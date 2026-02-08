@@ -19,6 +19,13 @@ export default function AppHeader() {
         return;
       }
 
+      // ✅ Auto-sync profile (idempotente)
+      await fetch("/api/profile/sync", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Org activa
       const res = await fetch("/api/orgs/active", {
         headers: { Authorization: `Bearer ${token}` },
       });

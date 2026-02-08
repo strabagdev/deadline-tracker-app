@@ -1,25 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { createClient } from "@supabase/supabase-js";
-
-function getAuthAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_AUTH_URL;
-  const service = process.env.SUPABASE_AUTH_SERVICE_ROLE_KEY;
-
-  if (!url || !service) {
-    throw new Error("Missing NEXT_PUBLIC_SUPABASE_AUTH_URL or SUPABASE_AUTH_SERVICE_ROLE_KEY");
-  }
-
-  return createClient(url, service, { auth: { persistSession: false } });
-}
 
 export async function GET(req: Request) {
   try {
     const { user: requester } = await requireAuthUser(req);
     const db = createDataServerClient();
 
-    // org activa del requester
+    // 1) org activa
     const { data: settings, error: setErr } = await db
       .from("user_settings")
       .select("active_organization_id")
@@ -33,60 +21,51 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "no active organization" }, { status: 400 });
     }
 
-    // permiso admin/owner
-    const { data: member, error: memErr } = await db
+    // 2) permiso admin/owner
+    const { data: reqMember, error: reqErr } = await db
       .from("organization_members")
       .select("role")
       .eq("organization_id", organizationId)
       .eq("user_id", requester.id)
       .maybeSingle();
 
-    if (memErr) throw memErr;
+    if (reqErr) throw reqErr;
 
-    if (!member || !["owner", "admin"].includes(member.role)) {
+    if (!reqMember || !["owner", "admin"].includes(reqMember.role)) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
-    // lista miembros (DATA)
-    const { data: rows, error: listErr } = await db
+    // 3) lista memberships
+    const { data: members, error: memErr } = await db
       .from("organization_members")
       .select("user_id, role, created_at")
       .eq("organization_id", organizationId)
       .order("created_at", { ascending: true });
 
-    if (listErr) throw listErr;
+    if (memErr) throw memErr;
 
-    const members = rows ?? [];
+    const list = members ?? [];
+    const userIds = list.map((m) => m.user_id);
 
-    // enriquecer con email desde AUTH central
-    const authAdmin = getAuthAdminClient();
+    // 4) trae profiles en un segundo query (sin join)
+    let profilesMap = new Map<string, string>();
+    if (userIds.length > 0) {
+      const { data: profiles, error: profErr } = await db
+        .from("profiles")
+        .select("user_id, email")
+        .in("user_id", userIds);
 
-    // En MVP: buscamos emails por listUsers (paginado) y armamos map
-    // (Suficiente para pocos usuarios. Luego optimizamos con tabla profiles)
-    const wantedIds = new Set(members.map((m) => m.user_id));
-    const idToEmail = new Map<string, string>();
+      if (profErr) throw profErr;
 
-    const perPage = 200;
-    for (let page = 1; page <= 10; page++) {
-      const { data, error } = await authAdmin.auth.admin.listUsers({ page, perPage });
-      if (error) throw error;
-
-      const users = data?.users ?? [];
-      for (const u of users) {
-        if (wantedIds.has(u.id)) idToEmail.set(u.id, u.email ?? "");
-      }
-      if (users.length < perPage) break;
+      (profiles ?? []).forEach((p: any) => profilesMap.set(p.user_id, p.email ?? ""));
     }
 
-    const enriched = members.map((m) => ({
+    const enriched = list.map((m) => ({
       ...m,
-      email: idToEmail.get(m.user_id) ?? "",
+      email: profilesMap.get(m.user_id) ?? "",
     }));
 
-    return NextResponse.json({
-      organization_id: organizationId,
-      members: enriched,
-    });
+    return NextResponse.json({ organization_id: organizationId, members: enriched });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
   }
