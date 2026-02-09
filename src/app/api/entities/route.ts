@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 
+/**
+ * Phase 1.3
+ * - Adds PUT (update entity + upsert field values) and DELETE (remove entity)
+ * - Uses query param ?id= to avoid dynamic route type validation issues.
+ */
+
 async function getActiveOrgId(db: any, userId: string) {
   const { data, error } = await db
     .from("user_settings")
@@ -182,6 +188,127 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ entity }, { status: 201 });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  }
+}
+
+export async function PUT(req: Request) {
+  try {
+    const { user } = await requireAuthUser(req);
+    const db = createDataServerClient();
+
+    const orgId = await getActiveOrgId(db, user.id);
+    if (!orgId) return NextResponse.json({ error: "no active organization" }, { status: 400 });
+
+    const role = await requireMember(db, orgId, user.id);
+    if (!role) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+
+    const url = new URL(req.url);
+    const id = url.searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+    const body = await req.json().catch(() => ({}));
+    const name = body?.name != null ? String(body.name).trim() : null;
+    const tracksUsage = body?.tracks_usage != null ? Boolean(body.tracks_usage) : null;
+    const fieldValues = Array.isArray(body?.field_values) ? body.field_values : null;
+
+    // Ensure entity exists (and belongs to org)
+    const { data: existing, error: exErr } = await db
+      .from("entities")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (exErr) throw exErr;
+    if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+    // Update entity base fields
+    const patch: any = {};
+    if (name !== null) patch.name = name;
+    if (tracksUsage !== null) patch.tracks_usage = tracksUsage;
+
+    if (Object.keys(patch).length) {
+      const { error: upErr } = await db
+        .from("entities")
+        .update(patch)
+        .eq("organization_id", orgId)
+        .eq("id", id);
+
+      if (upErr) throw upErr;
+    }
+
+    // Update field values (upsert non-empty, delete empty)
+    if (fieldValues) {
+      const normalized = (fieldValues as any[]).map((fv) => ({
+        entity_field_id: String(fv?.entity_field_id ?? "").trim(),
+        value_text: fv?.value_text == null ? "" : String(fv.value_text),
+      }));
+
+      const toUpsert = normalized
+        .filter((fv) => fv.entity_field_id && String(fv.value_text ?? "").trim() !== "")
+        .map((fv) => ({
+          organization_id: orgId,
+          entity_id: id,
+          entity_field_id: fv.entity_field_id,
+          value_text: String(fv.value_text).trim(),
+        }));
+
+      const toDeleteIds = normalized
+        .filter((fv) => fv.entity_field_id && String(fv.value_text ?? "").trim() === "")
+        .map((fv) => fv.entity_field_id);
+
+      if (toUpsert.length) {
+        const { error: uErr } = await db
+          .from("entity_field_values")
+          .upsert(toUpsert, { onConflict: "entity_id,entity_field_id" });
+
+        if (uErr) throw uErr;
+      }
+
+      if (toDeleteIds.length) {
+        const { error: dErr } = await db
+          .from("entity_field_values")
+          .delete()
+          .eq("organization_id", orgId)
+          .eq("entity_id", id)
+          .in("entity_field_id", toDeleteIds);
+
+        if (dErr) throw dErr;
+      }
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const { user } = await requireAuthUser(req);
+    const db = createDataServerClient();
+
+    const orgId = await getActiveOrgId(db, user.id);
+    if (!orgId) return NextResponse.json({ error: "no active organization" }, { status: 400 });
+
+    const role = await requireMember(db, orgId, user.id);
+    if (!role) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+
+    const url = new URL(req.url);
+    const id = url.searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+    const { error } = await db
+      .from("entities")
+      .delete()
+      .eq("organization_id", orgId)
+      .eq("id", id);
+
+    if (error) throw error;
+
+    return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
   }
