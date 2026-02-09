@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import EntityDeadlinesManager from "@/components/deadlines/EntityDeadlinesManager";
 
 type EntityDetail = {
   id: string;
@@ -308,11 +309,8 @@ export default function EntityDetailPage() {
             )}
           </section>
 
-          <section style={{ marginTop: 16, border: "1px dashed #ddd", padding: 12 }}>
-            <h3 style={{ marginTop: 0 }}>Próximo: Vencimientos (Fase 2)</h3>
-            <p style={{ opacity: 0.75, marginTop: 6 }}>
-              Aquí iremos agregando deadlines (por fecha y por uso) y los registros de uso.
-            </p>
+          <section style={{ marginTop: 16 }}>
+            <EntityDeadlinesManager entityId={entity.id} />
           </section>
         </>
       )}

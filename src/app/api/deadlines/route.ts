@@ -60,11 +60,9 @@ export async function GET(req: Request) {
     const entityId = url.searchParams.get("entity_id");
     if (!entityId) return NextResponse.json({ error: "entity_id required" }, { status: 400 });
 
-    // Ensure entity belongs to org (avoid leaking IDs)
     const okEntity = await requireEntityInOrg(db, orgId, entityId);
     if (!okEntity) return NextResponse.json({ error: "entity not found" }, { status: 404 });
 
-    // Join deadline_types for UI convenience
     const { data, error } = await db
       .from("deadlines")
       .select(
@@ -109,6 +107,11 @@ export async function POST(req: Request) {
     if (!dt) return NextResponse.json({ error: "deadline type not found" }, { status: 404 });
     if (!dt.is_active) return NextResponse.json({ error: "deadline type is inactive" }, { status: 400 });
 
+    // Backward-compat: some earlier schemas still have deadlines.title NOT NULL (and sometimes measure_by NOT NULL).
+    // We populate them from the type, so inserts work even before you run the SQL nullable patch.
+    const legacyTitle = dt.name;
+    const legacyMeasureBy = dt.measure_by;
+
     if (dt.measure_by === "date") {
       const nextDueDate = body?.next_due_date ? String(body.next_due_date) : null;
       if (!nextDueDate) {
@@ -121,6 +124,10 @@ export async function POST(req: Request) {
           organization_id: orgId,
           entity_id: entityId,
           deadline_type_id: deadlineTypeId,
+          // legacy columns
+          title: legacyTitle,
+          measure_by: legacyMeasureBy,
+          // fields
           last_done_date: lastDoneDate,
           next_due_date: nextDueDate,
         })
@@ -148,6 +155,10 @@ export async function POST(req: Request) {
         organization_id: orgId,
         entity_id: entityId,
         deadline_type_id: deadlineTypeId,
+        // legacy columns
+        title: legacyTitle,
+        measure_by: legacyMeasureBy,
+        // fields
         last_done_date: lastDoneDate,
         last_done_usage: lastDoneUsage,
         frequency,
