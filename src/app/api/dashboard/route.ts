@@ -36,15 +36,14 @@ export async function GET(req: Request) {
     const role = await requireMember(db, orgId, user.id);
     if (!role) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
-    // diagnóstico (count) para saber si la org activa realmente tiene entidades
+    // Diagnostic count
     const { count: entityCount, error: countErr } = await db
       .from("entities")
       .select("id", { count: "exact", head: true })
       .eq("organization_id", orgId);
-
     if (countErr) throw countErr;
 
-    // entidades + vencimientos + tipo
+    // Entities + deadlines + type
     const { data: entities, error: entErr } = await db
       .from("entities")
       .select(
@@ -76,7 +75,7 @@ export async function GET(req: Request) {
 
     const entityIds = (entities ?? []).map((e: any) => e.id);
 
-    // ✅ TU ESQUEMA: usage_logs.logged_at
+    // IMPORTANT: your schema uses usage_logs.logged_at (NOT recorded_at / created_at)
     const latestUsageByEntity: Record<string, { value: number; logged_at: string }> = {};
 
     if (entityIds.length > 0) {
