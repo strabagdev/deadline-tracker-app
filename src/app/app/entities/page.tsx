@@ -187,6 +187,8 @@ export default function EntitiesPage() {
 
   const [createName, setCreateName] = useState<string>("");
   const [createEntityTypeId, setCreateEntityTypeId] = useState<string>("");
+  // If true, this entity will record usage logs (hours/km/etc.) and can have usage-based deadlines
+  const [createTracksUsage, setCreateTracksUsage] = useState<boolean>(false);
 
   const [entityTypes, setEntityTypes] = useState<EntityType[]>([]);
   const [typesLoading, setTypesLoading] = useState<boolean>(false);
@@ -256,6 +258,7 @@ export default function EntitiesPage() {
       body: JSON.stringify({
         name,
         entity_type_id: createEntityTypeId,
+        tracks_usage: createTracksUsage,
       }),
     });
 
@@ -268,6 +271,7 @@ export default function EntitiesPage() {
 
     // clear + refresh
     setCreateName("");
+    setCreateTracksUsage(false);
     setShowCreate(false);
 
     const id = json.entity?.id || json.id;
@@ -473,6 +477,19 @@ export default function EntitiesPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", border: "1px solid #eee", borderRadius: 12 }}>
+                  <input
+                    id="create_tracks_usage"
+                    type="checkbox"
+                    checked={createTracksUsage}
+                    onChange={(e) => setCreateTracksUsage(e.target.checked)}
+                    style={{ width: 16, height: 16 }}
+                  />
+                  <label htmlFor="create_tracks_usage" style={{ fontSize: 13 }}>
+                    Registra uso (usage logs) — habilita vencimientos por uso (horas/km)
+                  </label>
                 </div>
 
                 <button type="submit" disabled={creating} style={{ padding: "10px 12px", width: "fit-content" }}>
