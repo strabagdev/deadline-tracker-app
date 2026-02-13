@@ -358,32 +358,69 @@ export default function AppDashboard() {
   const pagedRows = rows.slice(pageStart, pageStart + pageSize);
 
   const hasEntities = (meta?.entity_count_in_org ?? entities.length) > 0;
+  const touchActionButtonStyle: React.CSSProperties = {
+    minWidth: 46,
+    minHeight: 46,
+    borderRadius: 12,
+    border: "1px solid #d9d9d9",
+    background: "white",
+    fontSize: 18,
+    fontWeight: 800,
+    lineHeight: 1,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+  };
 
   return (
     <main style={{ padding: 16, maxWidth: 1400, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
         <div>
           <h2 style={{ margin: 0 }}>Dashboard</h2>
-          <p style={{ marginTop: 6, opacity: 0.75 }}>
-            Umbrales: 🟡≤{semaphore.date_yellow_days} · 🟠≤{semaphore.date_orange_days} · 🔴≤{semaphore.date_red_days} · vencido≤0
-          </p>
         </div>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <Link href="/app/entities?new=1" style={{ textDecoration: "none" }}>
-            <button style={{ padding: "10px 12px" }}>+ Nueva entidad</button>
+            <button
+              style={touchActionButtonStyle}
+              title="Nueva entidad"
+              aria-label="Nueva entidad"
+            >
+              ➕
+            </button>
           </Link>
 
           <Link href="/app/entities" style={{ textDecoration: "none" }}>
-            <button style={{ padding: "10px 12px" }}>Ver entidades</button>
+            <button
+              style={touchActionButtonStyle}
+              title="Ver entidades"
+              aria-label="Ver entidades"
+            >
+              📋
+            </button>
           </Link>
 
           <Link href="/app/settings/semaphore" style={{ textDecoration: "none" }}>
-            <button style={{ padding: "10px 12px" }}>Semáforo</button>
+            <button
+              style={touchActionButtonStyle}
+              title="Semáforo"
+              aria-label="Semáforo"
+            >
+              🚦
+            </button>
           </Link>
 
-          <button onClick={load} style={{ padding: "10px 12px" }} disabled={loading}>
-            Refrescar
+          <button
+            onClick={load}
+            style={{
+              ...touchActionButtonStyle,
+              opacity: loading ? 0.55 : 1,
+            }}
+            disabled={loading}
+            title="Refrescar"
+            aria-label="Refrescar"
+          >
+            ↻
           </button>
         </div>
       </div>
@@ -601,9 +638,21 @@ export default function AppDashboard() {
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={safePage <= 1}
-                  style={{ padding: "8px 12px" }}
+                  style={{
+                    minWidth: 46,
+                    minHeight: 46,
+                    borderRadius: 12,
+                    border: "1px solid #d9d9d9",
+                    background: "white",
+                    fontSize: 18,
+                    fontWeight: 800,
+                    lineHeight: 1,
+                    opacity: safePage <= 1 ? 0.45 : 1,
+                  }}
+                  title="Página anterior"
+                  aria-label="Página anterior"
                 >
-                  Anterior
+                  ◀
                 </button>
                 <div style={{ fontSize: 12, opacity: 0.8, alignSelf: "center" }}>
                   Página {safePage} de {totalPages}
@@ -611,9 +660,21 @@ export default function AppDashboard() {
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={safePage >= totalPages}
-                  style={{ padding: "8px 12px" }}
+                  style={{
+                    minWidth: 46,
+                    minHeight: 46,
+                    borderRadius: 12,
+                    border: "1px solid #d9d9d9",
+                    background: "white",
+                    fontSize: 18,
+                    fontWeight: 800,
+                    lineHeight: 1,
+                    opacity: safePage >= totalPages ? 0.45 : 1,
+                  }}
+                  title="Página siguiente"
+                  aria-label="Página siguiente"
                 >
-                  Siguiente
+                  ▶
                 </button>
               </div>
             </div>

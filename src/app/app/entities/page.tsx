@@ -60,7 +60,8 @@ function computeStatusAndDue(
 ): { due: Date | null; status: Status; label: string; typeName: string; measureBy: "date" | "usage" | "unknown" } {
   const t = deadline.deadline_types;
   const typeName = t?.name ?? "—";
-  const measureBy = (t?.measure_by as any) ?? "unknown";
+  const measureBy: "date" | "usage" | "unknown" =
+    t?.measure_by === "date" || t?.measure_by === "usage" ? t.measure_by : "unknown";
 
   if (!t) return { due: null, status: "none", label: "Sin tipo", typeName, measureBy };
 
@@ -154,18 +155,29 @@ function statusChipStyle(s: Status | "all", active: boolean): React.CSSPropertie
   return { ...base, ...(map[s] ?? {}), ...act };
 }
 
-function badgeStyle(): React.CSSProperties {
-  return {
+function rowStatusChipStyle(s: Status): React.CSSProperties {
+  const base: React.CSSProperties = {
+    border: "1px solid #e5e5e5",
+    borderRadius: 999,
+    padding: "3px 8px",
+    fontSize: 11,
+    cursor: "pointer",
+    background: "white",
+    userSelect: "none",
     display: "inline-flex",
     alignItems: "center",
-    gap: 6,
-    fontSize: 12,
-    padding: "4px 10px",
-    borderRadius: 999,
-    border: "1px solid #eee",
-    background: "white",
-    opacity: 0.9,
+    gap: 4,
+    lineHeight: 1.1,
   };
+
+  const map: Record<string, React.CSSProperties> = {
+    red: { background: "#ffeaea", borderColor: "#ffd0d0" },
+    yellow: { background: "#fff6d8", borderColor: "#ffe7a6" },
+    green: { background: "#e9ffe9", borderColor: "#cfffcc" },
+    none: { background: "#f6f6f6", borderColor: "#e7e7e7" },
+  };
+
+  return { ...base, ...(map[s] ?? {}) };
 }
 
 
@@ -583,9 +595,9 @@ export default function EntitiesPage() {
                 display: "grid",
                 gridTemplateColumns: "1.2fr 0.8fr 1.6fr 0.8fr",
                 gap: 0,
-                padding: "10px 12px",
+                padding: "7px 10px",
                 borderBottom: "1px solid #eee",
-                fontSize: 12,
+                fontSize: 11,
                 opacity: 0.75,
               }}
             >
@@ -608,19 +620,20 @@ export default function EntitiesPage() {
                     display: "grid",
                     gridTemplateColumns: "1.2fr 0.8fr 1.6fr 0.8fr",
                     gap: 0,
-                    padding: "12px 12px",
+                    padding: "8px 10px",
                     borderBottom: "1px solid #f0f0f0",
                     cursor: "pointer",
+                    fontSize: 13,
                   }}
                   title="Abrir ficha"
                 >
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</div>
-                    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>{e.entity_types?.name ?? "Sin tipo"}</div>
+                    <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{e.entity_types?.name ?? "Sin tipo"}</div>
                   </div>
 
                   <div style={{ display: "flex", alignItems: "center" }}>
-                    <span style={statusChipStyle(r.status, true)}>
+                    <span style={rowStatusChipStyle(r.status)}>
                       {r.status === "red" ? "🔴" : r.status === "yellow" ? "🟡" : r.status === "green" ? "🟢" : "⚪"}{" "}
                       {nearest?.label ?? "Sin info"}
                     </span>
@@ -631,12 +644,12 @@ export default function EntitiesPage() {
                       {nearest?.typeName ?? "—"}{" "}
                       {nearest?.due ? <span style={{ fontWeight: 700, opacity: 0.85 }}>· {fmtDate(nearest.due)}</span> : null}
                     </div>
-                    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>{measure}</div>
+                    <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{measure}</div>
                   </div>
 
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontWeight: 900 }}>{r.latestUsage != null ? r.latestUsage : "—"}</div>
-                    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
+                    <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>
                       {r.latestUsageAt ? new Date(r.latestUsageAt).toLocaleDateString() : ""}
                     </div>
                   </div>
