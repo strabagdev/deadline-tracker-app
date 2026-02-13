@@ -72,8 +72,11 @@ export default function EntityDeadlinesManager({
   const [types, setTypes] = useState<DeadlineType[]>([]);
   const [deadlines, setDeadlines] = useState<DeadlineRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string>("");
+  const [createBusy, setCreateBusy] = useState(false);
+  const [editBusy, setEditBusy] = useState(false);
+  const [generalMsg, setGeneralMsg] = useState<string>("");
+  const [createMsg, setCreateMsg] = useState<string>("");
+  const [editMsg, setEditMsg] = useState<string>("");
 
   // usage logs
   const [usageLogs, setUsageLogs] = useState<UsageLogRow[]>([]);
@@ -96,6 +99,7 @@ export default function EntityDeadlinesManager({
   const [frequencyUnit, setFrequencyUnit] = useState<string>("hours");
   const [usageDailyAverage, setUsageDailyAverage] = useState<string>("");
   const [usageDailyAverageMode, setUsageDailyAverageMode] = useState<"manual" | "auto">("manual");
+  const anyBusy = createBusy || editBusy;
 
   useEffect(() => {
     void bootstrap();
@@ -104,7 +108,7 @@ export default function EntityDeadlinesManager({
 
   async function bootstrap() {
     setLoading(true);
-    setMsg("");
+    setGeneralMsg("");
     await Promise.all([loadTypes(), loadDeadlines(), tracksUsage ? loadUsageLogs() : Promise.resolve()]);
     setLoading(false);
   }
@@ -118,7 +122,7 @@ export default function EntityDeadlinesManager({
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setMsg(json.error || "No se pudieron cargar los tipos");
+      setGeneralMsg(json.error || "No se pudieron cargar los tipos");
       setTypes([]);
       setDeadlineTypeId("");
       return;
@@ -141,7 +145,7 @@ export default function EntityDeadlinesManager({
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setMsg(json.error || "No se pudieron cargar los vencimientos");
+      setGeneralMsg(json.error || "No se pudieron cargar los vencimientos");
       setDeadlines([]);
       return;
     }
@@ -167,7 +171,7 @@ export default function EntityDeadlinesManager({
 
   function resetFormForType() {
     // keep selected type, reset only the inputs
-    setMsg("");
+    setCreateMsg("");
     setLastDoneDate("");
     setNextDueDate("");
     setLastDoneUsage("");
@@ -183,15 +187,18 @@ export default function EntityDeadlinesManager({
 
   async function createDeadline() {
     if (!deadlineTypeId) {
-      setMsg("Debes seleccionar un tipo de vencimiento");
+      setCreateMsg("Debes seleccionar un tipo de vencimiento");
       return;
     }
 
-    setBusy(true);
-    setMsg("");
+    setCreateBusy(true);
+    setCreateMsg("");
 
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      setCreateBusy(false);
+      return;
+    }
 
     const payload: Record<string, unknown> = {
       entity_id: entityId,
@@ -201,22 +208,22 @@ export default function EntityDeadlinesManager({
 
     if (selectedType?.measure_by === "date") {
       if (!nextDueDate) {
-        setMsg("Para tipo por fecha: debes indicar next due date");
-        setBusy(false);
+        setCreateMsg("Para tipo por fecha: debes indicar next due date");
+        setCreateBusy(false);
         return;
       }
       payload.next_due_date = nextDueDate;
     } else {
       // usage
       if (lastDoneUsage === "" || frequency === "") {
-        setMsg("Para tipo por uso: completa last done usage y frecuencia");
-        setBusy(false);
+        setCreateMsg("Para tipo por uso: completa last done usage y frecuencia");
+        setCreateBusy(false);
         return;
       }
 
       if (usageDailyAverageMode === "manual" && usageDailyAverage === "") {
-        setMsg("Para promedio manual: debes indicar el promedio diario");
-        setBusy(false);
+        setCreateMsg("Para promedio manual: debes indicar el promedio diario");
+        setCreateBusy(false);
         return;
       }
 
@@ -235,13 +242,14 @@ export default function EntityDeadlinesManager({
 
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setMsg(json.error || "No se pudo crear el vencimiento");
-      setBusy(false);
+      setCreateMsg(json.error || "No se pudo crear el vencimiento");
+      setCreateBusy(false);
       return;
     }
 
+    setCreateMsg("");
     await loadDeadlines();
-    setBusy(false);
+    setCreateBusy(false);
   }
 
   async function createUsageLog() {
@@ -318,23 +326,26 @@ export default function EntityDeadlinesManager({
         (d.usage_daily_average_mode ?? "manual") === "auto" ? "auto" : "manual",
       usage_daily_average: d.usage_daily_average != null ? String(d.usage_daily_average) : "",
     });
-    setMsg("");
+    setEditMsg("");
   }
 
   function cancelEditDeadline() {
     setEditingDeadlineId("");
     setEditDraft(null);
-    setMsg("");
+    setEditMsg("");
   }
 
   async function saveEditedDeadline(d: DeadlineRow) {
     if (!editDraft) return;
 
-    setBusy(true);
-    setMsg("");
+    setEditBusy(true);
+    setEditMsg("");
 
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      setEditBusy(false);
+      return;
+    }
 
     const payload: Record<string, unknown> = {
       id: d.id,
@@ -343,23 +354,23 @@ export default function EntityDeadlinesManager({
 
     if (d.deadline_types?.measure_by === "date") {
       if (!editDraft.next_due_date) {
-        setMsg("Para vencimientos por fecha: next due date es requerido.");
-        setBusy(false);
+        setEditMsg("Para vencimientos por fecha: next due date es requerido.");
+        setEditBusy(false);
         return;
       }
       payload.next_due_date = editDraft.next_due_date;
     } else {
       if (editDraft.last_done_usage === "" || editDraft.frequency === "") {
-        setMsg("Para vencimientos por uso: last done usage y frecuencia son requeridos.");
-        setBusy(false);
+        setEditMsg("Para vencimientos por uso: last done usage y frecuencia son requeridos.");
+        setEditBusy(false);
         return;
       }
       if (
         editDraft.usage_daily_average_mode === "manual" &&
         editDraft.usage_daily_average === ""
       ) {
-        setMsg("Para modo manual: promedio diario es requerido.");
-        setBusy(false);
+        setEditMsg("Para modo manual: promedio diario es requerido.");
+        setEditBusy(false);
         return;
       }
 
@@ -381,14 +392,14 @@ export default function EntityDeadlinesManager({
 
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setMsg(json.error || "No se pudo actualizar el vencimiento");
-      setBusy(false);
+      setEditMsg(json.error || "No se pudo actualizar el vencimiento");
+      setEditBusy(false);
       return;
     }
 
     cancelEditDeadline();
     await loadDeadlines();
-    setBusy(false);
+    setEditBusy(false);
   }
 
   const card: React.CSSProperties = {
@@ -407,12 +418,12 @@ export default function EntityDeadlinesManager({
             Todo vencimiento se crea desde un tipo (catálogo de la organización).
           </p>
         </div>
-        <button onClick={bootstrap} disabled={busy || usageLogsBusy} style={{ padding: 10 }}>
+        <button onClick={bootstrap} disabled={anyBusy || usageLogsBusy} style={{ padding: 10 }}>
           Refrescar
         </button>
       </div>
 
-      {msg && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{msg}</p>}
+      {generalMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{generalMsg}</p>}
 
       {/* -------------------------- Usage Logs (Opción 1) -------------------------- */}
       {tracksUsage ? (
@@ -516,6 +527,7 @@ export default function EntityDeadlinesManager({
           </div>
         ) : (
           <>
+            {createMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap", margin: 0 }}>{createMsg}</p>}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 200px 200px", gap: 10 }}>
               <div>
                 <label>Tipo</label>
@@ -523,7 +535,7 @@ export default function EntityDeadlinesManager({
                   value={deadlineTypeId}
                   onChange={(e) => setDeadlineTypeId(e.target.value)}
                   style={{ width: "100%", padding: 10, marginTop: 6 }}
-                  disabled={busy}
+                  disabled={createBusy}
                 >
                   {types.map((t) => (
                     <option key={t.id} value={t.id}>
@@ -540,7 +552,7 @@ export default function EntityDeadlinesManager({
                   value={lastDoneDate}
                   onChange={(e) => setLastDoneDate(e.target.value)}
                   style={{ width: "100%", padding: 10, marginTop: 6 }}
-                  disabled={busy}
+                  disabled={createBusy}
                 />
               </div>
 
@@ -553,7 +565,7 @@ export default function EntityDeadlinesManager({
                         value={nextDueDate}
                         onChange={(e) => setNextDueDate(e.target.value)}
                         style={{ width: "100%", padding: 10, marginTop: 6 }}
-                        disabled={busy}
+                        disabled={createBusy}
                       />
                     </>
                   ) : (
@@ -567,7 +579,7 @@ export default function EntityDeadlinesManager({
                             onChange={(e) => setLastDoneUsage(e.target.value)}
                             placeholder="Ej: 1200"
                             style={{ width: "100%", padding: 10, marginTop: 6 }}
-                            disabled={busy}
+                            disabled={createBusy}
                           />
                         </div>
                         <div>
@@ -578,7 +590,7 @@ export default function EntityDeadlinesManager({
                             onChange={(e) => setFrequency(e.target.value)}
                             placeholder="Ej: 250"
                             style={{ width: "100%", padding: 10, marginTop: 6 }}
-                            disabled={busy}
+                            disabled={createBusy}
                           />
                         </div>
                       </div>
@@ -590,7 +602,7 @@ export default function EntityDeadlinesManager({
                             value={frequencyUnit}
                             onChange={(e) => setFrequencyUnit(e.target.value)}
                             style={{ width: "100%", padding: 10, marginTop: 6 }}
-                            disabled={busy}
+                            disabled={createBusy}
                           >
                             <option value="hours">hours</option>
                             <option value="kilometers">kilometers</option>
@@ -604,7 +616,7 @@ export default function EntityDeadlinesManager({
                             value={usageDailyAverageMode}
                             onChange={(e) => setUsageDailyAverageMode(e.target.value as "manual" | "auto")}
                             style={{ width: "100%", padding: 10, marginTop: 6 }}
-                            disabled={busy}
+                            disabled={createBusy}
                           >
                             <option value="manual">Manual</option>
                             <option value="auto">Automático</option>
@@ -620,7 +632,7 @@ export default function EntityDeadlinesManager({
                           onChange={(e) => setUsageDailyAverage(e.target.value)}
                           placeholder={usageDailyAverageMode === "manual" ? "Ej: 6" : "Se calculará automáticamente"}
                           style={{ width: "100%", padding: 10, marginTop: 6 }}
-                          disabled={busy || usageDailyAverageMode === "auto"}
+                          disabled={createBusy || usageDailyAverageMode === "auto"}
                         />
                         {usageDailyAverageMode === "auto" && (
                           <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
@@ -634,8 +646,8 @@ export default function EntityDeadlinesManager({
               </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button onClick={createDeadline} disabled={busy || !deadlineTypeId} style={{ padding: 10, fontWeight: 800 }}>
-                {busy ? "Guardando..." : "Agregar vencimiento"}
+              <button onClick={createDeadline} disabled={createBusy || !deadlineTypeId} style={{ padding: 10, fontWeight: 800 }}>
+                {createBusy ? "Guardando..." : "Agregar vencimiento"}
               </button>
             </div>
           </>
@@ -645,6 +657,7 @@ export default function EntityDeadlinesManager({
       <hr style={{ margin: "14px 0", border: "none", borderTop: "1px solid #eee" }} />
 
       <h4 style={{ marginTop: 0 }}>Asignados</h4>
+      {editMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap", marginTop: 8 }}>{editMsg}</p>}
 
       {loading ? (
         <p>Cargando...</p>
@@ -667,15 +680,15 @@ export default function EntityDeadlinesManager({
                   </div>
                   {editingDeadlineId === d.id ? (
                     <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => saveEditedDeadline(d)} disabled={busy} style={{ padding: "8px 10px" }}>
+                      <button onClick={() => saveEditedDeadline(d)} disabled={editBusy} style={{ padding: "8px 10px" }}>
                         Guardar
                       </button>
-                      <button onClick={cancelEditDeadline} disabled={busy} style={{ padding: "8px 10px" }}>
+                      <button onClick={cancelEditDeadline} disabled={editBusy} style={{ padding: "8px 10px" }}>
                         Cancelar
                       </button>
                     </div>
                   ) : (
-                    <button onClick={() => startEditDeadline(d)} disabled={busy} style={{ padding: "8px 10px" }}>
+                    <button onClick={() => startEditDeadline(d)} disabled={editBusy} style={{ padding: "8px 10px" }}>
                       Editar
                     </button>
                   )}
@@ -699,7 +712,7 @@ export default function EntityDeadlinesManager({
                           setEditDraft((prev) => (prev ? { ...prev, last_done_date: e.target.value } : prev))
                         }
                         style={{ marginLeft: 8, padding: 6 }}
-                        disabled={busy}
+                        disabled={editBusy}
                       />
                     ) : (
                       (d.last_done_date ?? "-")
@@ -716,7 +729,7 @@ export default function EntityDeadlinesManager({
                             setEditDraft((prev) => (prev ? { ...prev, next_due_date: e.target.value } : prev))
                           }
                           style={{ marginLeft: 8, padding: 6 }}
-                          disabled={busy}
+                          disabled={editBusy}
                         />
                       ) : (
                         (d.next_due_date ?? "-")
@@ -734,7 +747,7 @@ export default function EntityDeadlinesManager({
                               setEditDraft((prev) => (prev ? { ...prev, last_done_usage: e.target.value } : prev))
                             }
                             style={{ marginLeft: 8, padding: 6 }}
-                            disabled={busy}
+                            disabled={editBusy}
                           />
                         ) : (
                           (d.last_done_usage ?? "-")
@@ -751,7 +764,7 @@ export default function EntityDeadlinesManager({
                                 setEditDraft((prev) => (prev ? { ...prev, frequency: e.target.value } : prev))
                               }
                               style={{ marginLeft: 8, padding: 6, width: 90 }}
-                              disabled={busy}
+                              disabled={editBusy}
                             />
                             <select
                               value={editDraft?.frequency_unit ?? "hours"}
@@ -759,7 +772,7 @@ export default function EntityDeadlinesManager({
                                 setEditDraft((prev) => (prev ? { ...prev, frequency_unit: e.target.value } : prev))
                               }
                               style={{ marginLeft: 8, padding: 6 }}
-                              disabled={busy}
+                              disabled={editBusy}
                             >
                               <option value="hours">hours</option>
                               <option value="kilometers">kilometers</option>
@@ -790,7 +803,7 @@ export default function EntityDeadlinesManager({
                                 )
                               }
                               style={{ marginLeft: 8, padding: 6 }}
-                              disabled={busy}
+                              disabled={editBusy}
                             >
                               <option value="manual">manual</option>
                               <option value="auto">auto</option>
@@ -808,7 +821,7 @@ export default function EntityDeadlinesManager({
                                 )
                               }
                               style={{ marginLeft: 8, padding: 6, width: 90 }}
-                              disabled={busy || (editDraft?.usage_daily_average_mode ?? "manual") === "auto"}
+                              disabled={editBusy || (editDraft?.usage_daily_average_mode ?? "manual") === "auto"}
                             />
                           </>
                         ) : (

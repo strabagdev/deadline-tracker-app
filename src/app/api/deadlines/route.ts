@@ -475,7 +475,8 @@ export async function PUT(req: Request) {
       patch.frequency = null;
       patch.frequency_unit = null;
       patch.usage_daily_average = null;
-      patch.usage_daily_average_mode = null;
+      // Column is NOT NULL in DB; keep a valid sentinel mode for date-based deadlines.
+      patch.usage_daily_average_mode = "manual";
 
       const { error } = await db.from("deadlines").update(patch).eq("organization_id", orgId).eq("id", id);
       if (error) throw error;

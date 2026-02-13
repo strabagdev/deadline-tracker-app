@@ -84,7 +84,8 @@ function computeStatusAndDue(
 ): { due: Date | null; status: Status; label: string; typeName: string; measureBy: "date" | "usage" | "unknown" } {
   const t = deadline.deadline_types;
   const typeName = t?.name ?? "—";
-  const measureBy = (t?.measure_by as any) ?? "unknown";
+  const measureBy: "date" | "usage" | "unknown" =
+    t?.measure_by === "date" || t?.measure_by === "usage" ? t.measure_by : "unknown";
   if (!t) return { due: null, status: "none", label: "Sin tipo", typeName, measureBy };
 
   const today = new Date();
@@ -205,6 +206,14 @@ function badgeStyle(): React.CSSProperties {
   };
 }
 
+function statusTone(s: Status): { border: string; soft: string; strong: string } {
+  if (s === "red") return { border: "#f5c2c2", soft: "#fff2f2", strong: "#c72b2b" };
+  if (s === "orange") return { border: "#ffd4b8", soft: "#fff5ee", strong: "#cc5a1c" };
+  if (s === "yellow") return { border: "#ffe39c", soft: "#fff9e8", strong: "#9b7300" };
+  if (s === "green") return { border: "#c7ebc7", soft: "#f1fff1", strong: "#2f7a2f" };
+  return { border: "#e5e5e5", soft: "#fafafa", strong: "#666" };
+}
+
 export default function AppDashboard() {
   const router = useRouter();
 
@@ -217,6 +226,9 @@ export default function AppDashboard() {
 
   const [filterStatus, setFilterStatus] = useState<Status | "all">("all");
   const [filterEntityType, setFilterEntityType] = useState<string>("all");
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
   const [semaphore, setSemaphore] = useState<SemaphoreSettings>({
     date_yellow_days: 60,
@@ -313,9 +325,11 @@ export default function AppDashboard() {
   }, [computedAll]);
 
   const rows = useMemo(() => {
+    const needle = q.trim().toLowerCase();
     const out = computedAll.filter((r) => {
       if (filterEntityType !== "all" && r.entity.entity_type_id !== filterEntityType) return false;
       if (filterStatus !== "all" && r.status !== filterStatus) return false;
+      if (needle && !r.entity.name.toLowerCase().includes(needle)) return false;
       return true;
     });
 
@@ -332,12 +346,21 @@ export default function AppDashboard() {
     });
 
     return out;
-  }, [computedAll, filterEntityType, filterStatus]);
+  }, [computedAll, filterEntityType, filterStatus, q]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterEntityType, filterStatus, q, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const pagedRows = rows.slice(pageStart, pageStart + pageSize);
 
   const hasEntities = (meta?.entity_count_in_org ?? entities.length) > 0;
 
   return (
-    <main style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
+    <main style={{ padding: 16, maxWidth: 1400, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
         <div>
           <h2 style={{ margin: 0 }}>Dashboard</h2>
@@ -368,7 +391,47 @@ export default function AppDashboard() {
       {errorMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{errorMsg}</p>}
 
       <section style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 16, padding: 12, background: "white" }}>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "grid", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 220px 220px", gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 12, opacity: 0.7 }}>Buscar</label>
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar entidad por nombre..."
+                style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e5e5", marginTop: 6 }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, opacity: 0.7 }}>Tipo</label>
+              <select
+                value={filterEntityType}
+                onChange={(e) => setFilterEntityType(e.target.value)}
+                style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e5e5", marginTop: 6 }}
+              >
+                <option value="all">Todos</option>
+                {entityTypeOptions.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, opacity: 0.7 }}>Filas por página</label>
+              <select
+                value={String(pageSize)}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e5e5", marginTop: 6 }}
+              >
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <span style={{ fontSize: 12, opacity: 0.7, marginRight: 6 }}>Estado:</span>
 
           <span onClick={() => setFilterStatus("all")} style={statusChipStyle("all", filterStatus === "all")}>
@@ -390,20 +453,6 @@ export default function AppDashboard() {
             ⚪ Sin info
           </span>
 
-          <span style={{ marginLeft: 10, fontSize: 12, opacity: 0.7 }}>Tipo:</span>
-          <select
-            value={filterEntityType}
-            onChange={(e) => setFilterEntityType(e.target.value)}
-            style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e5e5" }}
-          >
-            <option value="all">Todos</option>
-            {entityTypeOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-
           <span style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
             <span style={badgeStyle()}>🔴 {countsAll.red}</span>
             <span style={badgeStyle()}>🟠 {countsAll.orange}</span>
@@ -411,6 +460,7 @@ export default function AppDashboard() {
             <span style={badgeStyle()}>🟢 {countsAll.green}</span>
             <span style={badgeStyle()}>⚪ {countsAll.none}</span>
           </span>
+        </div>
         </div>
       </section>
 
@@ -426,65 +476,148 @@ export default function AppDashboard() {
             )}
           </div>
         ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {rows.map((r) => {
-              const e = r.entity;
-              const nearest = r.nearest;
-              const icon =
-                r.status === "red"
-                  ? "🔴"
-                  : r.status === "orange"
-                    ? "🟠"
-                    : r.status === "yellow"
-                      ? "🟡"
-                      : r.status === "green"
-                        ? "🟢"
-                        : "⚪";
+          <>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
+                gap: 10,
+              }}
+            >
+              {pagedRows.map((r) => {
+                const e = r.entity;
+                const nearest = r.nearest;
+                const tone = statusTone(r.status);
+                const hasLatestUsage = r.latestUsage != null;
+                const hasLatestUsageAt = Boolean(r.latestUsageAt);
 
-              return (
-                <div
-                  key={e.id}
-                  style={{ border: "1px solid #eee", borderRadius: 16, padding: 14, background: "white", cursor: "pointer" }}
-                  onClick={() => router.push(`/app/entities/${e.id}`)}
-                  title="Abrir ficha"
+                return (
+                  <article
+                    key={e.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => router.push(`/app/entities/${e.id}`)}
+                    onKeyDown={(ev) => {
+                      if (ev.key === "Enter" || ev.key === " ") {
+                        ev.preventDefault();
+                        router.push(`/app/entities/${e.id}`);
+                      }
+                    }}
+                    style={{
+                      border: `1px solid ${tone.border}`,
+                      background: tone.soft,
+                      borderRadius: 14,
+                      padding: 11,
+                      minHeight: 156,
+                      cursor: "pointer",
+                      display: "grid",
+                      alignContent: "space-between",
+                      gap: 9,
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.04)",
+                    }}
+                    title="Abrir ficha"
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontWeight: 900,
+                            fontSize: 15,
+                            lineHeight: 1.2,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {e.name}
+                        </div>
+                        <div style={{ marginTop: 4, opacity: 0.78, fontSize: 12 }}>
+                          {e.entity_types?.name ?? "Sin tipo"}
+                        </div>
+                      </div>
+                      <span
+                        style={{
+                          ...statusChipStyle(r.status, true),
+                          background: "white",
+                          borderColor: tone.border,
+                          color: tone.strong,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {nearest?.label ?? "Sin info"}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        background: "white",
+                        border: `1px solid ${tone.border}`,
+                        borderRadius: 10,
+                        padding: "8px 9px",
+                      }}
+                    >
+                      <div style={{ fontSize: 11, opacity: 0.72 }}>Próximo vencimiento</div>
+                      <div style={{ marginTop: 2, fontWeight: 900, fontSize: 14 }}>
+                        {nearest?.due ? fmtDate(nearest.due) : "Sin fecha estimada"}
+                      </div>
+                      <div style={{ marginTop: 2, fontSize: 12, opacity: 0.82 }}>
+                        {nearest?.typeName ?? "Sin tipo"}
+                        {nearest?.measureBy === "usage"
+                          ? " · por uso"
+                          : nearest?.measureBy === "date"
+                          ? " · por fecha"
+                          : ""}
+                      </div>
+                    </div>
+
+                    {(hasLatestUsage || hasLatestUsageAt) && (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
+                        {hasLatestUsage && (
+                          <div style={{ background: "white", border: "1px solid #ececec", borderRadius: 9, padding: "7px 8px" }}>
+                            <div style={{ fontSize: 11, opacity: 0.68 }}>Uso actual</div>
+                            <div style={{ marginTop: 2, fontWeight: 800 }}>{r.latestUsage}</div>
+                          </div>
+                        )}
+                        {hasLatestUsageAt && (
+                          <div style={{ background: "white", border: "1px solid #ececec", borderRadius: 9, padding: "7px 8px" }}>
+                            <div style={{ fontSize: 11, opacity: 0.68 }}>Último registro</div>
+                            <div style={{ marginTop: 2, fontWeight: 800 }}>
+                              {new Date(r.latestUsageAt as string).toLocaleDateString()}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 4px 2px 4px" }}>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                Mostrando {rows.length === 0 ? 0 : pageStart + 1}-{Math.min(pageStart + pageSize, rows.length)} de {rows.length}
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                  style={{ padding: "8px 12px" }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 900, fontSize: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {e.name}
-                      </div>
-                      <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>{e.entity_types?.name ?? "Sin tipo"}</div>
-                    </div>
-
-                    <span style={statusChipStyle(r.status, true)}>
-                      {icon} {nearest?.label ?? "Sin info"}
-                    </span>
-                  </div>
-
-                  <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 240px", gap: 10 }}>
-                    <div>
-                      <div style={{ fontSize: 12, opacity: 0.7 }}>Más próximo</div>
-                      <div style={{ fontWeight: 900 }}>
-                        {nearest?.typeName ?? "—"}{" "}
-                        {nearest?.due ? <span style={{ fontWeight: 700, opacity: 0.85 }}>· {fmtDate(nearest.due)}</span> : null}
-                      </div>
-                      <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-                        {nearest?.measureBy === "usage" ? "por uso (estimado)" : nearest?.measureBy === "date" ? "por fecha" : "—"}
-                      </div>
-                    </div>
-
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: 12, opacity: 0.7 }}>Uso actual</div>
-                      <div style={{ fontWeight: 900 }}>{r.latestUsage != null ? r.latestUsage : "—"}</div>
-                      <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-                        {r.latestUsageAt ? new Date(r.latestUsageAt).toLocaleString() : ""}
-                      </div>
-                    </div>
-                  </div>
+                  Anterior
+                </button>
+                <div style={{ fontSize: 12, opacity: 0.8, alignSelf: "center" }}>
+                  Página {safePage} de {totalPages}
                 </div>
-              );
-            })}
-          </div>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                  style={{ padding: "8px 12px" }}
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </section>
     </main>
