@@ -9,9 +9,31 @@ export default function HomePage() {
 
   useEffect(() => {
     (async () => {
+      const publicStatusRes = await fetch("/api/platform/super-admin/public-status");
+      const publicStatusJson = await publicStatusRes.json().catch(() => ({}));
+
+      if (publicStatusRes.ok && publicStatusJson && publicStatusJson.has_super_admin === false) {
+        router.replace("/setup-super-admin");
+        return;
+      }
+
       const { data } = await supabaseAuth.auth.getSession();
-      if (!data.session) router.replace("/login");
-      else router.replace("/select-org");
+      if (!data.session) {
+        router.replace("/login");
+        return;
+      }
+
+      const statusRes = await fetch("/api/platform/super-admin/status", {
+        headers: { Authorization: `Bearer ${data.session.access_token}` },
+      });
+      const statusJson = await statusRes.json().catch(() => ({}));
+
+      if (statusRes.ok && statusJson && statusJson.has_super_admin === false) {
+        router.replace("/setup-super-admin");
+        return;
+      }
+
+      router.replace("/select-org");
     })();
   }, [router]);
 

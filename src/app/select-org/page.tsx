@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 
 type Org = { id: string; name: string; role: string };
+type SuperAdminStatus = {
+  has_super_admin?: boolean;
+  is_super_admin?: boolean;
+  primary_super_admin_email?: string | null;
+};
 
 export default function SelectOrgPage() {
   const router = useRouter();
@@ -13,6 +18,8 @@ export default function SelectOrgPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>("");
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [primarySuperAdminEmail, setPrimarySuperAdminEmail] = useState("");
 
   useEffect(() => {
     void init();
@@ -72,6 +79,29 @@ export default function SelectOrgPage() {
       return;
     }
 
+    if (list.length === 0) {
+      const superRes = await fetch("/api/platform/super-admin/status", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const superJson = (await superRes.json().catch(() => ({}))) as SuperAdminStatus & { error?: string };
+      if (!superRes.ok) {
+        setError(superJson.error || "No se pudo validar estado de super admin");
+        setLoading(false);
+        return;
+      }
+
+      const hasSuperAdmin = Boolean(superJson.has_super_admin);
+      const currentIsSuperAdmin = Boolean(superJson.is_super_admin);
+      setIsSuperAdmin(currentIsSuperAdmin);
+      setPrimarySuperAdminEmail(String(superJson.primary_super_admin_email || ""));
+
+      if (!hasSuperAdmin) {
+        router.replace("/setup-super-admin");
+        return;
+      }
+    }
+
     setLoading(false);
   }
 
@@ -101,38 +131,6 @@ export default function SelectOrgPage() {
     router.replace("/app");
   }
 
-  async function createOrg() {
-    setBusy(true);
-    setError("");
-
-    const token = await getTokenOrRedirect();
-    if (!token) return;
-
-    const name = prompt("Nombre de la organización:");
-    if (!name || name.trim().length < 2) {
-      setBusy(false);
-      return;
-    }
-
-    const res = await fetch("/api/orgs/create", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ name: name.trim() }),
-    });
-
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setError(json.error || "No se pudo crear la organización");
-      setBusy(false);
-      return;
-    }
-
-    router.replace("/app");
-  }
-
   if (loading) return <p style={{ padding: 16 }}>Cargando...</p>;
 
   return (
@@ -148,16 +146,19 @@ export default function SelectOrgPage() {
       {orgs.length === 0 ? (
         <div style={{ marginTop: 14 }}>
           <p>No tienes acceso a ninguna organización en esta plataforma.</p>
-          <p>Solicita invitación a un admin.</p>
-
-          {/* Bootstrap (primer setup). Puedes quitar este botón cuando ya estés estable. */}
-          <button
-            onClick={createOrg}
-            disabled={busy}
-            style={{ padding: 12, marginTop: 12, width: "100%" }}
-          >
-            {busy ? "Creando..." : "Crear organización (bootstrap)"}
-          </button>
+          {isSuperAdmin ? (
+            <p>
+              Eres super admin. Puedes crear organizaciones en{" "}
+              <a href="/app/super-admin">/app/super-admin</a>.
+            </p>
+          ) : (
+            <p>
+              Solicita invitación a un admin.
+              {primarySuperAdminEmail
+                ? ` Super admin registrado: ${primarySuperAdminEmail}.`
+                : ""}
+            </p>
+          )}
         </div>
       ) : orgs.length > 1 ? (
         <div style={{ marginTop: 14 }}>

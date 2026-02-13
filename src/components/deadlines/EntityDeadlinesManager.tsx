@@ -52,7 +52,13 @@ function isoToLocalDatetimeInput(iso: string) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export default function EntityDeadlinesManager({ entityId }: { entityId: string }) {
+export default function EntityDeadlinesManager({
+  entityId,
+  tracksUsage,
+}: {
+  entityId: string;
+  tracksUsage: boolean;
+}) {
   const [types, setTypes] = useState<DeadlineType[]>([]);
   const [deadlines, setDeadlines] = useState<DeadlineRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,7 +93,7 @@ export default function EntityDeadlinesManager({ entityId }: { entityId: string 
   async function bootstrap() {
     setLoading(true);
     setMsg("");
-    await Promise.all([loadTypes(), loadDeadlines(), loadUsageLogs()]);
+    await Promise.all([loadTypes(), loadDeadlines(), tracksUsage ? loadUsageLogs() : Promise.resolve()]);
     setLoading(false);
   }
 
@@ -308,6 +314,7 @@ export default function EntityDeadlinesManager({ entityId }: { entityId: string 
       {msg && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{msg}</p>}
 
       {/* -------------------------- Usage Logs (Opción 1) -------------------------- */}
+      {tracksUsage ? (
       <div style={{ marginTop: 12, border: "1px solid #f0f0f0", borderRadius: 12, padding: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <div>
@@ -395,6 +402,7 @@ export default function EntityDeadlinesManager({ entityId }: { entityId: string 
           )}
         </div>
       </div>
+      ) : null}
       {/* ------------------------------------------------------------------------ */}
 
       <div style={{ marginTop: 12, display: "grid", gap: 10 }}>

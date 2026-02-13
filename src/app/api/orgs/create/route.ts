@@ -4,6 +4,14 @@ import { createDataServerClient } from "@/lib/supabase/dataServer";
 
 export async function POST(req: Request) {
   try {
+    const allowBootstrap = process.env.ALLOW_ORG_BOOTSTRAP === "true";
+    if (!allowBootstrap) {
+      return NextResponse.json(
+        { error: "organization bootstrap disabled" },
+        { status: 403 }
+      );
+    }
+
     const { user } = await requireAuthUser(req);
     const body = await req.json().catch(() => ({}));
     const name = body.name as string | undefined;
@@ -45,9 +53,10 @@ export async function POST(req: Request) {
     if (setErr) throw setErr;
 
     return NextResponse.json({ organization: org });
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unauthorized";
     return NextResponse.json(
-      { error: e?.message ?? "Unauthorized" },
+      { error: message },
       { status: 401 }
     );
   }

@@ -310,7 +310,7 @@ export default function EntityDetailPage() {
           </section>
 
           <section style={{ marginTop: 16 }}>
-            <EntityDeadlinesManager entityId={entity.id} />
+            <EntityDeadlinesManager entityId={entity.id} tracksUsage={entity.tracks_usage} />
           </section>
         </>
       )}

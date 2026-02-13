@@ -42,12 +42,6 @@ type EntityRow = {
 
 type LatestUsageByEntity = Record<string, { value: number; logged_at: string }>;
 
-type DashboardMeta = {
-  active_org_id: string;
-  role: string;
-  entity_count_in_org: number;
-};
-
 type Status = "red" | "yellow" | "green" | "none";
 
 function daysBetween(a: Date, b: Date) {
@@ -287,8 +281,6 @@ export default function EntitiesPage() {
 
   const [entities, setEntities] = useState<EntityRow[]>([]);
   const [usage, setUsage] = useState<LatestUsageByEntity>({});
-  const [meta, setMeta] = useState<DashboardMeta | null>(null);
-
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string>("");
 
@@ -320,12 +312,10 @@ export default function EntitiesPage() {
       setErrorMsg(json.error || "No se pudo cargar entidades");
       setEntities([]);
       setUsage({});
-      setMeta(null);
       setLoading(false);
       return;
     }
 
-    setMeta(json.meta ?? null);
     setEntities(json.entities ?? []);
     setUsage(json.latest_usage_by_entity ?? {});
     setLoading(false);
@@ -585,17 +575,7 @@ export default function EntitiesPage() {
         {loading ? (
           <p>Cargando…</p>
         ) : rows.length === 0 ? (
-          <div>
-            <p style={{ opacity: 0.8 }}>No hay entidades para mostrar con estos filtros.</p>
-            {meta ? (
-              <div style={{ fontSize: 12, opacity: 0.85, border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>Diagnóstico</div>
-                <div>active_org_id: {meta.active_org_id}</div>
-                <div>role: {meta.role}</div>
-                <div>entity_count_in_org: {meta.entity_count_in_org}</div>
-              </div>
-            ) : null}
-          </div>
+          <p style={{ opacity: 0.8 }}>No hay entidades para mostrar con estos filtros.</p>
         ) : (
           <div style={{ border: "1px solid #eee", borderRadius: 16, overflow: "hidden", background: "white" }}>
             <div

@@ -1,17 +1,36 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 
-type Settings = {
-  date_yellow_days: number;
-  date_orange_days: number;
-  date_red_days: number;
-  usage_yellow_days: number;
-  usage_orange_days: number;
-  usage_red_days: number;
+/**
+ * Semáforo (umbral en días) aplicado a:
+ * - Vencimientos por FECHA: days_remaining
+ * - Vencimientos por USO: estimated_days (derivado de usage)
+ *
+ * NOTA: Este formulario edita UN SOLO set de umbrales y lo guarda duplicado
+ * en date_* y usage_* para mantener compatibilidad con el backend actual.
+ */
+
+type SettingsPayload = {
+  organization_id?: string;
+  role?: string;
+  settings?: Partial<{
+    date_yellow_days: number;
+    date_orange_days: number;
+    date_red_days: number;
+    usage_yellow_days: number;
+    usage_orange_days: number;
+    usage_red_days: number;
+  }>;
+};
+
+type UnifiedThresholds = {
+  yellow_days: number;
+  orange_days: number;
+  red_days: number;
 };
 
 export default function SemaphoreSettingsPage() {
@@ -25,14 +44,13 @@ export default function SemaphoreSettingsPage() {
   const [orgId, setOrgId] = useState<string>("");
   const [role, setRole] = useState<string>("");
 
-  const [s, setS] = useState<Settings>({
-    date_yellow_days: 60,
-    date_orange_days: 30,
-    date_red_days: 15,
-    usage_yellow_days: 60,
-    usage_orange_days: 30,
-    usage_red_days: 15,
+  const [t, setT] = useState<UnifiedThresholds>({
+    yellow_days: 60,
+    orange_days: 30,
+    red_days: 15,
   });
+
+  const [mismatchWarn, setMismatchWarn] = useState<string>("");
 
   useEffect(() => {
     void load();
@@ -49,10 +67,22 @@ export default function SemaphoreSettingsPage() {
     return token;
   }
 
+  function validateLocal(th: UnifiedThresholds) {
+    const y = Number(th.yellow_days);
+    const o = Number(th.orange_days);
+    const r = Number(th.red_days);
+
+    if (![y, o, r].every((n) => Number.isFinite(n))) return "Los umbrales deben ser numéricos.";
+    if (y < 0 || o < 0 || r < 0) return "Los umbrales no pueden ser negativos.";
+    if (!(y >= o && o >= r)) return "Debe cumplirse: yellow ≥ orange ≥ red.";
+    return "";
+  }
+
   async function load() {
     setLoading(true);
     setErrorMsg("");
     setOkMsg("");
+    setMismatchWarn("");
 
     const token = await getTokenOrRedirect();
     if (!token) return;
@@ -60,9 +90,10 @@ export default function SemaphoreSettingsPage() {
     const res = await fetch("/api/settings/semaphore", {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const json = await res.json().catch(() => ({}));
+
+    const json: SettingsPayload = await res.json().catch(() => ({} as any));
     if (!res.ok) {
-      setErrorMsg(json.error || "No se pudo cargar configuración");
+      setErrorMsg((json as any)?.error || "No se pudo cargar configuración");
       setLoading(false);
       return;
     }
@@ -70,32 +101,31 @@ export default function SemaphoreSettingsPage() {
     setOrgId(String(json.organization_id || ""));
     setRole(String(json.role || ""));
 
-    const settings = json.settings || {};
-    setS({
-      date_yellow_days: Number(settings.date_yellow_days ?? 60),
-      date_orange_days: Number(settings.date_orange_days ?? 30),
-      date_red_days: Number(settings.date_red_days ?? 15),
-      usage_yellow_days: Number(settings.usage_yellow_days ?? 60),
-      usage_orange_days: Number(settings.usage_orange_days ?? 30),
-      usage_red_days: Number(settings.usage_red_days ?? 15),
+    const s = json.settings || {};
+
+    const dateY = Number(s.date_yellow_days ?? 60);
+    const dateO = Number(s.date_orange_days ?? 30);
+    const dateR = Number(s.date_red_days ?? 15);
+
+    const usageY = Number(s.usage_yellow_days ?? dateY);
+    const usageO = Number(s.usage_orange_days ?? dateO);
+    const usageR = Number(s.usage_red_days ?? dateR);
+
+    // Preferimos cargar desde "date_*" como fuente principal, para no romper setups antiguos.
+    setT({
+      yellow_days: dateY,
+      orange_days: dateO,
+      red_days: dateR,
     });
 
+    // Advertencia si hoy están desalineados: el usuario puede "Guardar" para unificarlos.
+    const mismatch =
+      dateY !== usageY || dateO !== usageO || dateR !== usageR
+        ? `Tus umbrales están distintos entre FECHA y USO (date: ${dateY}/${dateO}/${dateR} vs usage: ${usageY}/${usageO}/${usageR}). Al guardar se unificarán.`
+        : "";
+
+    setMismatchWarn(mismatch);
     setLoading(false);
-  }
-
-  function setField<K extends keyof Settings>(k: K, v: number) {
-    setS((prev) => ({ ...prev, [k]: v }));
-  }
-
-  function validateLocal(settings: Settings) {
-    const chk = (y: number, o: number, r: number) => y >= o && o >= r && r >= 0;
-    if (!chk(settings.date_yellow_days, settings.date_orange_days, settings.date_red_days)) {
-      return "FECHA: debe ser yellow ≥ orange ≥ red (y red ≥ 0).";
-    }
-    if (!chk(settings.usage_yellow_days, settings.usage_orange_days, settings.usage_red_days)) {
-      return "USO: debe ser yellow ≥ orange ≥ red (y red ≥ 0).";
-    }
-    return "";
   }
 
   async function save(e: React.FormEvent) {
@@ -103,7 +133,7 @@ export default function SemaphoreSettingsPage() {
     setErrorMsg("");
     setOkMsg("");
 
-    const msg = validateLocal(s);
+    const msg = validateLocal(t);
     if (msg) {
       setErrorMsg(msg);
       return;
@@ -114,57 +144,86 @@ export default function SemaphoreSettingsPage() {
 
     setSaving(true);
 
+    const payload = {
+      // Guardamos duplicado para mantener compatibilidad con el backend actual
+      date_yellow_days: Math.trunc(t.yellow_days),
+      date_orange_days: Math.trunc(t.orange_days),
+      date_red_days: Math.trunc(t.red_days),
+      usage_yellow_days: Math.trunc(t.yellow_days),
+      usage_orange_days: Math.trunc(t.orange_days),
+      usage_red_days: Math.trunc(t.red_days),
+    };
+
     const res = await fetch("/api/settings/semaphore", {
       method: "PUT",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        ...s,
-        date_yellow_days: Math.trunc(s.date_yellow_days),
-        date_orange_days: Math.trunc(s.date_orange_days),
-        date_red_days: Math.trunc(s.date_red_days),
-        usage_yellow_days: Math.trunc(s.usage_yellow_days),
-        usage_orange_days: Math.trunc(s.usage_orange_days),
-        usage_red_days: Math.trunc(s.usage_red_days),
-      }),
+      body: JSON.stringify(payload),
     });
 
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setErrorMsg(json.error || "No se pudo guardar");
+      setErrorMsg((json as any)?.error || "No se pudo guardar");
       setSaving(false);
       return;
     }
 
-    setOkMsg("Guardado ✅");
+    setOkMsg("Guardado ✅ (aplica igual para FECHA y USO)");
+    setMismatchWarn("");
     setSaving(false);
   }
 
   const canEdit = role === "owner" || role === "admin";
 
+  const helpText = useMemo(
+    () =>
+      "Estados: 🟢 verde, 🟡 amarillo, 🟠 naranja, 🔴 rojo. " +
+      "Vencido cuando días ≤ 0. Estos umbrales se aplican a FECHA (días restantes) y USO (días estimados).",
+    []
+  );
+
   return (
     <main style={{ padding: 16, maxWidth: 900, margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
         <div>
           <h2 style={{ margin: 0 }}>Semáforo</h2>
-          <p style={{ marginTop: 6, opacity: 0.75 }}>
-            4 estados: 🟢 verde, 🟡 amarillo, 🟠 naranja, 🔴 rojo. (Vencido cuando días ≤ 0)
-          </p>
+          <p style={{ marginTop: 6, opacity: 0.75 }}>{helpText}</p>
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Link href="/app" style={{ textDecoration: "none" }}>
             <button style={{ padding: "10px 12px" }}>Dashboard</button>
           </Link>
-          <button onClick={load} style={{ padding: "10px 12px" }} disabled={loading}>
-            Refrescar
+          <button onClick={load} style={{ padding: "10px 12px" }} disabled={loading || saving}>
+            Actualizar
           </button>
         </div>
       </div>
 
       {errorMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{errorMsg}</p>}
       {okMsg && <p style={{ color: "green" }}>{okMsg}</p>}
+      {mismatchWarn && (
+        <p style={{ color: "#8a6d3b", background: "#fcf8e3", padding: 10, borderRadius: 12 }}>
+          {mismatchWarn}
+        </p>
+      )}
 
-      <section style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 16, padding: 12, background: "white" }}>
+      <section
+        style={{
+          marginTop: 12,
+          border: "1px solid #eee",
+          borderRadius: 16,
+          padding: 12,
+          background: "white",
+        }}
+      >
         {loading ? (
           <p>Cargando…</p>
         ) : (
@@ -177,86 +236,79 @@ export default function SemaphoreSettingsPage() {
 
             <form onSubmit={save} style={{ marginTop: 12, display: "grid", gap: 16, maxWidth: 620 }}>
               <div style={{ border: "1px solid #f0f0f0", borderRadius: 12, padding: 12 }}>
-                <div style={{ fontWeight: 900 }}>Por FECHA (días restantes)</div>
+                <div style={{ fontWeight: 900 }}>Umbrales (aplican a FECHA y USO)</div>
+
                 <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr 1fr", marginTop: 10 }}>
                   <label style={{ fontSize: 12, opacity: 0.8 }}>
-                    🟡 Yellow ≤
+                    🟡 Yellow ≤ (días)
                     <input
-                      disabled={!canEdit}
-                      value={String(s.date_yellow_days)}
-                      onChange={(e) => setField("date_yellow_days", Number(e.target.value))}
+                      disabled={!canEdit || saving}
+                      value={String(t.yellow_days)}
+                      onChange={(e) => setT((p) => ({ ...p, yellow_days: Number(e.target.value) }))}
                       inputMode="numeric"
-                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #e5e5e5", marginTop: 6 }}
+                      style={{
+                        width: "100%",
+                        padding: 10,
+                        borderRadius: 10,
+                        border: "1px solid #e5e5e5",
+                        marginTop: 6,
+                      }}
                     />
                   </label>
+
                   <label style={{ fontSize: 12, opacity: 0.8 }}>
-                    🟠 Orange ≤
+                    🟠 Orange ≤ (días)
                     <input
-                      disabled={!canEdit}
-                      value={String(s.date_orange_days)}
-                      onChange={(e) => setField("date_orange_days", Number(e.target.value))}
+                      disabled={!canEdit || saving}
+                      value={String(t.orange_days)}
+                      onChange={(e) => setT((p) => ({ ...p, orange_days: Number(e.target.value) }))}
                       inputMode="numeric"
-                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #e5e5e5", marginTop: 6 }}
+                      style={{
+                        width: "100%",
+                        padding: 10,
+                        borderRadius: 10,
+                        border: "1px solid #e5e5e5",
+                        marginTop: 6,
+                      }}
                     />
                   </label>
+
                   <label style={{ fontSize: 12, opacity: 0.8 }}>
-                    🔴 Red ≤
+                    🔴 Red ≤ (días)
                     <input
-                      disabled={!canEdit}
-                      value={String(s.date_red_days)}
-                      onChange={(e) => setField("date_red_days", Number(e.target.value))}
+                      disabled={!canEdit || saving}
+                      value={String(t.red_days)}
+                      onChange={(e) => setT((p) => ({ ...p, red_days: Number(e.target.value) }))}
                       inputMode="numeric"
-                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #e5e5e5", marginTop: 6 }}
+                      style={{
+                        width: "100%",
+                        padding: 10,
+                        borderRadius: 10,
+                        border: "1px solid #e5e5e5",
+                        marginTop: 6,
+                      }}
                     />
                   </label>
                 </div>
-                <div style={{ fontSize: 12, opacity: 0.7, marginTop: 10 }}>
-                  Nota: “vencido” siempre es ≤ 0 (no se edita). El umbral 🔴 es “crítico” (0 &lt; días ≤ red).
+
+                <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
+                  Vencido cuando días ≤ <b>0</b> (no editable).
                 </div>
               </div>
 
-              <div style={{ border: "1px solid #f0f0f0", borderRadius: 12, padding: 12 }}>
-                <div style={{ fontWeight: 900 }}>Por USO (días estimados restantes)</div>
-                <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr 1fr", marginTop: 10 }}>
-                  <label style={{ fontSize: 12, opacity: 0.8 }}>
-                    🟡 Yellow ≤
-                    <input
-                      disabled={!canEdit}
-                      value={String(s.usage_yellow_days)}
-                      onChange={(e) => setField("usage_yellow_days", Number(e.target.value))}
-                      inputMode="numeric"
-                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #e5e5e5", marginTop: 6 }}
-                    />
-                  </label>
-                  <label style={{ fontSize: 12, opacity: 0.8 }}>
-                    🟠 Orange ≤
-                    <input
-                      disabled={!canEdit}
-                      value={String(s.usage_orange_days)}
-                      onChange={(e) => setField("usage_orange_days", Number(e.target.value))}
-                      inputMode="numeric"
-                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #e5e5e5", marginTop: 6 }}
-                    />
-                  </label>
-                  <label style={{ fontSize: 12, opacity: 0.8 }}>
-                    🔴 Red ≤
-                    <input
-                      disabled={!canEdit}
-                      value={String(s.usage_red_days)}
-                      onChange={(e) => setField("usage_red_days", Number(e.target.value))}
-                      inputMode="numeric"
-                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #e5e5e5", marginTop: 6 }}
-                    />
-                  </label>
-                </div>
-                <div style={{ fontSize: 12, opacity: 0.7, marginTop: 10 }}>
-                  “Días estimados” = (uso restante / promedio diario).
-                </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button type="submit" disabled={!canEdit || saving} style={{ padding: "10px 14px", fontWeight: 800 }}>
+                  {saving ? "Guardando…" : "Guardar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={load}
+                  disabled={loading || saving}
+                  style={{ padding: "10px 14px", opacity: 0.85 }}
+                >
+                  Revertir
+                </button>
               </div>
-
-              <button type="submit" disabled={!canEdit || saving} style={{ padding: "10px 12px", width: "fit-content" }}>
-                {saving ? "Guardando…" : "Guardar"}
-              </button>
             </form>
           </>
         )}

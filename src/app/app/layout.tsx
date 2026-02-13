@@ -27,6 +27,33 @@ function NavLink({ href, label }: { href: string; label: string }) {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const [isSuperAdmin, setIsSuperAdmin] = React.useState(false);
+  const [sessionEmail, setSessionEmail] = React.useState("");
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const { data } = await supabaseAuth.auth.getSession();
+      const token = data.session?.access_token;
+      const email = data.session?.user?.email || "";
+      if (!cancelled) setSessionEmail(email);
+      if (!token) return;
+
+      const res = await fetch("/api/platform/super-admin/status", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!cancelled) {
+        setIsSuperAdmin(Boolean(json?.is_super_admin));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function logout() {
     await supabaseAuth.auth.signOut();
@@ -40,27 +67,35 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           style={{
             maxWidth: 1100,
             margin: "0 auto",
-            padding: "10px 16px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
+            padding: "10px 16px 8px",
+            display: "grid",
+            gap: 6,
           }}
         >
-          <Link href="/app" style={{ textDecoration: "none", color: "black" }}>
-            <strong>Deadline Tracker</strong>
-          </Link>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, whiteSpace: "nowrap" }}>
+              <Link href="/app" style={{ textDecoration: "none", color: "black" }}>
+                <strong>Deadline Tracker</strong>
+              </Link>
+            </div>
 
-          <nav style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            <NavLink href="/app" label="Dashboard" />
-            <NavLink href="/app/entities" label="Entidades" />
-            <NavLink href="/app/entity-types" label="Tipos entidad" />
-            <NavLink href="/app/deadline-types" label="Tipos vencimiento" />
-            <NavLink href="/app/users" label="Usuarios" />
-            <button onClick={logout} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #eee" }}>
-              Salir
-            </button>
-          </nav>
+            <nav style={{ display: "flex", gap: 6, flexWrap: "nowrap", alignItems: "center" }}>
+              <NavLink href="/app" label="Dashboard" />
+              <NavLink href="/app/entities" label="Entidades" />
+              <NavLink href="/app/entity-types" label="Tipos entidad" />
+              <NavLink href="/app/deadline-types" label="Tipos vencimiento" />
+              <NavLink href="/app/users" label="Usuarios" />
+              <NavLink href="/app/profile" label="Perfil" />
+              {isSuperAdmin ? <NavLink href="/app/super-admin" label="Super Admin" /> : null}
+              <button onClick={logout} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #eee" }}>
+                Salir
+              </button>
+            </nav>
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>
+            Sesión: {sessionEmail || "(sin email)"}
+            {isSuperAdmin ? " · super admin" : ""}
+          </div>
         </div>
       </header>
 

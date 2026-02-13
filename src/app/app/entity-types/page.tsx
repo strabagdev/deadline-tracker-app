@@ -15,6 +15,12 @@ type EntityField = {
   options: any;
   created_at: string;
 };
+type FieldDraft = {
+  name: string;
+  key: string;
+  field_type: EntityField["field_type"];
+  show_in_card: boolean;
+};
 
 async function getTokenOrRedirect(router: any) {
   const { data } = await supabaseAuth.auth.getSession();
@@ -43,6 +49,8 @@ export default function EntityTypesPage() {
   const [newFieldName, setNewFieldName] = useState("");
   const [newFieldType, setNewFieldType] = useState<EntityField["field_type"]>("text");
   const [newShowInCard, setNewShowInCard] = useState(false);
+  const [editingFieldId, setEditingFieldId] = useState<string>("");
+  const [fieldDraft, setFieldDraft] = useState<FieldDraft | null>(null);
 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string>("");
@@ -170,6 +178,51 @@ export default function EntityTypesPage() {
     setNewFieldType("text");
     setNewShowInCard(false);
     await loadFields(selectedId);
+    setBusy(false);
+  }
+
+  function startEditField(field: EntityField) {
+    setEditingFieldId(field.id);
+    setFieldDraft({
+      name: field.name,
+      key: field.key,
+      field_type: field.field_type,
+      show_in_card: field.show_in_card,
+    });
+  }
+
+  function cancelEditField() {
+    setEditingFieldId("");
+    setFieldDraft(null);
+  }
+
+  async function saveField() {
+    if (!editingFieldId || !fieldDraft) return;
+
+    setBusy(true);
+    setMsg("");
+
+    const token = await getTokenOrRedirect(router);
+    if (!token) return;
+
+    const res = await fetch(`/api/entity-fields?id=${encodeURIComponent(editingFieldId)}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(fieldDraft),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMsg(json.error || "No se pudo actualizar el campo");
+      setBusy(false);
+      return;
+    }
+
+    cancelEditField();
+    if (selectedId) await loadFields(selectedId);
     setBusy(false);
   }
 
@@ -318,12 +371,28 @@ export default function EntityTypesPage() {
                         <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>
                           show_in_card
                         </th>
+                        <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>
+                          Acciones
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {fields.map((f) => (
                         <tr key={f.id}>
-                          <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>{f.name}</td>
+                          <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
+                            {editingFieldId === f.id ? (
+                              <input
+                                value={fieldDraft?.name ?? ""}
+                                onChange={(e) =>
+                                  setFieldDraft((prev) => (prev ? { ...prev, name: e.target.value } : prev))
+                                }
+                                style={{ width: "100%", padding: 8 }}
+                                disabled={busy}
+                              />
+                            ) : (
+                              f.name
+                            )}
+                          </td>
                           <td
                             style={{
                               borderBottom: "1px solid #f3f3f3",
@@ -331,11 +400,81 @@ export default function EntityTypesPage() {
                               fontFamily: "monospace",
                             }}
                           >
-                            {f.key}
+                            {editingFieldId === f.id ? (
+                              <input
+                                value={fieldDraft?.key ?? ""}
+                                onChange={(e) =>
+                                  setFieldDraft((prev) => (prev ? { ...prev, key: e.target.value } : prev))
+                                }
+                                style={{ width: "100%", padding: 8, fontFamily: "monospace" }}
+                                disabled={busy}
+                              />
+                            ) : (
+                              f.key
+                            )}
                           </td>
-                          <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>{f.field_type}</td>
                           <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
-                            {f.show_in_card ? "true" : "false"}
+                            {editingFieldId === f.id ? (
+                              <select
+                                value={fieldDraft?.field_type ?? "text"}
+                                onChange={(e) =>
+                                  setFieldDraft((prev) =>
+                                    prev
+                                      ? { ...prev, field_type: e.target.value as EntityField["field_type"] }
+                                      : prev
+                                  )
+                                }
+                                style={{ padding: 8 }}
+                                disabled={busy}
+                              >
+                                <option value="text">text</option>
+                                <option value="number">number</option>
+                                <option value="date">date</option>
+                                <option value="boolean">boolean</option>
+                                <option value="select">select</option>
+                              </select>
+                            ) : (
+                              f.field_type
+                            )}
+                          </td>
+                          <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
+                            {editingFieldId === f.id ? (
+                              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(fieldDraft?.show_in_card)}
+                                  onChange={(e) =>
+                                    setFieldDraft((prev) =>
+                                      prev ? { ...prev, show_in_card: e.target.checked } : prev
+                                    )
+                                  }
+                                  disabled={busy}
+                                />
+                                true
+                              </label>
+                            ) : (
+                              (f.show_in_card ? "true" : "false")
+                            )}
+                          </td>
+                          <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
+                            {editingFieldId === f.id ? (
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <button onClick={saveField} disabled={busy} style={{ padding: "6px 10px" }}>
+                                  Guardar
+                                </button>
+                                <button onClick={cancelEditField} disabled={busy} style={{ padding: "6px 10px" }}>
+                                  Cancelar
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => startEditField(f)}
+                                disabled={busy}
+                                style={{ padding: "6px 10px" }}
+                              >
+                                Editar
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}

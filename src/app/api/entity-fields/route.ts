@@ -114,3 +114,79 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
   }
 }
+
+export async function PUT(req: Request) {
+  try {
+    const { user } = await requireAuthUser(req);
+    const db = createDataServerClient();
+
+    const orgId = await getActiveOrgId(db, user.id);
+    if (!orgId) return NextResponse.json({ error: "no active organization" }, { status: 400 });
+
+    const role = await requireMember(db, orgId, user.id);
+    if (!role) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+
+    const url = new URL(req.url);
+    const id = url.searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+    const { data: existing, error: existingErr } = await db
+      .from("entity_fields")
+      .select("id, organization_id, name, key, field_type, show_in_card, options")
+      .eq("organization_id", orgId)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (existingErr) throw existingErr;
+    if (!existing) return NextResponse.json({ error: "field not found" }, { status: 404 });
+
+    const body = await req.json().catch(() => ({}));
+    const patch: Record<string, unknown> = {};
+
+    if (body?.name !== undefined) {
+      const name = String(body.name).trim();
+      if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
+      patch.name = name;
+    }
+
+    if (body?.key !== undefined) {
+      const key = toSlugKey(String(body.key));
+      if (!key) return NextResponse.json({ error: "key required" }, { status: 400 });
+      patch.key = key;
+    }
+
+    if (body?.field_type !== undefined) {
+      const fieldType = String(body.field_type).trim();
+      const allowed = new Set(["text", "number", "date", "boolean", "select"]);
+      if (!allowed.has(fieldType)) {
+        return NextResponse.json({ error: "invalid field_type" }, { status: 400 });
+      }
+      patch.field_type = fieldType;
+    }
+
+    if (body?.show_in_card !== undefined) {
+      patch.show_in_card = Boolean(body.show_in_card);
+    }
+
+    if (body?.options !== undefined) {
+      patch.options = body.options;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return NextResponse.json({ error: "no changes provided" }, { status: 400 });
+    }
+
+    const { data, error } = await db
+      .from("entity_fields")
+      .update(patch)
+      .eq("organization_id", orgId)
+      .eq("id", id)
+      .select("id, entity_type_id, name, key, field_type, show_in_card, options, created_at")
+      .single();
+
+    if (error) throw error;
+    return NextResponse.json({ entity_field: data });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  }
+}
