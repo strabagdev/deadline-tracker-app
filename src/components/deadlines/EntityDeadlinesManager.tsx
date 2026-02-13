@@ -40,6 +40,16 @@ type UsageLogRow = {
   created_at?: string;
 };
 
+type DeadlineEditDraft = {
+  last_done_date: string;
+  next_due_date: string;
+  last_done_usage: string;
+  frequency: string;
+  frequency_unit: string;
+  usage_daily_average_mode: "manual" | "auto";
+  usage_daily_average: string;
+};
+
 async function getToken() {
   const { data } = await supabaseAuth.auth.getSession();
   return data.session?.access_token ?? null;
@@ -71,6 +81,8 @@ export default function EntityDeadlinesManager({
   const [usageLogLoggedAt, setUsageLogLoggedAt] = useState<string>(() => isoToLocalDatetimeInput(new Date().toISOString()));
   const [usageLogsBusy, setUsageLogsBusy] = useState(false);
   const [usageLogsMsg, setUsageLogsMsg] = useState<string>("");
+  const [editingDeadlineId, setEditingDeadlineId] = useState<string>("");
+  const [editDraft, setEditDraft] = useState<DeadlineEditDraft | null>(null);
 
   // form
   const [deadlineTypeId, setDeadlineTypeId] = useState<string>("");
@@ -108,11 +120,16 @@ export default function EntityDeadlinesManager({
     if (!res.ok) {
       setMsg(json.error || "No se pudieron cargar los tipos");
       setTypes([]);
+      setDeadlineTypeId("");
       return;
     }
     const list: DeadlineType[] = json.deadline_types ?? [];
     setTypes(list);
-    if (!deadlineTypeId && list.length > 0) setDeadlineTypeId(list[0].id);
+    if (list.length === 0) {
+      setDeadlineTypeId("");
+    } else if (!deadlineTypeId) {
+      setDeadlineTypeId(list[0].id);
+    }
   }
 
   async function loadDeadlines() {
@@ -148,7 +165,7 @@ export default function EntityDeadlinesManager({
     setUsageLogs(json.usage_logs ?? []);
   }
 
-  function resetFormForType(type: DeadlineType | null) {
+  function resetFormForType() {
     // keep selected type, reset only the inputs
     setMsg("");
     setLastDoneDate("");
@@ -161,8 +178,7 @@ export default function EntityDeadlinesManager({
   }
 
   useEffect(() => {
-    resetFormForType(selectedType);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    resetFormForType();
   }, [deadlineTypeId]);
 
   async function createDeadline() {
@@ -177,7 +193,7 @@ export default function EntityDeadlinesManager({
     const token = await getToken();
     if (!token) return;
 
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       entity_id: entityId,
       deadline_type_id: deadlineTypeId,
       last_done_date: lastDoneDate || null,
@@ -288,6 +304,91 @@ export default function EntityDeadlinesManager({
 
     await loadUsageLogs();
     setUsageLogsBusy(false);
+  }
+
+  function startEditDeadline(d: DeadlineRow) {
+    setEditingDeadlineId(d.id);
+    setEditDraft({
+      last_done_date: d.last_done_date ?? "",
+      next_due_date: d.next_due_date ?? "",
+      last_done_usage: d.last_done_usage != null ? String(d.last_done_usage) : "",
+      frequency: d.frequency != null ? String(d.frequency) : "",
+      frequency_unit: d.frequency_unit ?? "hours",
+      usage_daily_average_mode:
+        (d.usage_daily_average_mode ?? "manual") === "auto" ? "auto" : "manual",
+      usage_daily_average: d.usage_daily_average != null ? String(d.usage_daily_average) : "",
+    });
+    setMsg("");
+  }
+
+  function cancelEditDeadline() {
+    setEditingDeadlineId("");
+    setEditDraft(null);
+    setMsg("");
+  }
+
+  async function saveEditedDeadline(d: DeadlineRow) {
+    if (!editDraft) return;
+
+    setBusy(true);
+    setMsg("");
+
+    const token = await getToken();
+    if (!token) return;
+
+    const payload: Record<string, unknown> = {
+      id: d.id,
+      last_done_date: editDraft.last_done_date || null,
+    };
+
+    if (d.deadline_types?.measure_by === "date") {
+      if (!editDraft.next_due_date) {
+        setMsg("Para vencimientos por fecha: next due date es requerido.");
+        setBusy(false);
+        return;
+      }
+      payload.next_due_date = editDraft.next_due_date;
+    } else {
+      if (editDraft.last_done_usage === "" || editDraft.frequency === "") {
+        setMsg("Para vencimientos por uso: last done usage y frecuencia son requeridos.");
+        setBusy(false);
+        return;
+      }
+      if (
+        editDraft.usage_daily_average_mode === "manual" &&
+        editDraft.usage_daily_average === ""
+      ) {
+        setMsg("Para modo manual: promedio diario es requerido.");
+        setBusy(false);
+        return;
+      }
+
+      payload.last_done_usage = Number(editDraft.last_done_usage);
+      payload.frequency = Number(editDraft.frequency);
+      payload.frequency_unit = editDraft.frequency_unit;
+      payload.usage_daily_average_mode = editDraft.usage_daily_average_mode;
+      payload.usage_daily_average =
+        editDraft.usage_daily_average_mode === "manual"
+          ? Number(editDraft.usage_daily_average)
+          : null;
+    }
+
+    const res = await fetch("/api/deadlines", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMsg(json.error || "No se pudo actualizar el vencimiento");
+      setBusy(false);
+      return;
+    }
+
+    cancelEditDeadline();
+    await loadDeadlines();
+    setBusy(false);
   }
 
   const card: React.CSSProperties = {
@@ -406,126 +507,139 @@ export default function EntityDeadlinesManager({
       {/* ------------------------------------------------------------------------ */}
 
       <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 200px 200px", gap: 10 }}>
-          <div>
-            <label>Tipo</label>
-            <select
-              value={deadlineTypeId}
-              onChange={(e) => setDeadlineTypeId(e.target.value)}
-              style={{ width: "100%", padding: 10, marginTop: 6 }}
-              disabled={busy}
-            >
-              {types.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} ({t.measure_by === "date" ? "fecha" : "uso"})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label>Última realización (opcional)</label>
-            <input
-              type="date"
-              value={lastDoneDate}
-              onChange={(e) => setLastDoneDate(e.target.value)}
-              style={{ width: "100%", padding: 10, marginTop: 6 }}
-              disabled={busy}
-            />
-          </div>
-
-          {selectedType?.measure_by === "date" ? (
-            <div>
-              <label>Next due date</label>
-              <input
-                type="date"
-                value={nextDueDate}
-                onChange={(e) => setNextDueDate(e.target.value)}
-                style={{ width: "100%", padding: 10, marginTop: 6 }}
-                disabled={busy}
-              />
+        {types.length === 0 ? (
+          <div style={{ border: "1px dashed #ddd", borderRadius: 12, padding: 12, opacity: 0.85 }}>
+            <strong>No hay tipos de vencimiento disponibles.</strong>
+            <div style={{ marginTop: 6, fontSize: 13 }}>
+              Crea al menos un tipo de vencimiento en <code>/app/deadline-types</code> para poder agregar vencimientos a esta entidad.
             </div>
-          ) : (
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div>
-                  <label>Last done usage</label>
-                  <input
-                    inputMode="decimal"
-                    value={lastDoneUsage}
-                    onChange={(e) => setLastDoneUsage(e.target.value)}
-                    placeholder="Ej: 1200"
-                    style={{ width: "100%", padding: 10, marginTop: 6 }}
-                    disabled={busy}
-                  />
-                </div>
-                <div>
-                  <label>Frecuencia</label>
-                  <input
-                    inputMode="decimal"
-                    value={frequency}
-                    onChange={(e) => setFrequency(e.target.value)}
-                    placeholder="Ej: 250"
-                    style={{ width: "100%", padding: 10, marginTop: 6 }}
-                    disabled={busy}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div>
-                  <label>Unidad</label>
-                  <select
-                    value={frequencyUnit}
-                    onChange={(e) => setFrequencyUnit(e.target.value)}
-                    style={{ width: "100%", padding: 10, marginTop: 6 }}
-                    disabled={busy}
-                  >
-                    <option value="hours">hours</option>
-                    <option value="kilometers">kilometers</option>
-                    <option value="days">days</option>
-                    <option value="cycles">cycles</option>
-                  </select>
-                </div>
-                <div>
-                  <label>Promedio diario (modo)</label>
-                  <select
-                    value={usageDailyAverageMode}
-                    onChange={(e) => setUsageDailyAverageMode(e.target.value as "manual" | "auto")}
-                    style={{ width: "100%", padding: 10, marginTop: 6 }}
-                    disabled={busy}
-                  >
-                    <option value="manual">Manual</option>
-                    <option value="auto">Automático</option>
-                  </select>
-                </div>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 200px 200px", gap: 10 }}>
+              <div>
+                <label>Tipo</label>
+                <select
+                  value={deadlineTypeId}
+                  onChange={(e) => setDeadlineTypeId(e.target.value)}
+                  style={{ width: "100%", padding: 10, marginTop: 6 }}
+                  disabled={busy}
+                >
+                  {types.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.measure_by === "date" ? "fecha" : "uso"})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
-                <label>Promedio diario{usageDailyAverageMode === "auto" ? " (calculado por el sistema)" : ""}</label>
+                <label>Última realización (opcional)</label>
                 <input
-                  inputMode="decimal"
-                  value={usageDailyAverageMode === "manual" ? usageDailyAverage : ""}
-                  onChange={(e) => setUsageDailyAverage(e.target.value)}
-                  placeholder={usageDailyAverageMode === "manual" ? "Ej: 6" : "Se calculará automáticamente"}
+                  type="date"
+                  value={lastDoneDate}
+                  onChange={(e) => setLastDoneDate(e.target.value)}
                   style={{ width: "100%", padding: 10, marginTop: 6 }}
-                  disabled={busy || usageDailyAverageMode === "auto"}
+                  disabled={busy}
                 />
-                {usageDailyAverageMode === "auto" && (
-                  <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
-                    El promedio se calcula usando los usage_logs de la entidad (backend).
-                  </div>
-                )}
               </div>
-            </div>
-          )}
-        </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button onClick={createDeadline} disabled={busy || !deadlineTypeId} style={{ padding: 10, fontWeight: 800 }}>
-            {busy ? "Guardando..." : "Agregar vencimiento"}
-          </button>
-        </div>
+                <div>
+                  {selectedType?.measure_by === "date" ? (
+                    <>
+                      <label>Next due date</label>
+                      <input
+                        type="date"
+                        value={nextDueDate}
+                        onChange={(e) => setNextDueDate(e.target.value)}
+                        style={{ width: "100%", padding: 10, marginTop: 6 }}
+                        disabled={busy}
+                      />
+                    </>
+                  ) : (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                        <div>
+                          <label>Last done usage</label>
+                          <input
+                            inputMode="decimal"
+                            value={lastDoneUsage}
+                            onChange={(e) => setLastDoneUsage(e.target.value)}
+                            placeholder="Ej: 1200"
+                            style={{ width: "100%", padding: 10, marginTop: 6 }}
+                            disabled={busy}
+                          />
+                        </div>
+                        <div>
+                          <label>Frecuencia</label>
+                          <input
+                            inputMode="decimal"
+                            value={frequency}
+                            onChange={(e) => setFrequency(e.target.value)}
+                            placeholder="Ej: 250"
+                            style={{ width: "100%", padding: 10, marginTop: 6 }}
+                            disabled={busy}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                        <div>
+                          <label>Unidad</label>
+                          <select
+                            value={frequencyUnit}
+                            onChange={(e) => setFrequencyUnit(e.target.value)}
+                            style={{ width: "100%", padding: 10, marginTop: 6 }}
+                            disabled={busy}
+                          >
+                            <option value="hours">hours</option>
+                            <option value="kilometers">kilometers</option>
+                            <option value="days">days</option>
+                            <option value="cycles">cycles</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label>Promedio diario (modo)</label>
+                          <select
+                            value={usageDailyAverageMode}
+                            onChange={(e) => setUsageDailyAverageMode(e.target.value as "manual" | "auto")}
+                            style={{ width: "100%", padding: 10, marginTop: 6 }}
+                            disabled={busy}
+                          >
+                            <option value="manual">Manual</option>
+                            <option value="auto">Automático</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label>Promedio diario{usageDailyAverageMode === "auto" ? " (calculado por el sistema)" : ""}</label>
+                        <input
+                          inputMode="decimal"
+                          value={usageDailyAverageMode === "manual" ? usageDailyAverage : ""}
+                          onChange={(e) => setUsageDailyAverage(e.target.value)}
+                          placeholder={usageDailyAverageMode === "manual" ? "Ej: 6" : "Se calculará automáticamente"}
+                          style={{ width: "100%", padding: 10, marginTop: 6 }}
+                          disabled={busy || usageDailyAverageMode === "auto"}
+                        />
+                        {usageDailyAverageMode === "auto" && (
+                          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
+                            El promedio se calcula usando los usage_logs de la entidad (backend).
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={createDeadline} disabled={busy || !deadlineTypeId} style={{ padding: 10, fontWeight: 800 }}>
+                {busy ? "Guardando..." : "Agregar vencimiento"}
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       <hr style={{ margin: "14px 0", border: "none", borderTop: "1px solid #eee" }} />
@@ -551,6 +665,20 @@ export default function EntityDeadlinesManager({
                       {new Date(d.created_at).toLocaleString()}
                     </div>
                   </div>
+                  {editingDeadlineId === d.id ? (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => saveEditedDeadline(d)} disabled={busy} style={{ padding: "8px 10px" }}>
+                        Guardar
+                      </button>
+                      <button onClick={cancelEditDeadline} disabled={busy} style={{ padding: "8px 10px" }}>
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => startEditDeadline(d)} disabled={busy} style={{ padding: "8px 10px" }}>
+                      Editar
+                    </button>
+                  )}
                 </div>
 
                 <div
@@ -562,25 +690,135 @@ export default function EntityDeadlinesManager({
                   }}
                 >
                   <div>
-                    <strong>Last done date:</strong> {d.last_done_date ?? "-"}
+                    <strong>Last done date:</strong>{" "}
+                    {editingDeadlineId === d.id ? (
+                      <input
+                        type="date"
+                        value={editDraft?.last_done_date ?? ""}
+                        onChange={(e) =>
+                          setEditDraft((prev) => (prev ? { ...prev, last_done_date: e.target.value } : prev))
+                        }
+                        style={{ marginLeft: 8, padding: 6 }}
+                        disabled={busy}
+                      />
+                    ) : (
+                      (d.last_done_date ?? "-")
+                    )}
                   </div>
                   {t?.measure_by === "date" ? (
                     <div>
-                      <strong>Next due date:</strong> {d.next_due_date ?? "-"}
+                      <strong>Next due date:</strong>{" "}
+                      {editingDeadlineId === d.id ? (
+                        <input
+                          type="date"
+                          value={editDraft?.next_due_date ?? ""}
+                          onChange={(e) =>
+                            setEditDraft((prev) => (prev ? { ...prev, next_due_date: e.target.value } : prev))
+                          }
+                          style={{ marginLeft: 8, padding: 6 }}
+                          disabled={busy}
+                        />
+                      ) : (
+                        (d.next_due_date ?? "-")
+                      )}
                     </div>
                   ) : (
                     <>
                       <div>
-                        <strong>Last done usage:</strong> {d.last_done_usage ?? "-"}
+                        <strong>Last done usage:</strong>{" "}
+                        {editingDeadlineId === d.id ? (
+                          <input
+                            inputMode="decimal"
+                            value={editDraft?.last_done_usage ?? ""}
+                            onChange={(e) =>
+                              setEditDraft((prev) => (prev ? { ...prev, last_done_usage: e.target.value } : prev))
+                            }
+                            style={{ marginLeft: 8, padding: 6 }}
+                            disabled={busy}
+                          />
+                        ) : (
+                          (d.last_done_usage ?? "-")
+                        )}
                       </div>
                       <div>
-                        <strong>Frecuencia:</strong> {d.frequency ?? "-"} {d.frequency_unit ?? ""}
+                        <strong>Frecuencia:</strong>{" "}
+                        {editingDeadlineId === d.id ? (
+                          <>
+                            <input
+                              inputMode="decimal"
+                              value={editDraft?.frequency ?? ""}
+                              onChange={(e) =>
+                                setEditDraft((prev) => (prev ? { ...prev, frequency: e.target.value } : prev))
+                              }
+                              style={{ marginLeft: 8, padding: 6, width: 90 }}
+                              disabled={busy}
+                            />
+                            <select
+                              value={editDraft?.frequency_unit ?? "hours"}
+                              onChange={(e) =>
+                                setEditDraft((prev) => (prev ? { ...prev, frequency_unit: e.target.value } : prev))
+                              }
+                              style={{ marginLeft: 8, padding: 6 }}
+                              disabled={busy}
+                            >
+                              <option value="hours">hours</option>
+                              <option value="kilometers">kilometers</option>
+                              <option value="days">days</option>
+                              <option value="cycles">cycles</option>
+                            </select>
+                          </>
+                        ) : (
+                          <>
+                            {d.frequency ?? "-"} {d.frequency_unit ?? ""}
+                          </>
+                        )}
                       </div>
                       <div>
-                        <strong>Promedio diario:</strong> {d.usage_daily_average ?? "-"}{" "}
-                        <span style={{ opacity: 0.75 }}>
-                          ({(d.usage_daily_average_mode ?? "manual") === "auto" ? "auto" : "manual"})
-                        </span>
+                        <strong>Promedio diario:</strong>{" "}
+                        {editingDeadlineId === d.id ? (
+                          <>
+                            <select
+                              value={editDraft?.usage_daily_average_mode ?? "manual"}
+                              onChange={(e) =>
+                                setEditDraft((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        usage_daily_average_mode: e.target.value as "manual" | "auto",
+                                      }
+                                    : prev
+                                )
+                              }
+                              style={{ marginLeft: 8, padding: 6 }}
+                              disabled={busy}
+                            >
+                              <option value="manual">manual</option>
+                              <option value="auto">auto</option>
+                            </select>
+                            <input
+                              inputMode="decimal"
+                              value={
+                                (editDraft?.usage_daily_average_mode ?? "manual") === "manual"
+                                  ? editDraft?.usage_daily_average ?? ""
+                                  : ""
+                              }
+                              onChange={(e) =>
+                                setEditDraft((prev) =>
+                                  prev ? { ...prev, usage_daily_average: e.target.value } : prev
+                                )
+                              }
+                              style={{ marginLeft: 8, padding: 6, width: 90 }}
+                              disabled={busy || (editDraft?.usage_daily_average_mode ?? "manual") === "auto"}
+                            />
+                          </>
+                        ) : (
+                          <>
+                            {d.usage_daily_average ?? "-"}{" "}
+                            <span style={{ opacity: 0.75 }}>
+                              ({(d.usage_daily_average_mode ?? "manual") === "auto" ? "auto" : "manual"})
+                            </span>
+                          </>
+                        )}
                       </div>
                     </>
                   )}
