@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 
-type EntityType = { id: string; name: string; icon: string | null; created_at: string };
+type EntityType = { id: string; name: string; icon: string | null };
 type EntityField = {
   id: string;
   entity_type_id: string;
@@ -12,7 +12,7 @@ type EntityField = {
   key: string;
   field_type: "text" | "number" | "date" | "boolean" | "select";
   show_in_card: boolean;
-  options: any;
+  options: unknown;
   created_at: string;
 };
 type FieldDraft = {
@@ -22,7 +22,7 @@ type FieldDraft = {
   show_in_card: boolean;
 };
 
-async function getTokenOrRedirect(router: any) {
+async function getTokenOrRedirect(router: { replace: (href: string) => void }) {
   const { data } = await supabaseAuth.auth.getSession();
   const token = data.session?.access_token;
   if (!token) {
@@ -287,9 +287,6 @@ export default function EntityTypesPage() {
                       }}
                     >
                       <strong>{t.name}</strong>
-                      <div style={{ opacity: 0.7, fontSize: 12, marginTop: 4 }}>
-                        {new Date(t.created_at).toLocaleString()}
-                      </div>
                     </button>
                   </li>
                 ))}
@@ -326,7 +323,7 @@ export default function EntityTypesPage() {
 
                 <select
                   value={newFieldType}
-                  onChange={(e) => setNewFieldType(e.target.value as any)}
+                  onChange={(e) => setNewFieldType(e.target.value as EntityField["field_type"])}
                   style={{ padding: 10 }}
                   disabled={busy}
                 >

@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import { pickNearestDeadline } from "@/lib/deadlines/calculateDeadlineStatus";
 
 type DeadlineType = {
   id: string;
@@ -55,99 +56,6 @@ type SemaphoreSettings = {
   orange_days: number;
   red_days: number;
 };
-
-function daysBetween(a: Date, b: Date) {
-  return (b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24);
-}
-
-function parseISODateOnly(s: string): Date {
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-// ✅ ESTA ES LA REGLA FINAL (4 estados + vencido)
-function classify(diffDays: number, yellow: number, orange: number, red: number) {
-  if (diffDays <= 0) return { status: "red" as const, label: "Vencido" };
-  if (diffDays <= red) return { status: "red" as const, label: "Crítico" };
-  if (diffDays <= orange) return { status: "orange" as const, label: "Por vencer" };
-  if (diffDays <= yellow) return { status: "yellow" as const, label: "Por vencer" };
-  return { status: "green" as const, label: "Vigente" };
-}
-
-function computeStatusAndDue(
-  deadline: Deadline,
-  latestUsage: number | null,
-  settings: SemaphoreSettings
-): { due: Date | null; status: Status; label: string; typeName: string; measureBy: "date" | "usage" | "unknown" } {
-  const t = deadline.deadline_types;
-  const typeName = t?.name ?? "—";
-  const measureBy: "date" | "usage" | "unknown" =
-    t?.measure_by === "date" || t?.measure_by === "usage" ? t.measure_by : "unknown";
-  if (!t) return { due: null, status: "none", label: "Sin tipo", typeName, measureBy };
-
-  const today = new Date();
-
-  if (t.measure_by === "date") {
-    if (!deadline.next_due_date) return { due: null, status: "none", label: "Sin fecha", typeName, measureBy: "date" };
-    const due = parseISODateOnly(deadline.next_due_date);
-    const diff = daysBetween(today, due);
-
-    const c = classify(
-      diff,
-      Number(settings.yellow_days ?? 60),
-      Number(settings.orange_days ?? 30),
-      Number(settings.red_days ?? 15)
-    );
-
-    return { due, status: c.status, label: c.label, typeName, measureBy: "date" };
-  }
-
-  // USO: días estimados restantes
-  if (
-    deadline.last_done_usage == null ||
-    deadline.frequency == null ||
-    deadline.usage_daily_average == null ||
-    latestUsage == null ||
-    Number(deadline.usage_daily_average) <= 0
-  ) {
-    return { due: null, status: "none", label: "Incompleto", typeName, measureBy: "usage" };
-  }
-
-  const remaining = Number(deadline.frequency) - (Number(latestUsage) - Number(deadline.last_done_usage));
-  const avg = Number(deadline.usage_daily_average);
-
-  if (remaining <= 0) return { due: today, status: "red", label: "Vencido", typeName, measureBy: "usage" };
-
-  const days = remaining / avg;
-  const due = new Date(today.getTime() + days * 86400000);
-
-  const c = classify(
-    days,
-    Number(settings.yellow_days ?? 60),
-    Number(settings.orange_days ?? 30),
-    Number(settings.red_days ?? 15)
-  );
-
-  return { due, status: c.status, label: c.label, typeName, measureBy: "usage" };
-}
-
-function pickNearestDeadline(entity: EntityRow, latestUsage: number | null, settings: SemaphoreSettings) {
-  const ds = (entity.deadlines ?? []).filter((d) => d.deadline_types?.is_active !== false);
-
-  let best: ReturnType<typeof computeStatusAndDue> | null = null;
-
-  for (const d of ds) {
-    const r = computeStatusAndDue(d, latestUsage, settings);
-    if (!best) {
-      best = r;
-      continue;
-    }
-    if (best.due == null && r.due != null) best = r;
-    else if (best.due != null && r.due != null && r.due < best.due) best = r;
-  }
-
-  return best;
-}
 
 function fmtDate(d: Date | null) {
   if (!d) return "—";
@@ -297,9 +205,14 @@ export default function AppDashboard() {
     return entities.map((e) => {
       const latest = usage[e.id]?.value ?? null;
       const latestAt = usage[e.id]?.logged_at ?? null;
-      const nearest = pickNearestDeadline(e, latest, semaphore);
+      const hasActiveDeadlines = (e.deadlines ?? []).some((d) => d.deadline_types?.is_active !== false);
+      const nearest = pickNearestDeadline(e.deadlines, latest, {
+        yellowDays: Number(semaphore.yellow_days ?? 60),
+        orangeDays: Number(semaphore.orange_days ?? 30),
+        redDays: Number(semaphore.red_days ?? 15),
+      });
       const status: Status = (nearest?.status as Status) ?? "none";
-      return { entity: e, latestUsage: latest, latestUsageAt: latestAt, nearest, status };
+      return { entity: e, latestUsage: latest, latestUsageAt: latestAt, nearest, status, hasActiveDeadlines };
     });
   }, [entities, usage, semaphore]);
 
@@ -578,7 +491,7 @@ export default function AppDashboard() {
                           fontWeight: 700,
                         }}
                       >
-                        {nearest?.label ?? "Sin info"}
+                        {r.hasActiveDeadlines ? nearest?.label ?? "Sin info" : "Sin vencimientos"}
                       </span>
                     </div>
 
@@ -592,15 +505,22 @@ export default function AppDashboard() {
                     >
                       <div style={{ fontSize: 11, opacity: 0.72 }}>Próximo vencimiento</div>
                       <div style={{ marginTop: 2, fontWeight: 900, fontSize: 14 }}>
-                        {nearest?.due ? fmtDate(nearest.due) : "Sin fecha estimada"}
+                        {!r.hasActiveDeadlines
+                          ? "Sin vencimientos"
+                          : nearest?.due
+                          ? fmtDate(nearest.due)
+                          : "Sin fecha estimada"}
                       </div>
                       <div style={{ marginTop: 2, fontSize: 12, opacity: 0.82 }}>
-                        {nearest?.typeName ?? "Sin tipo"}
-                        {nearest?.measureBy === "usage"
-                          ? " · por uso"
-                          : nearest?.measureBy === "date"
-                          ? " · por fecha"
-                          : ""}
+                        {!r.hasActiveDeadlines
+                          ? "Asocia un vencimiento para calcular estado."
+                          : `${nearest?.typeName ?? "Sin tipo"}${
+                              nearest?.measureBy === "usage"
+                                ? " · por uso"
+                                : nearest?.measureBy === "date"
+                                ? " · por fecha"
+                                : ""
+                            }`}
                       </div>
                     </div>
 

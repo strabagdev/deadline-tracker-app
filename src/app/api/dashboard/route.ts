@@ -50,6 +50,32 @@ async function requireMember(db: any, organizationId: string, userId: string) {
   return data?.role ?? null;
 }
 
+async function getLatestUsageByEntity(db: any, orgId: string, entityIds: string[]) {
+  const entries = await Promise.all(
+    entityIds.map(async (entityId) => {
+      const { data, error } = await db
+        .from("usage_logs")
+        .select("value, logged_at")
+        .eq("organization_id", orgId)
+        .eq("entity_id", entityId)
+        .order("logged_at", { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      const row = (data ?? [])[0];
+      if (!row) return null;
+      return [entityId, { value: Number(row.value), logged_at: String(row.logged_at) }] as const;
+    })
+  );
+
+  const out: Record<string, { value: number; logged_at: string }> = {};
+  for (const entry of entries) {
+    if (entry) out[entry[0]] = entry[1];
+  }
+  return out;
+}
+
 async function computeAutoDailyAverageFromList(logs: Array<{ value: any; logged_at: any }>): Promise<number | null> {
   if (!logs || logs.length < 2) return null;
 
@@ -221,11 +247,13 @@ export async function GET(req: Request) {
 
     const entityIds = (entities ?? []).map((e: any) => e.id);
 
-    // Fetch recent logs for all entities (for latest usage + auto avg)
+    // Fetch recent logs for auto daily average (mode=auto).
     const logsByEntity: Record<string, Array<{ value: any; logged_at: any }>> = {};
     const latestUsageByEntity: Record<string, { value: number; logged_at: string }> = {};
 
     if (entityIds.length > 0) {
+      Object.assign(latestUsageByEntity, await getLatestUsageByEntity(db, orgId, entityIds));
+
       const since = new Date(Date.now() - 30 * MS_PER_DAY).toISOString();
 
       const { data: logs, error: logErr } = await db
@@ -243,9 +271,6 @@ export async function GET(req: Request) {
         const id = row.entity_id as string;
         if (!logsByEntity[id]) logsByEntity[id] = [];
         logsByEntity[id].push({ value: row.value, logged_at: row.logged_at });
-
-        // latest map (we are in ascending order, so keep updating)
-        latestUsageByEntity[id] = { value: Number(row.value), logged_at: String(row.logged_at) };
       }
     }
 

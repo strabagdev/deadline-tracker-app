@@ -402,6 +402,38 @@ export default function EntityDeadlinesManager({
     setEditBusy(false);
   }
 
+  async function deleteDeadline(id: string) {
+    const ok = window.confirm("¿Eliminar este vencimiento asignado? Esta acción no se puede deshacer.");
+    if (!ok) return;
+
+    setEditBusy(true);
+    setEditMsg("");
+
+    const token = await getToken();
+    if (!token) {
+      setEditBusy(false);
+      return;
+    }
+
+    const res = await fetch(`/api/deadlines?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setEditMsg(json.error || "No se pudo eliminar el vencimiento");
+      setEditBusy(false);
+      return;
+    }
+
+    if (editingDeadlineId === id) {
+      cancelEditDeadline();
+    }
+    await loadDeadlines();
+    setEditBusy(false);
+  }
+
   const card: React.CSSProperties = {
     border: "1px solid #eee",
     borderRadius: 14,
@@ -551,7 +583,18 @@ export default function EntityDeadlinesManager({
             {showCreateForm ? (
               <>
                 {createMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap", margin: 0 }}>{createMsg}</p>}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 200px 200px", gap: 10 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      selectedType?.measure_by === "date"
+                        ? "1fr 200px 200px"
+                        : selectedType?.measure_by === "usage"
+                        ? "1fr 200px 1fr"
+                        : "1fr 1fr",
+                    gap: 10,
+                  }}
+                >
                   <div>
                     <label>Tipo</label>
                     <select
@@ -569,16 +612,18 @@ export default function EntityDeadlinesManager({
                     </select>
                   </div>
 
-                  <div>
-                    <label>Última realización (opcional)</label>
-                    <input
-                      type="date"
-                      value={lastDoneDate}
-                      onChange={(e) => setLastDoneDate(e.target.value)}
-                      style={{ width: "100%", padding: 10, marginTop: 6 }}
-                      disabled={createBusy}
-                    />
-                  </div>
+                  {selectedType ? (
+                    <div>
+                      <label>Última realización (opcional)</label>
+                      <input
+                        type="date"
+                        value={lastDoneDate}
+                        onChange={(e) => setLastDoneDate(e.target.value)}
+                        style={{ width: "100%", padding: 10, marginTop: 6 }}
+                        disabled={createBusy}
+                      />
+                    </div>
+                  ) : null}
 
                   <div>
                     {selectedType?.measure_by === "date" ? (
@@ -718,9 +763,19 @@ export default function EntityDeadlinesManager({
                       </button>
                     </div>
                   ) : (
-                    <button onClick={() => startEditDeadline(d)} disabled={editBusy} style={{ padding: "8px 10px" }}>
-                      Editar
-                    </button>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => startEditDeadline(d)} disabled={editBusy} style={{ padding: "8px 10px" }}>
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => deleteDeadline(d.id)}
+                        disabled={editBusy}
+                        style={{ padding: "8px 10px" }}
+                        title="Eliminar vencimiento"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
                   )}
                 </div>
 

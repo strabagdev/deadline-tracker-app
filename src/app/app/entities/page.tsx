@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import { pickNearestDeadline } from "@/lib/deadlines/calculateDeadlineStatus";
 
 type DeadlineType = {
   id: string;
@@ -43,79 +44,6 @@ type EntityRow = {
 type LatestUsageByEntity = Record<string, { value: number; logged_at: string }>;
 
 type Status = "red" | "yellow" | "green" | "none";
-
-function daysBetween(a: Date, b: Date) {
-  return (b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24);
-}
-
-function parseISODateOnly(s: string): Date {
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function computeStatusAndDue(
-  deadline: Deadline,
-  latestUsage: number | null,
-  warnDays = 7
-): { due: Date | null; status: Status; label: string; typeName: string; measureBy: "date" | "usage" | "unknown" } {
-  const t = deadline.deadline_types;
-  const typeName = t?.name ?? "—";
-  const measureBy: "date" | "usage" | "unknown" =
-    t?.measure_by === "date" || t?.measure_by === "usage" ? t.measure_by : "unknown";
-
-  if (!t) return { due: null, status: "none", label: "Sin tipo", typeName, measureBy };
-
-  const today = new Date();
-
-  if (t.measure_by === "date") {
-    if (!deadline.next_due_date) return { due: null, status: "none", label: "Sin fecha", typeName, measureBy: "date" };
-    const due = parseISODateOnly(deadline.next_due_date);
-    const diff = daysBetween(today, due);
-    if (diff < 0) return { due, status: "red", label: "Vencido", typeName, measureBy: "date" };
-    if (diff <= warnDays) return { due, status: "yellow", label: "Por vencer", typeName, measureBy: "date" };
-    return { due, status: "green", label: "Vigente", typeName, measureBy: "date" };
-  }
-
-  // usage
-  if (
-    deadline.last_done_usage == null ||
-    deadline.frequency == null ||
-    deadline.usage_daily_average == null ||
-    latestUsage == null ||
-    Number(deadline.usage_daily_average) <= 0
-  ) {
-    return { due: null, status: "none", label: "Incompleto", typeName, measureBy: "usage" };
-  }
-
-  const remaining = Number(deadline.frequency) - (Number(latestUsage) - Number(deadline.last_done_usage));
-  if (remaining <= 0) return { due: today, status: "red", label: "Vencido", typeName, measureBy: "usage" };
-
-  const days = remaining / Number(deadline.usage_daily_average);
-  const due = new Date(today.getTime() + days * 86400000);
-
-  if (days <= warnDays) return { due, status: "yellow", label: "Por vencer", typeName, measureBy: "usage" };
-  return { due, status: "green", label: "Vigente", typeName, measureBy: "usage" };
-}
-
-function pickNearestDeadline(entity: EntityRow, latestUsage: number | null, warnDays = 7) {
-  const ds = (entity.deadlines ?? []).filter((d) => d.deadline_types?.is_active !== false);
-
-  let best: ReturnType<typeof computeStatusAndDue> | null = null;
-
-  for (const d of ds) {
-    const r = computeStatusAndDue(d, latestUsage, warnDays);
-    if (!best) {
-      best = r;
-      continue;
-    }
-
-    // earliest due (nulls last)
-    if (best.due == null && r.due != null) best = r;
-    else if (best.due != null && r.due != null && r.due < best.due) best = r;
-  }
-
-  return best;
-}
 
 function fmtDate(d: Date | null) {
   if (!d) return "—";
@@ -178,6 +106,11 @@ function rowStatusChipStyle(s: Status): React.CSSProperties {
   };
 
   return { ...base, ...(map[s] ?? {}) };
+}
+
+function toEntitiesStatus(s: "red" | "orange" | "yellow" | "green" | "none"): Status {
+  if (s === "orange") return "yellow";
+  return s;
 }
 
 
@@ -349,8 +282,12 @@ export default function EntitiesPage() {
       .map((e) => {
         const latest = usage[e.id]?.value ?? null;
         const latestAt = usage[e.id]?.logged_at ?? null;
-        const nearest = pickNearestDeadline(e, latest, 7);
-        const status: Status = (nearest?.status as Status) ?? "none";
+        const nearest = pickNearestDeadline(e.deadlines, latest, {
+          yellowDays: 7,
+          orangeDays: 7,
+          redDays: 0,
+        });
+        const status: Status = nearest ? toEntitiesStatus(nearest.status) : "none";
         return { entity: e, nearest, status, latestUsage: latest, latestUsageAt: latestAt };
       })
       .filter((r) => {
