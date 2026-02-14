@@ -88,6 +88,7 @@ export default function EntityDeadlinesManager({
   const [editDraft, setEditDraft] = useState<DeadlineEditDraft | null>(null);
 
   // form
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [deadlineTypeId, setDeadlineTypeId] = useState<string>("");
   const selectedType = useMemo(() => types.find((t) => t.id === deadlineTypeId) || null, [types, deadlineTypeId]);
 
@@ -129,11 +130,8 @@ export default function EntityDeadlinesManager({
     }
     const list: DeadlineType[] = json.deadline_types ?? [];
     setTypes(list);
-    if (list.length === 0) {
-      setDeadlineTypeId("");
-    } else if (!deadlineTypeId) {
-      setDeadlineTypeId(list[0].id);
-    }
+    if (list.length === 0) setDeadlineTypeId("");
+    if (deadlineTypeId && !list.some((t) => t.id === deadlineTypeId)) setDeadlineTypeId("");
   }
 
   async function loadDeadlines() {
@@ -249,6 +247,8 @@ export default function EntityDeadlinesManager({
 
     setCreateMsg("");
     await loadDeadlines();
+    setShowCreateForm(false);
+    setDeadlineTypeId("");
     setCreateBusy(false);
   }
 
@@ -527,129 +527,159 @@ export default function EntityDeadlinesManager({
           </div>
         ) : (
           <>
-            {createMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap", margin: 0 }}>{createMsg}</p>}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 200px 200px", gap: 10 }}>
-              <div>
-                <label>Tipo</label>
-                <select
-                  value={deadlineTypeId}
-                  onChange={(e) => setDeadlineTypeId(e.target.value)}
-                  style={{ width: "100%", padding: 10, marginTop: 6 }}
-                  disabled={createBusy}
-                >
-                  {types.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.measure_by === "date" ? "fecha" : "uso"})
-                    </option>
-                  ))}
-                </select>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <div style={{ fontSize: 13, opacity: 0.8 }}>
+                {showCreateForm
+                  ? "Completa los datos del nuevo vencimiento."
+                  : "Oculto para ahorrar espacio. Ábrelo solo cuando lo necesites."}
               </div>
-
-              <div>
-                <label>Última realización (opcional)</label>
-                <input
-                  type="date"
-                  value={lastDoneDate}
-                  onChange={(e) => setLastDoneDate(e.target.value)}
-                  style={{ width: "100%", padding: 10, marginTop: 6 }}
-                  disabled={createBusy}
-                />
-              </div>
-
-                <div>
-                  {selectedType?.measure_by === "date" ? (
-                    <>
-                      <label>Next due date</label>
-                      <input
-                        type="date"
-                        value={nextDueDate}
-                        onChange={(e) => setNextDueDate(e.target.value)}
-                        style={{ width: "100%", padding: 10, marginTop: 6 }}
-                        disabled={createBusy}
-                      />
-                    </>
-                  ) : (
-                    <div style={{ display: "grid", gap: 8 }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                        <div>
-                          <label>Last done usage</label>
-                          <input
-                            inputMode="decimal"
-                            value={lastDoneUsage}
-                            onChange={(e) => setLastDoneUsage(e.target.value)}
-                            placeholder="Ej: 1200"
-                            style={{ width: "100%", padding: 10, marginTop: 6 }}
-                            disabled={createBusy}
-                          />
-                        </div>
-                        <div>
-                          <label>Frecuencia</label>
-                          <input
-                            inputMode="decimal"
-                            value={frequency}
-                            onChange={(e) => setFrequency(e.target.value)}
-                            placeholder="Ej: 250"
-                            style={{ width: "100%", padding: 10, marginTop: 6 }}
-                            disabled={createBusy}
-                          />
-                        </div>
-                      </div>
-
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                        <div>
-                          <label>Unidad</label>
-                          <select
-                            value={frequencyUnit}
-                            onChange={(e) => setFrequencyUnit(e.target.value)}
-                            style={{ width: "100%", padding: 10, marginTop: 6 }}
-                            disabled={createBusy}
-                          >
-                            <option value="hours">hours</option>
-                            <option value="kilometers">kilometers</option>
-                            <option value="days">days</option>
-                            <option value="cycles">cycles</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label>Promedio diario (modo)</label>
-                          <select
-                            value={usageDailyAverageMode}
-                            onChange={(e) => setUsageDailyAverageMode(e.target.value as "manual" | "auto")}
-                            style={{ width: "100%", padding: 10, marginTop: 6 }}
-                            disabled={createBusy}
-                          >
-                            <option value="manual">Manual</option>
-                            <option value="auto">Automático</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label>Promedio diario{usageDailyAverageMode === "auto" ? " (calculado por el sistema)" : ""}</label>
-                        <input
-                          inputMode="decimal"
-                          value={usageDailyAverageMode === "manual" ? usageDailyAverage : ""}
-                          onChange={(e) => setUsageDailyAverage(e.target.value)}
-                          placeholder={usageDailyAverageMode === "manual" ? "Ej: 6" : "Se calculará automáticamente"}
-                          style={{ width: "100%", padding: 10, marginTop: 6 }}
-                          disabled={createBusy || usageDailyAverageMode === "auto"}
-                        />
-                        {usageDailyAverageMode === "auto" && (
-                          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
-                            El promedio se calcula usando los usage_logs de la entidad (backend).
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button onClick={createDeadline} disabled={createBusy || !deadlineTypeId} style={{ padding: 10, fontWeight: 800 }}>
-                {createBusy ? "Guardando..." : "Agregar vencimiento"}
+              <button
+                onClick={() => {
+                  setShowCreateForm((prev) => !prev);
+                  setCreateMsg("");
+                  if (showCreateForm) {
+                    setDeadlineTypeId("");
+                  }
+                }}
+                disabled={createBusy}
+                style={{ padding: "8px 10px", fontWeight: 700 }}
+              >
+                {showCreateForm ? "Cancelar" : "Agregar vencimiento"}
               </button>
             </div>
+
+            {showCreateForm ? (
+              <>
+                {createMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap", margin: 0 }}>{createMsg}</p>}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 200px 200px", gap: 10 }}>
+                  <div>
+                    <label>Tipo</label>
+                    <select
+                      value={deadlineTypeId}
+                      onChange={(e) => setDeadlineTypeId(e.target.value)}
+                      style={{ width: "100%", padding: 10, marginTop: 6 }}
+                      disabled={createBusy}
+                    >
+                      <option value="">Selecciona un tipo…</option>
+                      {types.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} ({t.measure_by === "date" ? "fecha" : "uso"})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label>Última realización (opcional)</label>
+                    <input
+                      type="date"
+                      value={lastDoneDate}
+                      onChange={(e) => setLastDoneDate(e.target.value)}
+                      style={{ width: "100%", padding: 10, marginTop: 6 }}
+                      disabled={createBusy}
+                    />
+                  </div>
+
+                  <div>
+                    {selectedType?.measure_by === "date" ? (
+                      <>
+                        <label>Next due date</label>
+                        <input
+                          type="date"
+                          value={nextDueDate}
+                          onChange={(e) => setNextDueDate(e.target.value)}
+                          style={{ width: "100%", padding: 10, marginTop: 6 }}
+                          disabled={createBusy}
+                        />
+                      </>
+                    ) : selectedType?.measure_by === "usage" ? (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                          <div>
+                            <label>Last done usage</label>
+                            <input
+                              inputMode="decimal"
+                              value={lastDoneUsage}
+                              onChange={(e) => setLastDoneUsage(e.target.value)}
+                              placeholder="Ej: 1200"
+                              style={{ width: "100%", padding: 10, marginTop: 6 }}
+                              disabled={createBusy}
+                            />
+                          </div>
+                          <div>
+                            <label>Frecuencia</label>
+                            <input
+                              inputMode="decimal"
+                              value={frequency}
+                              onChange={(e) => setFrequency(e.target.value)}
+                              placeholder="Ej: 250"
+                              style={{ width: "100%", padding: 10, marginTop: 6 }}
+                              disabled={createBusy}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                          <div>
+                            <label>Unidad</label>
+                            <select
+                              value={frequencyUnit}
+                              onChange={(e) => setFrequencyUnit(e.target.value)}
+                              style={{ width: "100%", padding: 10, marginTop: 6 }}
+                              disabled={createBusy}
+                            >
+                              <option value="hours">hours</option>
+                              <option value="kilometers">kilometers</option>
+                              <option value="days">days</option>
+                              <option value="cycles">cycles</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label>Promedio diario (modo)</label>
+                            <select
+                              value={usageDailyAverageMode}
+                              onChange={(e) => setUsageDailyAverageMode(e.target.value as "manual" | "auto")}
+                              style={{ width: "100%", padding: 10, marginTop: 6 }}
+                              disabled={createBusy}
+                            >
+                              <option value="manual">Manual</option>
+                              <option value="auto">Automático</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label>Promedio diario{usageDailyAverageMode === "auto" ? " (calculado por el sistema)" : ""}</label>
+                          <input
+                            inputMode="decimal"
+                            value={usageDailyAverageMode === "manual" ? usageDailyAverage : ""}
+                            onChange={(e) => setUsageDailyAverage(e.target.value)}
+                            placeholder={usageDailyAverageMode === "manual" ? "Ej: 6" : "Se calculará automáticamente"}
+                            style={{ width: "100%", padding: 10, marginTop: 6 }}
+                            disabled={createBusy || usageDailyAverageMode === "auto"}
+                          />
+                          {usageDailyAverageMode === "auto" && (
+                            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
+                              El promedio se calcula usando los usage_logs de la entidad (backend).
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: 24, fontSize: 12, opacity: 0.7 }}>
+                        Selecciona un tipo para completar el resto del formulario.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button onClick={createDeadline} disabled={createBusy || !deadlineTypeId} style={{ padding: 10, fontWeight: 800 }}>
+                    {createBusy ? "Guardando..." : "Guardar vencimiento"}
+                  </button>
+                </div>
+              </>
+            ) : null}
           </>
         )}
       </div>

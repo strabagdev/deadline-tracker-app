@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 
-async function getActiveOrgId(db: any, userId: string) {
+type DataClient = ReturnType<typeof createDataServerClient>;
+
+function getErrorMessage(err: unknown) {
+  return err instanceof Error ? err.message : "error";
+}
+
+async function getActiveOrgId(db: DataClient, userId: string) {
   const { data, error } = await db
     .from("user_settings")
     .select("active_organization_id")
@@ -13,7 +19,7 @@ async function getActiveOrgId(db: any, userId: string) {
   return (data?.active_organization_id as string) || null;
 }
 
-async function getMemberRole(db: any, organizationId: string, userId: string) {
+async function getMemberRole(db: DataClient, organizationId: string, userId: string) {
   const { data, error } = await db
     .from("organization_members")
     .select("role")
@@ -47,7 +53,7 @@ export async function GET(req: Request) {
     const { data, error } = await db
       .from("organization_settings")
       .select(
-        "organization_id, date_yellow_days, date_orange_days, date_red_days, usage_yellow_days, usage_orange_days, usage_red_days, updated_at"
+        "organization_id, yellow_days, orange_days, red_days, updated_at"
       )
       .eq("organization_id", orgId)
       .maybeSingle();
@@ -57,18 +63,15 @@ export async function GET(req: Request) {
     const settings =
       data ?? ({
         organization_id: orgId,
-        date_yellow_days: 60,
-        date_orange_days: 30,
-        date_red_days: 15,
-        usage_yellow_days: 60,
-        usage_orange_days: 30,
-        usage_red_days: 15,
+        yellow_days: 60,
+        orange_days: 30,
+        red_days: 15,
         updated_at: null,
       } as const);
 
     return NextResponse.json({ organization_id: orgId, role, settings });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
   }
 }
 
@@ -86,31 +89,21 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "admin/owner only" }, { status: 403 });
     }
 
-    const body = await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
-    const dateYellow = Math.trunc(Number(body.date_yellow_days));
-    const dateOrange = Math.trunc(Number(body.date_orange_days));
-    const dateRed = Math.trunc(Number(body.date_red_days));
+    const yellow = Math.trunc(Number(body.yellow_days ?? body.date_yellow_days ?? body.usage_yellow_days));
+    const orange = Math.trunc(Number(body.orange_days ?? body.date_orange_days ?? body.usage_orange_days));
+    const red = Math.trunc(Number(body.red_days ?? body.date_red_days ?? body.usage_red_days));
 
-    const usageYellow = Math.trunc(Number(body.usage_yellow_days));
-    const usageOrange = Math.trunc(Number(body.usage_orange_days));
-    const usageRed = Math.trunc(Number(body.usage_red_days));
-
-    const vDate = validateThresholds(dateYellow, dateOrange, dateRed);
-    if (vDate) return NextResponse.json({ error: `FECHA: ${vDate}` }, { status: 400 });
-
-    const vUsage = validateThresholds(usageYellow, usageOrange, usageRed);
-    if (vUsage) return NextResponse.json({ error: `USO: ${vUsage}` }, { status: 400 });
+    const v = validateThresholds(yellow, orange, red);
+    if (v) return NextResponse.json({ error: v }, { status: 400 });
 
     const { error: upErr } = await db.from("organization_settings").upsert(
       {
         organization_id: orgId,
-        date_yellow_days: dateYellow,
-        date_orange_days: dateOrange,
-        date_red_days: dateRed,
-        usage_yellow_days: usageYellow,
-        usage_orange_days: usageOrange,
-        usage_red_days: usageRed,
+        yellow_days: yellow,
+        orange_days: orange,
+        red_days: red,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "organization_id" }
@@ -121,7 +114,7 @@ export async function PUT(req: Request) {
     const { data, error } = await db
       .from("organization_settings")
       .select(
-        "organization_id, date_yellow_days, date_orange_days, date_red_days, usage_yellow_days, usage_orange_days, usage_red_days, updated_at"
+        "organization_id, yellow_days, orange_days, red_days, updated_at"
       )
       .eq("organization_id", orgId)
       .maybeSingle();
@@ -129,7 +122,7 @@ export async function PUT(req: Request) {
     if (error) throw error;
 
     return NextResponse.json({ organization_id: orgId, role, settings: data });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
   }
 }

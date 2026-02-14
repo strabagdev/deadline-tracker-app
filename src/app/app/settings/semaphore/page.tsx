@@ -10,14 +10,18 @@ import { supabaseAuth } from "@/lib/supabase/authClient";
  * - Vencimientos por FECHA: days_remaining
  * - Vencimientos por USO: estimated_days (derivado de usage)
  *
- * NOTA: Este formulario edita UN SOLO set de umbrales y lo guarda duplicado
- * en date_* y usage_* para mantener compatibilidad con el backend actual.
+ * NOTA: Este formulario edita UN SOLO set de umbrales persistido en
+ * yellow_days, orange_days y red_days.
  */
 
 type SettingsPayload = {
   organization_id?: string;
   role?: string;
   settings?: Partial<{
+    yellow_days: number;
+    orange_days: number;
+    red_days: number;
+    // legacy fallback
     date_yellow_days: number;
     date_orange_days: number;
     date_red_days: number;
@@ -32,6 +36,14 @@ type UnifiedThresholds = {
   orange_days: number;
   red_days: number;
 };
+
+function readApiError(payload: unknown) {
+  if (payload && typeof payload === "object" && "error" in payload) {
+    const err = (payload as { error?: unknown }).error;
+    return typeof err === "string" ? err : "";
+  }
+  return "";
+}
 
 export default function SemaphoreSettingsPage() {
   const router = useRouter();
@@ -49,8 +61,6 @@ export default function SemaphoreSettingsPage() {
     orange_days: 30,
     red_days: 15,
   });
-
-  const [mismatchWarn, setMismatchWarn] = useState<string>("");
 
   useEffect(() => {
     void load();
@@ -82,7 +92,6 @@ export default function SemaphoreSettingsPage() {
     setLoading(true);
     setErrorMsg("");
     setOkMsg("");
-    setMismatchWarn("");
 
     const token = await getTokenOrRedirect();
     if (!token) return;
@@ -91,9 +100,10 @@ export default function SemaphoreSettingsPage() {
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    const json: SettingsPayload = await res.json().catch(() => ({} as any));
+    const payload: unknown = await res.json().catch(() => ({}));
+    const json = payload as SettingsPayload;
     if (!res.ok) {
-      setErrorMsg((json as any)?.error || "No se pudo cargar configuración");
+      setErrorMsg(readApiError(payload) || "No se pudo cargar configuración");
       setLoading(false);
       return;
     }
@@ -102,29 +112,11 @@ export default function SemaphoreSettingsPage() {
     setRole(String(json.role || ""));
 
     const s = json.settings || {};
-
-    const dateY = Number(s.date_yellow_days ?? 60);
-    const dateO = Number(s.date_orange_days ?? 30);
-    const dateR = Number(s.date_red_days ?? 15);
-
-    const usageY = Number(s.usage_yellow_days ?? dateY);
-    const usageO = Number(s.usage_orange_days ?? dateO);
-    const usageR = Number(s.usage_red_days ?? dateR);
-
-    // Preferimos cargar desde "date_*" como fuente principal, para no romper setups antiguos.
     setT({
-      yellow_days: dateY,
-      orange_days: dateO,
-      red_days: dateR,
+      yellow_days: Number(s.yellow_days ?? s.date_yellow_days ?? s.usage_yellow_days ?? 60),
+      orange_days: Number(s.orange_days ?? s.date_orange_days ?? s.usage_orange_days ?? 30),
+      red_days: Number(s.red_days ?? s.date_red_days ?? s.usage_red_days ?? 15),
     });
-
-    // Advertencia si hoy están desalineados: el usuario puede "Guardar" para unificarlos.
-    const mismatch =
-      dateY !== usageY || dateO !== usageO || dateR !== usageR
-        ? `Tus umbrales están distintos entre FECHA y USO (date: ${dateY}/${dateO}/${dateR} vs usage: ${usageY}/${usageO}/${usageR}). Al guardar se unificarán.`
-        : "";
-
-    setMismatchWarn(mismatch);
     setLoading(false);
   }
 
@@ -145,13 +137,9 @@ export default function SemaphoreSettingsPage() {
     setSaving(true);
 
     const payload = {
-      // Guardamos duplicado para mantener compatibilidad con el backend actual
-      date_yellow_days: Math.trunc(t.yellow_days),
-      date_orange_days: Math.trunc(t.orange_days),
-      date_red_days: Math.trunc(t.red_days),
-      usage_yellow_days: Math.trunc(t.yellow_days),
-      usage_orange_days: Math.trunc(t.orange_days),
-      usage_red_days: Math.trunc(t.red_days),
+      yellow_days: Math.trunc(t.yellow_days),
+      orange_days: Math.trunc(t.orange_days),
+      red_days: Math.trunc(t.red_days),
     };
 
     const res = await fetch("/api/settings/semaphore", {
@@ -160,15 +148,14 @@ export default function SemaphoreSettingsPage() {
       body: JSON.stringify(payload),
     });
 
-    const json = await res.json().catch(() => ({}));
+    const json: unknown = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setErrorMsg((json as any)?.error || "No se pudo guardar");
+      setErrorMsg(readApiError(json) || "No se pudo guardar");
       setSaving(false);
       return;
     }
 
-    setOkMsg("Guardado ✅ (aplica igual para FECHA y USO)");
-    setMismatchWarn("");
+    setOkMsg("Guardado ✅ (aplica para FECHA y USO)");
     setSaving(false);
   }
 
@@ -209,11 +196,6 @@ export default function SemaphoreSettingsPage() {
 
       {errorMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{errorMsg}</p>}
       {okMsg && <p style={{ color: "green" }}>{okMsg}</p>}
-      {mismatchWarn && (
-        <p style={{ color: "#8a6d3b", background: "#fcf8e3", padding: 10, borderRadius: 12 }}>
-          {mismatchWarn}
-        </p>
-      )}
 
       <section
         style={{

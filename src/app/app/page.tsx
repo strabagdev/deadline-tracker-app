@@ -51,12 +51,9 @@ type DashboardMeta = {
 type Status = "red" | "orange" | "yellow" | "green" | "none";
 
 type SemaphoreSettings = {
-  date_yellow_days: number;
-  date_orange_days: number;
-  date_red_days: number;
-  usage_yellow_days: number;
-  usage_orange_days: number;
-  usage_red_days: number;
+  yellow_days: number;
+  orange_days: number;
+  red_days: number;
 };
 
 function daysBetween(a: Date, b: Date) {
@@ -97,9 +94,9 @@ function computeStatusAndDue(
 
     const c = classify(
       diff,
-      Number(settings.date_yellow_days ?? 60),
-      Number(settings.date_orange_days ?? 30),
-      Number(settings.date_red_days ?? 15)
+      Number(settings.yellow_days ?? 60),
+      Number(settings.orange_days ?? 30),
+      Number(settings.red_days ?? 15)
     );
 
     return { due, status: c.status, label: c.label, typeName, measureBy: "date" };
@@ -126,9 +123,9 @@ function computeStatusAndDue(
 
   const c = classify(
     days,
-    Number(settings.usage_yellow_days ?? 60),
-    Number(settings.usage_orange_days ?? 30),
-    Number(settings.usage_red_days ?? 15)
+    Number(settings.yellow_days ?? 60),
+    Number(settings.orange_days ?? 30),
+    Number(settings.red_days ?? 15)
   );
 
   return { due, status: c.status, label: c.label, typeName, measureBy: "usage" };
@@ -231,12 +228,9 @@ export default function AppDashboard() {
   const [pageSize, setPageSize] = useState(50);
 
   const [semaphore, setSemaphore] = useState<SemaphoreSettings>({
-    date_yellow_days: 60,
-    date_orange_days: 30,
-    date_red_days: 15,
-    usage_yellow_days: 60,
-    usage_orange_days: 30,
-    usage_red_days: 15,
+    yellow_days: 60,
+    orange_days: 30,
+    red_days: 15,
   });
 
   useEffect(() => {
@@ -275,12 +269,15 @@ export default function AppDashboard() {
     const sjson = await sres.json().catch(() => ({}));
     if (sres.ok && sjson?.settings) {
       setSemaphore({
-        date_yellow_days: Number(sjson.settings.date_yellow_days ?? 60),
-        date_orange_days: Number(sjson.settings.date_orange_days ?? 30),
-        date_red_days: Number(sjson.settings.date_red_days ?? 15),
-        usage_yellow_days: Number(sjson.settings.usage_yellow_days ?? 60),
-        usage_orange_days: Number(sjson.settings.usage_orange_days ?? 30),
-        usage_red_days: Number(sjson.settings.usage_red_days ?? 15),
+        yellow_days: Number(
+          sjson.settings.yellow_days ?? sjson.settings.date_yellow_days ?? sjson.settings.usage_yellow_days ?? 60
+        ),
+        orange_days: Number(
+          sjson.settings.orange_days ?? sjson.settings.date_orange_days ?? sjson.settings.usage_orange_days ?? 30
+        ),
+        red_days: Number(
+          sjson.settings.red_days ?? sjson.settings.date_red_days ?? sjson.settings.usage_red_days ?? 15
+        ),
       });
     }
 
