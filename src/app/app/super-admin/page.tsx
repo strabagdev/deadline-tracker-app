@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
@@ -40,6 +41,7 @@ export default function SuperAdminPage() {
   const [inviteRole, setInviteRole] = useState("member");
   const [platformLogoUrl, setPlatformLogoUrl] = useState("");
   const [platformLogoFile, setPlatformLogoFile] = useState<File | null>(null);
+  const [platformLogoPreviewUrl, setPlatformLogoPreviewUrl] = useState("");
   const [brandingBusy, setBrandingBusy] = useState(false);
   const platformLogoInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -47,6 +49,17 @@ export default function SuperAdminPage() {
     void validateAccess();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!platformLogoFile) {
+      setPlatformLogoPreviewUrl("");
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(platformLogoFile);
+    setPlatformLogoPreviewUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [platformLogoFile]);
 
   async function getTokenOrRedirect() {
     const { data } = await supabaseAuth.auth.getSession();
@@ -372,6 +385,7 @@ export default function SuperAdminPage() {
 
     setPlatformLogoUrl(json.platform?.logo_url || "");
     setPlatformLogoFile(null);
+    setPlatformLogoPreviewUrl("");
     setOk("Logo de plataforma actualizado.");
     setBrandingBusy(false);
   }
@@ -401,6 +415,7 @@ export default function SuperAdminPage() {
 
     setPlatformLogoUrl(json.platform?.logo_url || "");
     setPlatformLogoFile(null);
+    setPlatformLogoPreviewUrl("");
     setOk("Logo de plataforma eliminado.");
     setBrandingBusy(false);
   }
@@ -437,9 +452,9 @@ export default function SuperAdminPage() {
           <CardContent>
             <div className="grid gap-4 md:grid-cols-[150px_1fr] md:items-start">
               <div className="rounded-xl border bg-slate-50 p-3">
-                {platformLogoUrl ? (
-                  <img
-                    src={platformLogoUrl}
+                {platformLogoPreviewUrl || platformLogoUrl ? (
+                  <Image
+                    src={platformLogoPreviewUrl || platformLogoUrl}
                     alt="Logo plataforma"
                     width={120}
                     height={120}

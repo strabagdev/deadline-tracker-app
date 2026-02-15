@@ -63,7 +63,7 @@ function statusChipStyle(s: Status | "all", active: boolean): React.CSSPropertie
   const base: React.CSSProperties = {
     border: "1px solid #d1d5db",
     borderRadius: 999,
-    padding: "6px 10px",
+    padding: "8px 12px",
     fontSize: 12,
     cursor: "pointer",
     background: "white",
@@ -92,7 +92,7 @@ function rowStatusChipStyle(s: Status): React.CSSProperties {
   const base: React.CSSProperties = {
     border: "1px solid #e5e5e5",
     borderRadius: 999,
-    padding: "3px 8px",
+    padding: "5px 10px",
     fontSize: 11,
     cursor: "pointer",
     background: "white",
@@ -334,10 +334,10 @@ export default function EntitiesPage() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
 
           <Link href="/app" style={{ textDecoration: "none" }}>
-            <button style={{ padding: "10px 12px" }}>Volver al dashboard</button>
+            <button style={{ padding: "12px 14px" }}>Volver al dashboard</button>
           </Link>
 
-          <button onClick={load} style={{ padding: "10px 12px" }} disabled={loading}>
+          <button onClick={load} style={{ padding: "12px 14px" }} disabled={loading}>
             Refrescar
           </button>
         </div>
@@ -366,7 +366,7 @@ export default function EntitiesPage() {
 
           <button
             onClick={() => setShowCreate((v) => !v)}
-            style={{ padding: "10px 12px" }}
+            style={{ padding: "12px 14px" }}
             disabled={typesLoading}
           >
             {showCreate ? "Cerrar" : "+ Nueva entidad"}
@@ -381,7 +381,7 @@ export default function EntitiesPage() {
               <div style={{ opacity: 0.85 }}>
                 <p>No hay tipos de entidad. Debes crear al menos uno antes de crear entidades.</p>
                 <Link href="/app/entity-types" style={{ textDecoration: "none" }}>
-                  <button style={{ padding: "10px 12px" }}>Ir a Tipos de entidad</button>
+                  <button style={{ padding: "12px 14px" }}>Ir a Tipos de entidad</button>
                 </Link>
               </div>
             ) : (
@@ -436,7 +436,7 @@ export default function EntitiesPage() {
                   </label>
                 </div>
 
-                <button type="submit" disabled={creating} style={{ padding: "10px 12px", width: "fit-content" }}>
+                <button type="submit" disabled={creating} style={{ padding: "12px 14px", width: "fit-content" }}>
                   {creating ? "Creando…" : "Crear"}
                 </button>
               </form>
@@ -447,7 +447,7 @@ export default function EntitiesPage() {
 
 
       <section style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 16, padding: 12, background: "white" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 160px", gap: 10, alignItems: "end" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, alignItems: "end" }}>
           <div>
             <label style={{ fontSize: 12, opacity: 0.7 }}>Buscar</label>
             <input
@@ -458,7 +458,7 @@ export default function EntitiesPage() {
             />
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
             <div>
               <label style={{ fontSize: 12, opacity: 0.7 }}>Tipo</label>
               <select
@@ -497,7 +497,7 @@ export default function EntitiesPage() {
               setFilterStatus("all");
               setSortMode("critical");
             }}
-            style={{ padding: 10 }}
+            style={{ padding: "12px 14px", width: "100%" }}
           >
             Limpiar
           </button>
@@ -536,12 +536,13 @@ export default function EntitiesPage() {
         ) : rows.length === 0 ? (
           <p style={{ opacity: 0.8 }}>No hay entidades para mostrar con estos filtros.</p>
         ) : (
-          <div style={{ border: "1px solid #eee", borderRadius: 16, overflow: "hidden", background: "white" }}>
+          <div style={{ border: "1px solid #eee", borderRadius: 16, overflowX: "auto", background: "white" }}>
             <div
               style={{
                 display: "grid",
                 gridTemplateColumns: "1.2fr 0.8fr 1.6fr 0.8fr",
                 gap: 0,
+                minWidth: 760,
                 padding: "7px 10px",
                 borderBottom: "1px solid #eee",
                 fontSize: 11,
@@ -567,7 +568,8 @@ export default function EntitiesPage() {
                     display: "grid",
                     gridTemplateColumns: "1.2fr 0.8fr 1.6fr 0.8fr",
                     gap: 0,
-                    padding: "8px 10px",
+                    minWidth: 760,
+                    padding: "10px 10px",
                     borderBottom: "1px solid #f0f0f0",
                     cursor: "pointer",
                     fontSize: 13,

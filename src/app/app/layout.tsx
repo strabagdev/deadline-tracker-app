@@ -128,7 +128,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   const userInfoCapsule = !isSuperAdmin ? (
-    <div className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1">
+    <div className="hidden min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1 md:flex">
       {activeOrgLogoUrl ? (
         <img
           src={activeOrgLogoUrl}
@@ -153,7 +153,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-10 border-b bg-white/90 backdrop-blur">
         <div className={cn("mx-auto grid gap-1 px-4", isDashboardHome ? "max-w-[1400px] py-2" : "max-w-[1100px] py-2")}>
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2 whitespace-nowrap">
               {platformLogoUrl ? (
                 <img
@@ -161,7 +161,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   alt="Logo plataforma"
                   width={38}
                   height={38}
-                  className="h-9 w-9 rounded-lg border object-cover"
+                  className="h-9 w-9 rounded-lg object-cover"
                 />
               ) : null}
               <Link href={isSuperAdmin ? "/app/super-admin" : "/app"} className="text-base font-semibold text-slate-900">
@@ -171,7 +171,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
 
             {isSuperAdmin ? (
-              <div className="flex items-center gap-2">
+              <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
                 <Link href="/app/super-admin">
                   <Button variant="outline" size="sm">
                     Panel global
@@ -182,37 +182,56 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </Button>
               </div>
             ) : isDashboardHome ? (
-              <div className="flex items-center gap-2">
+              <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 sm:w-auto sm:overflow-visible sm:pb-0">
                 <Link href="/app/entities?new=1">
-                  <Button variant="outline" size="icon" title="Nueva entidad" aria-label="Nueva entidad">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-10 w-10 shrink-0"
+                    title="Nueva entidad"
+                    aria-label="Nueva entidad"
+                  >
                     <IconPlus />
                   </Button>
                 </Link>
                 <Link href="/app/settings/semaphore">
-                  <Button variant="outline" size="icon" title="Semáforo" aria-label="Semáforo">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-10 w-10 shrink-0"
+                    title="Semáforo"
+                    aria-label="Semáforo"
+                  >
                     <IconTraffic />
                   </Button>
                 </Link>
-                <Button onClick={refreshDashboard} variant="outline" size="icon" title="Refrescar" aria-label="Refrescar">
+                <Button
+                  onClick={refreshDashboard}
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 shrink-0"
+                  title="Refrescar"
+                  aria-label="Refrescar"
+                >
                   <IconRefresh />
                 </Button>
                 <Link href="/app/entities">
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" className="shrink-0">
                     Menú
                   </Button>
                 </Link>
                 <Link href="/app/profile">
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" className="shrink-0">
                     Perfil
                   </Button>
                 </Link>
-                <Button onClick={logout} variant="outline" size="sm">
+                <Button onClick={logout} variant="outline" size="sm" className="shrink-0">
                   Salir
                 </Button>
                 {userInfoCapsule}
               </div>
             ) : (
-              <div className="flex min-w-0 flex-1 items-center gap-2">
+              <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-1 sm:flex-row sm:items-center">
                 <nav className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto">
                   <NavLink href="/app" label="Dashboard" />
                   <NavLink href="/app/entities" label="Entidades" />
@@ -220,7 +239,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <NavLink href="/app/deadline-types" label="Tipos vencimiento" />
                   <NavLink href="/app/users" label="Usuarios" />
                 </nav>
-                <div className="ml-auto flex items-center gap-2">
+                <div className="ml-auto flex w-full items-center justify-end gap-2 sm:w-auto">
                   <Link href="/app/profile">
                     <Button variant="outline" size="sm">
                       Perfil

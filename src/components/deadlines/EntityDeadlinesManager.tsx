@@ -444,14 +444,14 @@ export default function EntityDeadlinesManager({
 
   return (
     <section style={{ marginTop: 14, ...card }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <div>
           <h3 style={{ margin: 0 }}>Vencimientos</h3>
           <p style={{ marginTop: 6, opacity: 0.75 }}>
             Todo vencimiento se crea desde un tipo (catálogo de la organización).
           </p>
         </div>
-        <button onClick={bootstrap} disabled={anyBusy || usageLogsBusy} style={{ padding: 10 }}>
+        <button onClick={bootstrap} disabled={anyBusy || usageLogsBusy} style={{ padding: "12px 14px" }}>
           Refrescar
         </button>
       </div>
@@ -461,21 +461,21 @@ export default function EntityDeadlinesManager({
       {/* -------------------------- Usage Logs (Opción 1) -------------------------- */}
       {tracksUsage ? (
       <div style={{ marginTop: 12, border: "1px solid #f0f0f0", borderRadius: 12, padding: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <div>
             <h4 style={{ margin: 0 }}>Registro de uso</h4>
             <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
               Estos registros alimentan el cálculo automático del promedio diario (modo auto).
             </div>
           </div>
-          <button onClick={() => loadUsageLogs()} disabled={usageLogsBusy} style={{ padding: 10 }}>
+          <button onClick={() => loadUsageLogs()} disabled={usageLogsBusy} style={{ padding: "12px 14px" }}>
             Actualizar
           </button>
         </div>
 
         {usageLogsMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{usageLogsMsg}</p>}
 
-        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 240px 160px", gap: 10 }}>
+        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
           <div>
             <label>Valor de uso</label>
             <input
@@ -503,7 +503,7 @@ export default function EntityDeadlinesManager({
             <button
               onClick={createUsageLog}
               disabled={usageLogsBusy}
-              style={{ padding: 10, fontWeight: 800, width: "100%" }}
+              style={{ padding: "12px 14px", fontWeight: 800, width: "100%" }}
             >
               {usageLogsBusy ? "Guardando..." : "Guardar"}
             </button>
@@ -526,6 +526,7 @@ export default function EntityDeadlinesManager({
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
+                    flexWrap: "wrap",
                     gap: 10,
                   }}
                 >
@@ -536,7 +537,7 @@ export default function EntityDeadlinesManager({
                   <button
                     onClick={() => deleteUsageLog(l.id)}
                     disabled={usageLogsBusy}
-                    style={{ padding: "8px 10px" }}
+                    style={{ padding: "10px 12px" }}
                     title="Eliminar registro"
                   >
                     Eliminar
@@ -560,7 +561,7 @@ export default function EntityDeadlinesManager({
           </div>
         ) : (
           <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <div style={{ fontSize: 13, opacity: 0.8 }}>
                 {showCreateForm
                   ? "Completa los datos del nuevo vencimiento."
@@ -575,7 +576,7 @@ export default function EntityDeadlinesManager({
                   }
                 }}
                 disabled={createBusy}
-                style={{ padding: "8px 10px", fontWeight: 700 }}
+                style={{ padding: "10px 12px", fontWeight: 700 }}
               >
                 {showCreateForm ? "Cancelar" : "Agregar vencimiento"}
               </button>
@@ -587,12 +588,7 @@ export default function EntityDeadlinesManager({
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns:
-                      selectedType?.measure_by === "date"
-                        ? "1fr 200px 200px"
-                        : selectedType?.measure_by === "usage"
-                        ? "1fr 200px 1fr"
-                        : "1fr 1fr",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                     gap: 10,
                   }}
                 >
@@ -640,7 +636,7 @@ export default function EntityDeadlinesManager({
                       </>
                     ) : selectedType?.measure_by === "usage" ? (
                       <div style={{ display: "grid", gap: 8 }}>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
                           <div>
                             <label>Last done usage</label>
                             <input
@@ -665,7 +661,7 @@ export default function EntityDeadlinesManager({
                           </div>
                         </div>
 
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
                           <div>
                             <label>Unidad</label>
                             <select
@@ -720,7 +716,7 @@ export default function EntityDeadlinesManager({
                 </div>
 
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <button onClick={createDeadline} disabled={createBusy || !deadlineTypeId} style={{ padding: 10, fontWeight: 800 }}>
+                  <button onClick={createDeadline} disabled={createBusy || !deadlineTypeId} style={{ padding: "12px 14px", fontWeight: 800, width: "100%", maxWidth: 260 }}>
                     {createBusy ? "Guardando..." : "Guardar vencimiento"}
                   </button>
                 </div>
@@ -747,7 +743,7 @@ export default function EntityDeadlinesManager({
             const t = d.deadline_types;
             return (
               <div key={d.id} style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                   <div>
                     <div style={{ fontWeight: 900 }}>{t?.name ?? "Tipo desconocido"}</div>
                     <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
@@ -757,23 +753,23 @@ export default function EntityDeadlinesManager({
                     </div>
                   </div>
                   {editingDeadlineId === d.id ? (
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => saveEditedDeadline(d)} disabled={editBusy} style={{ padding: "8px 10px" }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button onClick={() => saveEditedDeadline(d)} disabled={editBusy} style={{ padding: "10px 12px" }}>
                         Guardar
                       </button>
-                      <button onClick={cancelEditDeadline} disabled={editBusy} style={{ padding: "8px 10px" }}>
+                      <button onClick={cancelEditDeadline} disabled={editBusy} style={{ padding: "10px 12px" }}>
                         Cancelar
                       </button>
                     </div>
                   ) : (
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => startEditDeadline(d)} disabled={editBusy} style={{ padding: "8px 10px" }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button onClick={() => startEditDeadline(d)} disabled={editBusy} style={{ padding: "10px 12px" }}>
                         Editar
                       </button>
                       <button
                         onClick={() => deleteDeadline(d.id)}
                         disabled={editBusy}
-                        style={{ padding: "8px 10px" }}
+                        style={{ padding: "10px 12px" }}
                         title="Eliminar vencimiento"
                       >
                         Eliminar
@@ -799,7 +795,7 @@ export default function EntityDeadlinesManager({
                         onChange={(e) =>
                           setEditDraft((prev) => (prev ? { ...prev, last_done_date: e.target.value } : prev))
                         }
-                        style={{ marginLeft: 8, padding: 6 }}
+                        style={{ marginLeft: 8, marginTop: 6, padding: 8, width: "100%", maxWidth: 220 }}
                         disabled={editBusy}
                       />
                     ) : (
@@ -816,7 +812,7 @@ export default function EntityDeadlinesManager({
                           onChange={(e) =>
                             setEditDraft((prev) => (prev ? { ...prev, next_due_date: e.target.value } : prev))
                           }
-                          style={{ marginLeft: 8, padding: 6 }}
+                          style={{ marginLeft: 8, marginTop: 6, padding: 8, width: "100%", maxWidth: 220 }}
                           disabled={editBusy}
                         />
                       ) : (
@@ -834,7 +830,7 @@ export default function EntityDeadlinesManager({
                             onChange={(e) =>
                               setEditDraft((prev) => (prev ? { ...prev, last_done_usage: e.target.value } : prev))
                             }
-                            style={{ marginLeft: 8, padding: 6 }}
+                            style={{ marginLeft: 8, marginTop: 6, padding: 8, width: "100%", maxWidth: 220 }}
                             disabled={editBusy}
                           />
                         ) : (
@@ -851,7 +847,7 @@ export default function EntityDeadlinesManager({
                               onChange={(e) =>
                                 setEditDraft((prev) => (prev ? { ...prev, frequency: e.target.value } : prev))
                               }
-                              style={{ marginLeft: 8, padding: 6, width: 90 }}
+                              style={{ marginLeft: 8, marginTop: 6, padding: 8, width: "100%", maxWidth: 120 }}
                               disabled={editBusy}
                             />
                             <select
@@ -859,7 +855,7 @@ export default function EntityDeadlinesManager({
                               onChange={(e) =>
                                 setEditDraft((prev) => (prev ? { ...prev, frequency_unit: e.target.value } : prev))
                               }
-                              style={{ marginLeft: 8, padding: 6 }}
+                              style={{ marginLeft: 8, marginTop: 6, padding: 8, width: "100%", maxWidth: 180 }}
                               disabled={editBusy}
                             >
                               <option value="hours">hours</option>
@@ -890,7 +886,7 @@ export default function EntityDeadlinesManager({
                                     : prev
                                 )
                               }
-                              style={{ marginLeft: 8, padding: 6 }}
+                              style={{ marginLeft: 8, marginTop: 6, padding: 8, width: "100%", maxWidth: 180 }}
                               disabled={editBusy}
                             >
                               <option value="manual">manual</option>
@@ -908,7 +904,7 @@ export default function EntityDeadlinesManager({
                                   prev ? { ...prev, usage_daily_average: e.target.value } : prev
                                 )
                               }
-                              style={{ marginLeft: 8, padding: 6, width: 90 }}
+                              style={{ marginLeft: 8, marginTop: 6, padding: 8, width: "100%", maxWidth: 120 }}
                               disabled={editBusy || (editDraft?.usage_daily_average_mode ?? "manual") === "auto"}
                             />
                           </>

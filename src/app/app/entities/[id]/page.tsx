@@ -19,14 +19,14 @@ type EntityDetail = {
     key: string;
     field_type: string;
     show_in_card: boolean;
-    options: any;
+    options: unknown;
     created_at: string;
     value_text: string;
     value_updated_at: string | null;
   }>;
 };
 
-async function getTokenOrRedirect(router: any) {
+async function getTokenOrRedirect(router: { replace: (path: string) => void }) {
   const { data } = await supabaseAuth.auth.getSession();
   const token = data.session?.access_token;
   if (!token) {
@@ -167,13 +167,13 @@ export default function EntityDetailPage() {
 
   return (
     <main style={{ padding: 16, maxWidth: 1000, margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-        <button onClick={() => router.push("/app/entities")} style={{ padding: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <button onClick={() => router.push("/app/entities")} style={{ padding: "12px 14px" }}>
           ← Volver
         </button>
 
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={load} style={{ padding: 10 }} disabled={busy}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginLeft: "auto" }}>
+          <button onClick={load} style={{ padding: "12px 14px" }} disabled={busy}>
             Refrescar
           </button>
 
@@ -183,7 +183,7 @@ export default function EntityDetailPage() {
                 if (entity) hydrateDraft(entity);
                 setEditMode(true);
               }}
-              style={{ padding: 10 }}
+              style={{ padding: "12px 14px" }}
               disabled={!entity || busy}
             >
               Editar
@@ -196,18 +196,18 @@ export default function EntityDetailPage() {
                   setEditMode(false);
                   setMsg("");
                 }}
-                style={{ padding: 10 }}
+                style={{ padding: "12px 14px" }}
                 disabled={busy}
               >
                 Cancelar
               </button>
-              <button onClick={save} style={{ padding: 10, fontWeight: 700 }} disabled={busy || !canSave}>
+              <button onClick={save} style={{ padding: "12px 14px", fontWeight: 700 }} disabled={busy || !canSave}>
                 {busy ? "Guardando..." : "Guardar"}
               </button>
             </>
           )}
 
-          <button onClick={removeEntity} style={{ padding: 10 }} disabled={!entity || busy}>
+          <button onClick={removeEntity} style={{ padding: "12px 14px" }} disabled={!entity || busy}>
             Eliminar
           </button>
         </div>
@@ -223,7 +223,7 @@ export default function EntityDetailPage() {
         <p style={{ marginTop: 16, opacity: 0.75 }}>No encontrada.</p>
       ) : (
         <>
-          <section style={{ marginTop: 16, border: "1px solid #eee", padding: 12 }}>
+          <section style={{ marginTop: 16, border: "1px solid #eee", borderRadius: 14, padding: 12 }}>
             {!editMode ? (
               <>
                 <h2 style={{ margin: 0 }}>{entity.name}</h2>
@@ -238,7 +238,7 @@ export default function EntityDetailPage() {
             ) : (
               <>
                 <h2 style={{ marginTop: 0 }}>Editar entidad</h2>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 260px", gap: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
                   <div>
                     <label>Nombre</label>
                     <input
@@ -270,7 +270,7 @@ export default function EntityDetailPage() {
             )}
           </section>
 
-          <section style={{ marginTop: 16, border: "1px solid #eee", padding: 12 }}>
+          <section style={{ marginTop: 16, border: "1px solid #eee", borderRadius: 14, padding: 12 }}>
             <h3 style={{ marginTop: 0 }}>Campos</h3>
 
             {entity.fields.length === 0 ? (

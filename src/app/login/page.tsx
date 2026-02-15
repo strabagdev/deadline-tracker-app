@@ -271,9 +271,9 @@ export default function LoginPage() {
               <img
                 src={platformLogoUrl}
                 alt="Logo plataforma"
-                width={74}
-                height={74}
-                className="h-[74px] w-[74px] rounded-xl border object-cover"
+                width={110}
+                height={110}
+                className="h-[110px] w-[110px] rounded-xl object-cover"
               />
             </div>
           ) : null}
