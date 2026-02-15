@@ -11,6 +11,12 @@ create table if not exists public.platform_admins (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.platform_settings (
+  id boolean primary key default true check (id = true),
+  platform_logo_url text,
+  updated_at timestamptz not null default now()
+);
+
 -- Reset de datos de la aplicacion (mantiene usuarios de Auth por defecto).
 do $$
 begin
@@ -46,6 +52,9 @@ begin
   end if;
   if to_regclass('public.platform_admins') is not null then
     execute 'truncate table public.platform_admins restart identity cascade';
+  end if;
+  if to_regclass('public.platform_settings') is not null then
+    execute 'truncate table public.platform_settings cascade';
   end if;
   if to_regclass('public.profiles') is not null then
     execute 'truncate table public.profiles restart identity cascade';

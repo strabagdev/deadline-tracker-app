@@ -113,6 +113,9 @@ export default function LoginPage() {
     if (res.ok && json && json.has_super_admin === false) {
       return "/setup-super-admin";
     }
+    if (res.ok && json && json.is_super_admin === true) {
+      return "/app/super-admin";
+    }
     return "/select-org";
   }
 
@@ -284,16 +287,23 @@ export default function LoginPage() {
       const baseUrl = getBaseUrl();
       const redirectTo = `${baseUrl}/reset-password`;
 
-      const { error } = await supabaseAuth.auth.resetPasswordForEmail(normalizedEmail, {
-        redirectTo,
+      const res = await fetch("/api/auth/password-reset/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          redirectTo,
+        }),
       });
 
-      if (error) {
-        const retrySeconds = getRetrySecondsFromMessage(error.message);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message = String(json?.error || "No se pudo enviar el correo de restablecimiento.");
+        const retrySeconds = getRetrySecondsFromMessage(message);
         if (retrySeconds) {
           applyCooldownUntil(Date.now() + retrySeconds * 1000 + 2_000);
         }
-        setMsg(humanizeAuthErrorMessage(error.message));
+        setMsg(humanizeAuthErrorMessage(message));
         return;
       }
 

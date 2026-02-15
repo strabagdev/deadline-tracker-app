@@ -43,6 +43,21 @@ export default function SelectOrgPage() {
     const token = await getTokenOrRedirect();
     if (!token) return;
 
+    const superRes = await fetch("/api/platform/super-admin/status", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const superJson = (await superRes.json().catch(() => ({}))) as SuperAdminStatus & { error?: string };
+    if (!superRes.ok) {
+      setError(superJson.error || "No se pudo validar estado de super admin");
+      setLoading(false);
+      return;
+    }
+
+    if (superJson.is_super_admin) {
+      router.replace("/app/super-admin");
+      return;
+    }
+
     const res = await fetch("/api/orgs", {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -80,17 +95,6 @@ export default function SelectOrgPage() {
     }
 
     if (list.length === 0) {
-      const superRes = await fetch("/api/platform/super-admin/status", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const superJson = (await superRes.json().catch(() => ({}))) as SuperAdminStatus & { error?: string };
-      if (!superRes.ok) {
-        setError(superJson.error || "No se pudo validar estado de super admin");
-        setLoading(false);
-        return;
-      }
-
       const hasSuperAdmin = Boolean(superJson.has_super_admin);
       const currentIsSuperAdmin = Boolean(superJson.is_super_admin);
       setIsSuperAdmin(currentIsSuperAdmin);

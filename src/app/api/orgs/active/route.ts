@@ -24,16 +24,17 @@ export async function GET(req: Request) {
     // 2) traer nombre org
     const { data: org, error: orgErr } = await db
       .from("organizations")
-      .select("id,name")
+      .select("id,name,logo_url")
       .eq("id", activeId)
       .maybeSingle();
 
     if (orgErr) throw orgErr;
 
     return NextResponse.json({ organization: org ?? null });
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unauthorized";
     return NextResponse.json(
-      { error: e?.message ?? "Unauthorized" },
+      { error: message },
       { status: 401 }
     );
   }

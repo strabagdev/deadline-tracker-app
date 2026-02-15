@@ -58,7 +58,7 @@ export default function AppHeader() {
       }}
     >
       <div>
-        <div style={{ fontWeight: 700 }}>Deadline Tracker</div>
+        <div style={{ fontWeight: 700 }}>OpsAhead</div>
         <div style={{ opacity: 0.75, fontSize: 13, marginTop: 4 }}>
           {loading
             ? "Cargando organización..."

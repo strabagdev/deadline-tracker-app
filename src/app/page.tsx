@@ -33,6 +33,11 @@ export default function HomePage() {
         return;
       }
 
+      if (statusRes.ok && statusJson && statusJson.is_super_admin === true) {
+        router.replace("/app/super-admin");
+        return;
+      }
+
       router.replace("/select-org");
     })();
   }, [router]);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 
@@ -11,6 +11,49 @@ export default function ProfilePage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+  const [orgLoading, setOrgLoading] = useState(true);
+  const [orgRole, setOrgRole] = useState<string | null>(null);
+  const [orgName, setOrgName] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoMsg, setLogoMsg] = useState("");
+  const [logoError, setLogoError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const { data } = await supabaseAuth.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) {
+        if (!cancelled) {
+          setOrgLoading(false);
+        }
+        return;
+      }
+
+      const res = await fetch("/api/orgs/branding", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+
+      if (cancelled) return;
+      setOrgRole(json?.role ?? null);
+      setOrgName(json?.organization?.name ?? "");
+      setLogoUrl(json?.organization?.logo_url ?? "");
+      setOrgLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function getAuthToken() {
+    const { data } = await supabaseAuth.auth.getSession();
+    return data.session?.access_token ?? null;
+  }
 
   async function updatePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -38,6 +81,72 @@ export default function ProfilePage() {
     setPassword("");
     setConfirmPassword("");
     setMsg("Contraseña actualizada correctamente.");
+  }
+
+  async function uploadLogo(e: React.FormEvent) {
+    e.preventDefault();
+    setLogoError("");
+    setLogoMsg("");
+
+    if (!logoFile) {
+      setLogoError("Selecciona una imagen.");
+      return;
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
+      setLogoError("Sesión inválida.");
+      return;
+    }
+
+    setLogoBusy(true);
+    const form = new FormData();
+    form.append("file", logoFile);
+
+    const res = await fetch("/api/orgs/branding", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    const json = await res.json().catch(() => ({}));
+    setLogoBusy(false);
+
+    if (!res.ok) {
+      setLogoError(json?.error ?? "No se pudo subir el logo.");
+      return;
+    }
+
+    setLogoUrl(json?.organization?.logo_url ?? "");
+    setLogoFile(null);
+    setLogoMsg("Logo actualizado.");
+  }
+
+  async function removeLogo() {
+    setLogoError("");
+    setLogoMsg("");
+
+    const token = await getAuthToken();
+    if (!token) {
+      setLogoError("Sesión inválida.");
+      return;
+    }
+
+    setLogoBusy(true);
+    const res = await fetch("/api/orgs/branding", {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json().catch(() => ({}));
+    setLogoBusy(false);
+
+    if (!res.ok) {
+      setLogoError(json?.error ?? "No se pudo eliminar el logo.");
+      return;
+    }
+
+    setLogoUrl("");
+    setLogoFile(null);
+    setLogoMsg("Logo eliminado.");
   }
 
   return (
@@ -80,6 +189,58 @@ export default function ProfilePage() {
           </button>
         </div>
       </form>
+
+      <section style={{ marginTop: 24, borderTop: "1px solid #eee", paddingTop: 18 }}>
+        <h3 style={{ margin: 0 }}>Marca de organización</h3>
+        <p style={{ marginTop: 8, opacity: 0.8 }}>
+          {orgLoading
+            ? "Cargando organización..."
+            : orgName
+              ? `Organización activa: ${orgName}`
+              : "No hay organización activa."}
+        </p>
+
+        {!orgLoading && orgRole !== "owner" ? (
+          <p style={{ fontSize: 13, opacity: 0.75 }}>
+            Solo el owner de la organización puede subir o eliminar el logo.
+          </p>
+        ) : null}
+
+        {!orgLoading && orgRole === "owner" ? (
+          <form onSubmit={uploadLogo} style={{ display: "grid", gap: 10 }}>
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt="Logo actual de la organización"
+                width={72}
+                height={72}
+                style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 10, border: "1px solid #ddd" }}
+              />
+            ) : (
+              <div style={{ fontSize: 13, opacity: 0.7 }}>No hay logo configurado.</div>
+            )}
+
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
+              disabled={logoBusy}
+            />
+
+            {logoError && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{logoError}</p>}
+            {logoMsg && <p style={{ color: "green", whiteSpace: "pre-wrap" }}>{logoMsg}</p>}
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <button type="submit" disabled={logoBusy || !logoFile} style={{ padding: 10 }}>
+                {logoBusy ? "Subiendo..." : "Guardar logo"}
+              </button>
+              <button type="button" onClick={removeLogo} disabled={logoBusy || !logoUrl} style={{ padding: 10 }}>
+                {logoBusy ? "Procesando..." : "Eliminar logo"}
+              </button>
+            </div>
+          </form>
+        ) : null}
+      </section>
     </main>
   );
 }
