@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import { Loader } from "@/components/ui/loader";
 
 type Org = { id: string; name: string; role: string };
 type SuperAdminStatus = {
@@ -135,7 +136,12 @@ export default function SelectOrgPage() {
     router.replace("/app");
   }
 
-  if (loading) return <p style={{ padding: 16 }}>Cargando...</p>;
+  if (loading)
+    return (
+      <div style={{ padding: 16, display: "flex", justifyContent: "center" }}>
+        <Loader label="Cargando organizaciones..." />
+      </div>
+    );
 
   return (
     <main style={{ padding: 16, maxWidth: 680, margin: "0 auto" }}>

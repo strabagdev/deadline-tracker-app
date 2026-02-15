@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 import { pickNearestDeadline } from "@/lib/deadlines/calculateDeadlineStatus";
+import { Loader } from "@/components/ui/loader";
 
 type DeadlineType = {
   id: string;
@@ -43,7 +44,7 @@ type EntityRow = {
 
 type LatestUsageByEntity = Record<string, { value: number; logged_at: string }>;
 
-type Status = "red" | "yellow" | "green" | "none";
+type Status = "red" | "orange" | "yellow" | "green" | "none";
 
 function fmtDate(d: Date | null) {
   if (!d) return "—";
@@ -52,14 +53,15 @@ function fmtDate(d: Date | null) {
 
 function statusPriority(s: Status) {
   if (s === "red") return 0;
-  if (s === "yellow") return 1;
-  if (s === "green") return 2;
-  return 3;
+  if (s === "orange") return 1;
+  if (s === "yellow") return 2;
+  if (s === "green") return 3;
+  return 4;
 }
 
 function statusChipStyle(s: Status | "all", active: boolean): React.CSSProperties {
   const base: React.CSSProperties = {
-    border: "1px solid #e5e5e5",
+    border: "1px solid #d1d5db",
     borderRadius: 999,
     padding: "6px 10px",
     fontSize: 12,
@@ -72,14 +74,17 @@ function statusChipStyle(s: Status | "all", active: boolean): React.CSSPropertie
   };
 
   const map: Record<string, React.CSSProperties> = {
-    red: { background: "#ffeaea", borderColor: "#ffd0d0" },
-    yellow: { background: "#fff6d8", borderColor: "#ffe7a6" },
-    green: { background: "#e9ffe9", borderColor: "#cfffcc" },
-    none: { background: "#f6f6f6", borderColor: "#e7e7e7" },
-    all: { background: "#f3f7ff", borderColor: "#d7e6ff" },
+    red: { background: "#ffe4e6", borderColor: "#fda4af", color: "#9f1239" },
+    orange: { background: "#ffedd5", borderColor: "#fdba74", color: "#9a3412" },
+    yellow: { background: "#fef3c7", borderColor: "#fcd34d", color: "#92400e" },
+    green: { background: "#dcfce7", borderColor: "#86efac", color: "#166534" },
+    none: { background: "#f1f5f9", borderColor: "#cbd5e1", color: "#334155" },
+    all: { background: "#dbeafe", borderColor: "#93c5fd", color: "#1d4ed8" },
   };
 
-  const act: React.CSSProperties = active ? { boxShadow: "0 0 0 2px rgba(0,0,0,0.06)" } : { opacity: 0.85 };
+  const act: React.CSSProperties = active
+    ? { boxShadow: "0 0 0 2px rgba(15,23,42,0.28)", opacity: 1, borderWidth: 2, fontWeight: 700 }
+    : { opacity: 0.72 };
   return { ...base, ...(map[s] ?? {}), ...act };
 }
 
@@ -99,17 +104,17 @@ function rowStatusChipStyle(s: Status): React.CSSProperties {
   };
 
   const map: Record<string, React.CSSProperties> = {
-    red: { background: "#ffeaea", borderColor: "#ffd0d0" },
-    yellow: { background: "#fff6d8", borderColor: "#ffe7a6" },
-    green: { background: "#e9ffe9", borderColor: "#cfffcc" },
-    none: { background: "#f6f6f6", borderColor: "#e7e7e7" },
+    red: { background: "#ffe4e6", borderColor: "#fda4af", color: "#9f1239" },
+    orange: { background: "#ffedd5", borderColor: "#fdba74", color: "#9a3412" },
+    yellow: { background: "#fef3c7", borderColor: "#fcd34d", color: "#92400e" },
+    green: { background: "#dcfce7", borderColor: "#86efac", color: "#166534" },
+    none: { background: "#f1f5f9", borderColor: "#cbd5e1", color: "#334155" },
   };
 
   return { ...base, ...(map[s] ?? {}) };
 }
 
 function toEntitiesStatus(s: "red" | "orange" | "yellow" | "green" | "none"): Status {
-  if (s === "orange") return "yellow";
   return s;
 }
 
@@ -283,7 +288,7 @@ export default function EntitiesPage() {
         const latest = usage[e.id]?.value ?? null;
         const latestAt = usage[e.id]?.logged_at ?? null;
         const nearest = pickNearestDeadline(e.deadlines, latest, {
-          yellowDays: 7,
+          yellowDays: 14,
           orangeDays: 7,
           redDays: 0,
         });
@@ -371,7 +376,7 @@ export default function EntitiesPage() {
         {showCreate ? (
           <div style={{ marginTop: 12 }}>
             {typesLoading ? (
-              <p>Cargando tipos…</p>
+              <Loader label="Cargando tipos..." />
             ) : entityTypes.length === 0 ? (
               <div style={{ opacity: 0.85 }}>
                 <p>No hay tipos de entidad. Debes crear al menos uno antes de crear entidades.</p>
@@ -506,6 +511,9 @@ export default function EntitiesPage() {
           <span onClick={() => setFilterStatus("red")} style={statusChipStyle("red", filterStatus === "red")}>
             🔴 Vencido
           </span>
+          <span onClick={() => setFilterStatus("orange")} style={statusChipStyle("orange", filterStatus === "orange")}>
+            🟠 Urgente
+          </span>
           <span onClick={() => setFilterStatus("yellow")} style={statusChipStyle("yellow", filterStatus === "yellow")}>
             🟡 Por vencer
           </span>
@@ -522,7 +530,9 @@ export default function EntitiesPage() {
 
       <section style={{ marginTop: 14 }}>
         {loading ? (
-          <p>Cargando…</p>
+          <div style={{ display: "flex", justifyContent: "center", padding: "16px 0" }}>
+            <Loader label="Cargando entidades..." />
+          </div>
         ) : rows.length === 0 ? (
           <p style={{ opacity: 0.8 }}>No hay entidades para mostrar con estos filtros.</p>
         ) : (
@@ -565,28 +575,28 @@ export default function EntitiesPage() {
                   title="Abrir ficha"
                 >
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</div>
-                    <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{e.entity_types?.name ?? "Sin tipo"}</div>
+                    <div style={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</div>
+                    <div style={{ fontSize: 11, opacity: 0.62, marginTop: 2 }}>{e.entity_types?.name ?? "Sin tipo"}</div>
                   </div>
 
                   <div style={{ display: "flex", alignItems: "center" }}>
                     <span style={rowStatusChipStyle(r.status)}>
-                      {r.status === "red" ? "🔴" : r.status === "yellow" ? "🟡" : r.status === "green" ? "🟢" : "⚪"}{" "}
+                      {r.status === "red" ? "🔴" : r.status === "orange" ? "🟠" : r.status === "yellow" ? "🟡" : r.status === "green" ? "🟢" : "⚪"}{" "}
                       {nearest?.label ?? "Sin info"}
                     </span>
                   </div>
 
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontWeight: 500, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {nearest?.typeName ?? "—"}{" "}
-                      {nearest?.due ? <span style={{ fontWeight: 700, opacity: 0.85 }}>· {fmtDate(nearest.due)}</span> : null}
+                      {nearest?.due ? <span style={{ fontWeight: 500, opacity: 0.75 }}>· {fmtDate(nearest.due)}</span> : null}
                     </div>
-                    <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{measure}</div>
+                    <div style={{ fontSize: 11, opacity: 0.62, marginTop: 2 }}>{measure}</div>
                   </div>
 
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontWeight: 900 }}>{r.latestUsage != null ? r.latestUsage : "—"}</div>
-                    <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>
+                    <div style={{ fontWeight: 500, color: "#334155" }}>{r.latestUsage != null ? r.latestUsage : "—"}</div>
+                    <div style={{ fontSize: 11, opacity: 0.62, marginTop: 2 }}>
                       {r.latestUsageAt ? new Date(r.latestUsageAt).toLocaleDateString() : ""}
                     </div>
                   </div>

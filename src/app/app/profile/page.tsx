@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import { Loader } from "@/components/ui/loader";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -193,11 +194,13 @@ export default function ProfilePage() {
       <section style={{ marginTop: 24, borderTop: "1px solid #eee", paddingTop: 18 }}>
         <h3 style={{ margin: 0 }}>Marca de organización</h3>
         <p style={{ marginTop: 8, opacity: 0.8 }}>
-          {orgLoading
-            ? "Cargando organización..."
-            : orgName
-              ? `Organización activa: ${orgName}`
-              : "No hay organización activa."}
+          {orgLoading ? (
+            <Loader label="Cargando organización..." size="sm" />
+          ) : orgName ? (
+            `Organización activa: ${orgName}`
+          ) : (
+            "No hay organización activa."
+          )}
         </p>
 
         {!orgLoading && orgRole !== "owner" ? (

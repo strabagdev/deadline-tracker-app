@@ -3,18 +3,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
-type Mode = "password" | "magic";
-type BusyAction = "password" | "magic" | "reset" | null;
+type BusyAction = "password" | "reset" | null;
 
 const AUTH_EMAIL_COOLDOWN_MS = 75_000;
 
 function toStorageSafeEmail(email: string) {
   return encodeURIComponent(email.trim().toLowerCase());
-}
-
-function getMagicCooldownKey(email: string) {
-  return `auth:magicCooldown:${toStorageSafeEmail(email)}`;
 }
 
 function getResetCooldownKey(email: string) {
@@ -23,10 +22,10 @@ function getResetCooldownKey(email: string) {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("password");
 
   const [email, setEmail] = useState("");
   const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
+  const [platformLogoUrl, setPlatformLogoUrl] = useState("");
 
   const [password, setPassword] = useState("");
 
@@ -40,11 +39,9 @@ export default function LoginPage() {
   const inFlightRef = useRef<BusyAction>(null);
 
   // Cooldowns para evitar spamear OTP / reset
-  const [magicCooldownUntil, setMagicCooldownUntil] = useState<number>(0);
   const [resetCooldownUntil, setResetCooldownUntil] = useState<number>(0);
   const [nowTs, setNowTs] = useState(() => Date.now());
 
-  const canSendMagic = nowTs > magicCooldownUntil;
   const canSendReset = nowTs > resetCooldownUntil;
 
   function getBaseUrl() {
@@ -73,10 +70,9 @@ export default function LoginPage() {
     return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
   }
 
-  function persistCooldowns(emailValue: string, cooldownUntil: number) {
+  function persistCooldown(emailValue: string, cooldownUntil: number) {
     if (!emailValue) return;
     try {
-      window.localStorage.setItem(getMagicCooldownKey(emailValue), String(cooldownUntil));
       window.localStorage.setItem(getResetCooldownKey(emailValue), String(cooldownUntil));
     } catch {
       // noop
@@ -84,9 +80,8 @@ export default function LoginPage() {
   }
 
   function applyCooldownUntil(cooldownUntil: number) {
-    setMagicCooldownUntil(cooldownUntil);
     setResetCooldownUntil(cooldownUntil);
-    persistCooldowns(normalizedEmail, cooldownUntil);
+    persistCooldown(normalizedEmail, cooldownUntil);
   }
 
   async function syncProfileFromSession() {
@@ -123,6 +118,12 @@ export default function LoginPage() {
     let cancelled = false;
 
     (async () => {
+      const brandingRes = await fetch("/api/platform/branding");
+      const brandingJson = await brandingRes.json().catch(() => ({}));
+      if (!cancelled && brandingRes.ok) {
+        setPlatformLogoUrl(brandingJson?.platform?.logo_url ?? "");
+      }
+
       const { data } = await supabaseAuth.auth.getSession();
       if (!cancelled && data.session) {
         const route = await resolvePostAuthRoute(data.session.access_token);
@@ -137,26 +138,21 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!normalizedEmail) {
-      setMagicCooldownUntil(0);
       setResetCooldownUntil(0);
       return;
     }
 
     try {
-      const magicRaw = window.localStorage.getItem(getMagicCooldownKey(normalizedEmail));
       const resetRaw = window.localStorage.getItem(getResetCooldownKey(normalizedEmail));
-      const magicUntil = magicRaw ? Number(magicRaw) : 0;
       const resetUntil = resetRaw ? Number(resetRaw) : 0;
-      setMagicCooldownUntil(Number.isFinite(magicUntil) ? magicUntil : 0);
       setResetCooldownUntil(Number.isFinite(resetUntil) ? resetUntil : 0);
     } catch {
-      setMagicCooldownUntil(0);
       setResetCooldownUntil(0);
     }
   }, [normalizedEmail]);
 
   useEffect(() => {
-    const hasActiveCooldown = magicCooldownUntil > nowTs || resetCooldownUntil > nowTs;
+    const hasActiveCooldown = resetCooldownUntil > nowTs;
     if (!hasActiveCooldown) return;
 
     const id = window.setInterval(() => {
@@ -164,7 +160,7 @@ export default function LoginPage() {
     }, 1000);
 
     return () => window.clearInterval(id);
-  }, [magicCooldownUntil, resetCooldownUntil, nowTs]);
+  }, [resetCooldownUntil, nowTs]);
 
   async function loginWithPassword(e: React.FormEvent) {
     e.preventDefault();
@@ -208,54 +204,6 @@ export default function LoginPage() {
       }
       const route = await resolvePostAuthRoute(token);
       router.replace(route);
-    } finally {
-      setBusyAction(null);
-      inFlightRef.current = null;
-    }
-  }
-
-  async function sendMagicLink(e: React.FormEvent) {
-    e.preventDefault();
-    setMsg("");
-
-    if (!normalizedEmail) {
-      setMsg("Ingresa un email válido.");
-      return;
-    }
-
-    if (!canSendMagic) {
-      const seconds = Math.max(1, Math.ceil((magicCooldownUntil - Date.now()) / 1000));
-      setMsg(`Espera ${seconds}s para reenviar el magic link.`);
-      return;
-    }
-
-    // Lock fuerte anti doble submit
-    if (inFlightRef.current) return;
-    inFlightRef.current = "magic";
-    setBusyAction("magic");
-
-    // Inicia cooldown al momento de intentar (evita spam aunque falle por doble click)
-    applyCooldownUntil(Date.now() + AUTH_EMAIL_COOLDOWN_MS);
-
-    try {
-      const baseUrl = getBaseUrl();
-      const redirectTo = `${baseUrl}/auth/callback`;
-
-      const { error } = await supabaseAuth.auth.signInWithOtp({
-        email: normalizedEmail,
-        options: { emailRedirectTo: redirectTo },
-      });
-
-      if (error) {
-        const retrySeconds = getRetrySecondsFromMessage(error.message);
-        if (retrySeconds) {
-          applyCooldownUntil(Date.now() + retrySeconds * 1000 + 2_000);
-        }
-        setMsg(humanizeAuthErrorMessage(error.message));
-        return;
-      }
-
-      setMsg("Listo. Revisa tu correo para el link de acceso.");
     } finally {
       setBusyAction(null);
       inFlightRef.current = null;
@@ -315,87 +263,74 @@ export default function LoginPage() {
   }
 
   return (
-    <main style={{ maxWidth: 420, margin: "40px auto", padding: 16 }}>
-      <h1>Iniciar sesión</h1>
+    <main className="mx-auto mt-10 w-full max-w-md px-4">
+      <Card>
+        <CardHeader className="space-y-2">
+          {platformLogoUrl ? (
+            <div className="flex justify-center pb-2">
+              <img
+                src={platformLogoUrl}
+                alt="Logo plataforma"
+                width={74}
+                height={74}
+                className="h-[74px] w-[74px] rounded-xl border object-cover"
+              />
+            </div>
+          ) : null}
+          <CardTitle className="text-2xl">Iniciar sesión</CardTitle>
+          <CardDescription>Acceso por contraseña para miembros y administradores.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={loginWithPassword} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="tu@correo.com"
+                type="email"
+                required
+                autoComplete="email"
+                inputMode="email"
+              />
+            </div>
 
-      <div style={{ display: "flex", gap: 8, margin: "12px 0" }}>
-        <button
-          type="button"
-          onClick={() => setMode("password")}
-          disabled={busy}
-          style={{ padding: 10, flex: 1, opacity: mode === "password" ? 1 : 0.6 }}
-        >
-          Con contraseña
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("magic")}
-          disabled={busy}
-          style={{ padding: 10, flex: 1, opacity: mode === "magic" ? 1 : 0.6 }}
-        >
-          Magic link
-        </button>
-      </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Contraseña</Label>
+              <Input
+                id="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                type="password"
+                required
+                autoComplete="current-password"
+              />
+            </div>
 
-      <label>Email</label>
-      <input
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="tu@correo.com"
-        style={{ width: "100%", padding: 10, marginTop: 6 }}
-        type="email"
-        required
-        autoComplete="email"
-        inputMode="email"
-      />
+            <Button type="submit" disabled={busy} className="w-full">
+              {busyAction === "password" ? "Entrando..." : "Entrar"}
+            </Button>
 
-      {mode === "password" ? (
-        <form onSubmit={loginWithPassword}>
-          <label style={{ marginTop: 10, display: "block" }}>Contraseña</label>
-          <input
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            style={{ width: "100%", padding: 10, marginTop: 6 }}
-            type="password"
-            required
-            autoComplete="current-password"
-          />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || !normalizedEmail}
+              onClick={sendPasswordReset}
+              className="w-full"
+            >
+              {busyAction === "reset"
+                ? "Enviando..."
+                : !canSendReset
+                ? `Espera ${Math.max(1, Math.ceil((resetCooldownUntil - nowTs) / 1000))}s`
+                : "Restablecer contraseña"}
+            </Button>
+          </form>
 
-          <button type="submit" disabled={busy} style={{ width: "100%", padding: 10, marginTop: 12 }}>
-            {busyAction === "password" ? "Entrando..." : "Entrar"}
-          </button>
-
-          <button
-            type="button"
-            disabled={busy || !normalizedEmail}
-            onClick={sendPasswordReset}
-            style={{ width: "100%", padding: 10, marginTop: 10 }}
-          >
-            {busyAction === "reset"
-              ? "Enviando..."
-              : !canSendReset
-              ? `Espera ${Math.max(1, Math.ceil((resetCooldownUntil - nowTs) / 1000))}s`
-              : "Restablecer contraseña"}
-          </button>
-        </form>
-      ) : (
-        <form onSubmit={sendMagicLink}>
-          <button
-            type="submit"
-            disabled={busy || !normalizedEmail}
-            style={{ width: "100%", padding: 10, marginTop: 12 }}
-          >
-            {busyAction === "magic"
-              ? "Enviando..."
-              : !canSendMagic
-              ? `Espera ${Math.max(1, Math.ceil((magicCooldownUntil - nowTs) / 1000))}s`
-              : "Enviar magic link"}
-          </button>
-        </form>
-      )}
-
-      {msg && <p style={{ marginTop: 12, whiteSpace: "pre-wrap" }}>{msg}</p>}
+          {msg ? <p className="mt-4 whitespace-pre-wrap text-sm text-slate-700">{msg}</p> : null}
+        </CardContent>
+      </Card>
     </main>
   );
 }

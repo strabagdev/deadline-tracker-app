@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import { Loader } from "@/components/ui/loader";
 
 type DeadlineType = {
   id: string;
@@ -271,7 +272,9 @@ export default function DeadlineTypesPage() {
         <h3 style={{ marginTop: 0 }}>Listado</h3>
 
         {loading ? (
-          <p>Cargando...</p>
+          <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
+            <Loader label="Cargando tipos..." />
+          </div>
         ) : items.length === 0 ? (
           <p style={{ opacity: 0.7 }}>Aún no hay tipos creados.</p>
         ) : (

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import { Loader } from "@/components/ui/loader";
 
 type DeadlineType = {
   id: string;
@@ -735,7 +736,9 @@ export default function EntityDeadlinesManager({
       {editMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap", marginTop: 8 }}>{editMsg}</p>}
 
       {loading ? (
-        <p>Cargando...</p>
+        <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
+          <Loader label="Cargando vencimientos..." />
+        </div>
       ) : deadlines.length === 0 ? (
         <p style={{ opacity: 0.7 }}>Esta entidad aún no tiene vencimientos.</p>
       ) : (

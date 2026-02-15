@@ -91,9 +91,9 @@ export async function PUT(req: Request) {
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
-    const yellow = Math.trunc(Number(body.yellow_days ?? body.date_yellow_days ?? body.usage_yellow_days));
-    const orange = Math.trunc(Number(body.orange_days ?? body.date_orange_days ?? body.usage_orange_days));
-    const red = Math.trunc(Number(body.red_days ?? body.date_red_days ?? body.usage_red_days));
+    const yellow = Math.trunc(Number(body.yellow_days));
+    const orange = Math.trunc(Number(body.orange_days));
+    const red = Math.trunc(Number(body.red_days));
 
     const v = validateThresholds(yellow, orange, red);
     if (v) return NextResponse.json({ error: v }, { status: 400 });

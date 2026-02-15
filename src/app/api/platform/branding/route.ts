@@ -66,9 +66,8 @@ async function getCurrentSettings(db: ReturnType<typeof createDataServerClient>)
   return (data as PlatformSettingsRow | null) ?? null;
 }
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
-    await requireAuthUser(req);
     const db = createDataServerClient();
 
     let settings: PlatformSettingsRow | null = null;

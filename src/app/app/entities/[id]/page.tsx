@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 import EntityDeadlinesManager from "@/components/deadlines/EntityDeadlinesManager";
+import { Loader } from "@/components/ui/loader";
 
 type EntityDetail = {
   id: string;
@@ -213,7 +214,9 @@ export default function EntityDetailPage() {
       </div>
 
       {loading ? (
-        <p style={{ marginTop: 16 }}>Cargando...</p>
+        <div style={{ marginTop: 16, display: "flex", justifyContent: "center" }}>
+          <Loader label="Cargando entidad..." />
+        </div>
       ) : msg ? (
         <p style={{ marginTop: 16, color: "crimson", whiteSpace: "pre-wrap" }}>{msg}</p>
       ) : !entity ? (

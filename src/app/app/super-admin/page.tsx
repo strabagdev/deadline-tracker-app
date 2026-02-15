@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import { Loader } from "@/components/ui/loader";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type StatusResponse = {
   has_super_admin?: boolean;
@@ -35,6 +41,7 @@ export default function SuperAdminPage() {
   const [platformLogoUrl, setPlatformLogoUrl] = useState("");
   const [platformLogoFile, setPlatformLogoFile] = useState<File | null>(null);
   const [brandingBusy, setBrandingBusy] = useState(false);
+  const platformLogoInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     void validateAccess();
@@ -398,211 +405,257 @@ export default function SuperAdminPage() {
     setBrandingBusy(false);
   }
 
-  if (loading) return <p style={{ padding: 16 }}>Validando permisos...</p>;
+  if (loading) {
+    return (
+      <div style={{ padding: 16, display: "flex", justifyContent: "center" }}>
+        <Loader label="Validando permisos..." />
+      </div>
+    );
+  }
 
   return (
-    <main style={{ maxWidth: 720, margin: "0 auto", padding: 16 }}>
-      <h2>Super Admin</h2>
-      <p style={{ opacity: 0.8 }}>
-        Menu exclusivo para administracion global de plataforma.
+    <main className="mx-auto max-w-5xl px-4 py-4">
+      <h2 className="text-2xl font-semibold">Super Admin</h2>
+      <p className="mt-1 text-sm text-slate-600">
+        Menú exclusivo para administración global de plataforma.
       </p>
 
-      {error && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{error}</p>}
-      {ok && <p style={{ color: "green", whiteSpace: "pre-wrap" }}>{ok}</p>}
+      {error ? <p className="mt-3 whitespace-pre-wrap text-sm text-rose-600">{error}</p> : null}
+      {ok ? <p className="mt-3 whitespace-pre-wrap text-sm text-emerald-600">{ok}</p> : null}
 
-      <section style={{ marginTop: 14, border: "1px solid #eee", padding: 12 }}>
-        <h3 style={{ marginTop: 0 }}>Branding de plataforma</h3>
-        <p style={{ fontSize: 12, opacity: 0.75 }}>
-          Este logo es global y se muestra en el header para todos los usuarios.
-        </p>
-        <div style={{ display: "grid", gap: 10 }}>
-          {platformLogoUrl ? (
-            <img
-              src={platformLogoUrl}
-              alt="Logo plataforma"
-              width={96}
-              height={96}
-              style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 12, border: "1px solid #e5e5e5" }}
-            />
-          ) : (
-            <div style={{ fontSize: 12, opacity: 0.75 }}>No hay logo global configurado.</div>
-          )}
-
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/svg+xml"
-            onChange={(e) => setPlatformLogoFile(e.target.files?.[0] ?? null)}
-            disabled={brandingBusy}
-          />
-
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={updatePlatformLogo} disabled={brandingBusy || !platformLogoFile} style={{ padding: "10px 12px" }}>
-              {brandingBusy ? "Guardando..." : "Guardar logo plataforma"}
-            </button>
-            <button onClick={removePlatformLogo} disabled={brandingBusy || !platformLogoUrl} style={{ padding: "10px 12px" }}>
-              {brandingBusy ? "Eliminando..." : "Eliminar logo plataforma"}
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section style={{ marginTop: 14, border: "1px solid #eee", padding: 12 }}>
-        <h3 style={{ marginTop: 0 }}>Crear organización</h3>
-        <div style={{ display: "grid", gap: 10 }}>
-          <div>
-            <label>Nombre de organizacion</label>
-            <input
-              value={organizationName}
-              onChange={(e) => setOrganizationName(e.target.value)}
-              placeholder="Acme Corp"
-              style={{ width: "100%", padding: 10, marginTop: 6 }}
-              disabled={busy}
-            />
-          </div>
-
-          <button onClick={createOrganization} disabled={busy} style={{ width: "100%", padding: 12 }}>
-            {busy ? "Creando..." : "Crear organización"}
-          </button>
-          <div style={{ fontSize: 12, opacity: 0.75 }}>
-            El primer owner se asigna por invitación global (rol owner), no automáticamente.
-          </div>
-        </div>
-      </section>
-
-      <section style={{ marginTop: 14, border: "1px solid #eee", padding: 12 }}>
-        <h3 style={{ marginTop: 0 }}>Invitación global (Super Admin)</h3>
-        <div style={{ display: "grid", gap: 10 }}>
-          <div>
-            <label>Email a invitar</label>
-            <input
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="usuario@empresa.com"
-              type="email"
-              style={{ width: "100%", padding: 10, marginTop: 6 }}
-              disabled={busy}
-            />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 10 }}>
-            <div>
-              <label>Organización destino</label>
-              <select
-                value={inviteOrgId}
-                onChange={(e) => setInviteOrgId(e.target.value)}
-                style={{ width: "100%", padding: 10, marginTop: 6 }}
-                disabled={busy}
-              >
-                <option value="">Selecciona organización…</option>
-                {organizations.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name}
-                  </option>
-                ))}
-              </select>
+      <section style={{ marginTop: 14 }}>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle>Branding de plataforma</CardTitle>
+              <Badge variant="secondary">Global</Badge>
             </div>
-
-            <div>
-              <label>Rol</label>
-              <select
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value)}
-                style={{ width: "100%", padding: 10, marginTop: 6 }}
-                disabled={busy}
-              >
-                <option value="member">member</option>
-                <option value="admin">admin</option>
-                <option value="owner">owner</option>
-                <option value="viewer">viewer</option>
-              </select>
-            </div>
-          </div>
-
-          <button onClick={sendGlobalInvite} disabled={busy} style={{ width: "100%", padding: 12 }}>
-            {busy ? "Enviando..." : "Invitar a organización"}
-          </button>
-        </div>
-      </section>
-
-      <section style={{ marginTop: 14, border: "1px solid #eee", padding: 12 }}>
-        <h3 style={{ marginTop: 0 }}>Organizaciones y owners</h3>
-        {organizations.length === 0 ? (
-          <p style={{ opacity: 0.75 }}>Aún no hay organizaciones creadas.</p>
-        ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {organizations.map((org) => (
-              <div key={org.id} style={{ border: "1px solid #eee", borderRadius: 10, padding: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                  <div>
-                    <div style={{ fontWeight: 800 }}>{org.name}</div>
-                    <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                      ID: {org.id} · Miembros: {org.member_count}
-                    </div>
-                    <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                      Owners:
-                    </div>
-                    <div style={{ marginTop: 6, display: "grid", gap: 6 }}>
-                      {org.owners.length === 0 ? (
-                        <div style={{ fontSize: 12, opacity: 0.75 }}>Sin owner</div>
-                      ) : (
-                        org.owners.map((o) => (
-                          <div
-                            key={`${org.id}-${o.user_id}`}
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                              gap: 8,
-                              border: "1px solid #f0f0f0",
-                              borderRadius: 8,
-                              padding: "6px 8px",
-                            }}
-                          >
-                            <span style={{ fontSize: 12 }}>{o.email || o.user_id}</span>
-                            <button
-                              onClick={() => removeOwner(org.id, o.user_id, o.email)}
-                              disabled={busy || org.owners.length <= 1}
-                              style={{ padding: "6px 8px" }}
-                              title={
-                                org.owners.length <= 1
-                                  ? "No se puede eliminar el último owner"
-                                  : "Eliminar owner"
-                              }
-                            >
-                              Eliminar
-                            </button>
-                          </div>
-                        ))
-                      )}
-                    </div>
+            <CardDescription>
+              Configura el logo maestro visible en el header de toda la plataforma.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-[150px_1fr] md:items-start">
+              <div className="rounded-xl border bg-slate-50 p-3">
+                {platformLogoUrl ? (
+                  <img
+                    src={platformLogoUrl}
+                    alt="Logo plataforma"
+                    width={120}
+                    height={120}
+                    className="h-[120px] w-[120px] rounded-lg border object-cover"
+                  />
+                ) : (
+                  <div className="flex h-[120px] w-[120px] items-center justify-center rounded-lg border bg-white text-xs text-slate-500">
+                    Sin logo
                   </div>
-                  <div style={{ display: "grid", gap: 8, minWidth: 280 }}>
-                    <input
-                      value={ownerDrafts[org.id] ?? ""}
-                      onChange={(e) =>
-                        setOwnerDrafts((prev) => ({ ...prev, [org.id]: e.target.value }))
-                      }
-                      placeholder="nuevo-owner@empresa.com"
-                      type="email"
-                      style={{ width: "100%", padding: 10 }}
-                      disabled={busy}
-                    />
-                    <button onClick={() => assignOwner(org.id)} disabled={busy} style={{ padding: "10px 12px" }}>
-                      Asignar owner
-                    </button>
-                    <button
-                      onClick={() => deleteOrganization(org.id, org.name)}
-                      disabled={busy}
-                      style={{ padding: "10px 12px" }}
-                    >
-                      Eliminar organización
-                    </button>
-                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-3">
+                <input
+                  ref={platformLogoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  onChange={(e) => setPlatformLogoFile(e.target.files?.[0] ?? null)}
+                  disabled={brandingBusy}
+                  style={{ display: "none" }}
+                />
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={() => platformLogoInputRef.current?.click()}
+                    disabled={brandingBusy}
+                    variant="outline"
+                  >
+                    Seleccionar archivo
+                  </Button>
+                  <Button onClick={updatePlatformLogo} disabled={brandingBusy || !platformLogoFile}>
+                    {brandingBusy ? "Guardando..." : "Guardar logo"}
+                  </Button>
+                  <Button
+                    onClick={removePlatformLogo}
+                    disabled={brandingBusy || !platformLogoUrl}
+                    variant="destructive"
+                  >
+                    {brandingBusy ? "Eliminando..." : "Eliminar logo"}
+                  </Button>
+                </div>
+
+                <div className="text-xs text-slate-600">
+                  {platformLogoFile ? `Archivo seleccionado: ${platformLogoFile.name}` : "Sin archivo seleccionado"}
+                </div>
+                <div className="text-xs text-slate-500">
+                  Formatos permitidos: PNG, JPG, WEBP, SVG. Tamaño máximo: 4MB.
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Crear organización</CardTitle>
+            <CardDescription>
+              Crea una organización nueva. El primer owner se asigna después por invitación global.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="organization_name">Nombre de organización</Label>
+              <Input
+                id="organization_name"
+                value={organizationName}
+                onChange={(e) => setOrganizationName(e.target.value)}
+                placeholder="Acme Corp"
+                disabled={busy}
+              />
+            </div>
+            <Button onClick={createOrganization} disabled={busy} className="w-full">
+              {busy ? "Creando..." : "Crear organización"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Invitación global</CardTitle>
+            <CardDescription>
+              Invita un usuario y define organización destino y rol desde el panel global.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="invite_email">Email a invitar</Label>
+              <Input
+                id="invite_email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="usuario@empresa.com"
+                type="email"
+                disabled={busy}
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-[1fr_170px]">
+              <div className="grid gap-2">
+                <Label htmlFor="invite_org">Organización destino</Label>
+                <select
+                  id="invite_org"
+                  value={inviteOrgId}
+                  onChange={(e) => setInviteOrgId(e.target.value)}
+                  className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                  disabled={busy}
+                >
+                  <option value="">Selecciona organización…</option>
+                  {organizations.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="invite_role">Rol</Label>
+                <select
+                  id="invite_role"
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value)}
+                  className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                  disabled={busy}
+                >
+                  <option value="member">member</option>
+                  <option value="admin">admin</option>
+                  <option value="owner">owner</option>
+                  <option value="viewer">viewer</option>
+                </select>
+              </div>
+            </div>
+
+            <Button onClick={sendGlobalInvite} disabled={busy} className="w-full">
+              {busy ? "Enviando..." : "Invitar a organización"}
+            </Button>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="mt-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Organizaciones y owners</CardTitle>
+            <CardDescription>
+              Administra owners por organización y elimina organizaciones cuando sea necesario.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {organizations.length === 0 ? (
+              <p className="text-sm text-slate-600">Aún no hay organizaciones creadas.</p>
+            ) : (
+              <div className="grid gap-3">
+                {organizations.map((org) => (
+                  <div key={org.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-base font-semibold text-slate-900">{org.name}</div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          ID: {org.id} · Miembros: {org.member_count}
+                        </div>
+                        <div className="mt-3 text-xs font-medium text-slate-600">Owners</div>
+
+                        <div className="mt-2 grid gap-2">
+                          {org.owners.length === 0 ? (
+                            <div className="text-xs text-slate-500">Sin owner</div>
+                          ) : (
+                            org.owners.map((o) => (
+                              <div
+                                key={`${org.id}-${o.user_id}`}
+                                className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5"
+                              >
+                                <span className="truncate text-xs text-slate-700">{o.email || o.user_id}</span>
+                                <Button
+                                  onClick={() => removeOwner(org.id, o.user_id, o.email)}
+                                  disabled={busy || org.owners.length <= 1}
+                                  variant="outline"
+                                  size="sm"
+                                  title={
+                                    org.owners.length <= 1
+                                      ? "No se puede eliminar el último owner"
+                                      : "Eliminar owner"
+                                  }
+                                >
+                                  Eliminar
+                                </Button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid min-w-[280px] gap-2">
+                        <Input
+                          value={ownerDrafts[org.id] ?? ""}
+                          onChange={(e) => setOwnerDrafts((prev) => ({ ...prev, [org.id]: e.target.value }))}
+                          placeholder="nuevo-owner@empresa.com"
+                          type="email"
+                          disabled={busy}
+                        />
+                        <Button onClick={() => assignOwner(org.id)} disabled={busy}>
+                          Asignar owner
+                        </Button>
+                        <Button onClick={() => deleteOrganization(org.id, org.name)} disabled={busy} variant="destructive">
+                          Eliminar organización
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </section>
     </main>
   );

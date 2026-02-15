@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import { Loader } from "@/components/ui/loader";
 
 export default function HomePage() {
   const router = useRouter();
@@ -43,8 +44,8 @@ export default function HomePage() {
   }, [router]);
 
   return (
-    <main style={{ padding: 16 }}>
-      <p>Cargando…</p>
+    <main style={{ padding: 16, display: "flex", justifyContent: "center" }}>
+      <Loader label="Cargando acceso..." />
     </main>
   );
 }

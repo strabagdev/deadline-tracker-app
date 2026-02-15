@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import { Loader } from "@/components/ui/loader";
 
 export default function AppHeader() {
   const router = useRouter();
@@ -60,11 +61,7 @@ export default function AppHeader() {
       <div>
         <div style={{ fontWeight: 700 }}>OpsAhead</div>
         <div style={{ opacity: 0.75, fontSize: 13, marginTop: 4 }}>
-          {loading
-            ? "Cargando organización..."
-            : orgName
-              ? `Org: ${orgName}`
-              : "Sin organización"}
+          {loading ? <Loader label="Cargando organización..." size="sm" /> : orgName ? `Org: ${orgName}` : "Sin organización"}
         </div>
       </div>
 

@@ -1,10 +1,15 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 import { pickNearestDeadline } from "@/lib/deadlines/calculateDeadlineStatus";
+import { Loader } from "@/components/ui/loader";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 type DeadlineType = {
   id: string;
@@ -17,15 +22,12 @@ type DeadlineType = {
 type Deadline = {
   id: string;
   deadline_type_id: string;
-
   last_done_date: string | null;
   next_due_date: string | null;
-
   last_done_usage: number | null;
   frequency: number | null;
   frequency_unit: string | null;
   usage_daily_average: number | null;
-
   created_at: string;
   deadline_types?: DeadlineType | null;
 };
@@ -56,6 +58,65 @@ type SemaphoreSettings = {
   orange_days: number;
   red_days: number;
 };
+type ViewMode = "cards" | "list";
+
+type IconProps = {
+  className?: string;
+};
+
+function IconList({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cn("h-4 w-4", className)} aria-hidden>
+      <path d="M8 6h13" />
+      <path d="M8 12h13" />
+      <path d="M8 18h13" />
+      <path d="M3 6h.01" />
+      <path d="M3 12h.01" />
+      <path d="M3 18h.01" />
+    </svg>
+  );
+}
+
+function IconGrid({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cn("h-4 w-4", className)} aria-hidden>
+      <rect x="3" y="3" width="8" height="8" rx="1.5" />
+      <rect x="13" y="3" width="8" height="8" rx="1.5" />
+      <rect x="3" y="13" width="8" height="8" rx="1.5" />
+      <rect x="13" y="13" width="8" height="8" rx="1.5" />
+    </svg>
+  );
+}
+
+
+function IconStatus({ status }: { status: Status | "all" }) {
+  if (status === "all") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+        <path d="M4 5h16" />
+        <path d="M7 12h10" />
+        <path d="M10 19h4" />
+      </svg>
+    );
+  }
+
+  const colorClass =
+    status === "red"
+      ? "text-rose-600"
+      : status === "orange"
+        ? "text-orange-600"
+        : status === "yellow"
+          ? "text-amber-500"
+          : status === "green"
+            ? "text-emerald-600"
+            : "text-slate-400";
+
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={cn("h-3.5 w-3.5", colorClass)} aria-hidden>
+      <circle cx="12" cy="12" r="8" />
+    </svg>
+  );
+}
 
 function fmtDate(d: Date | null) {
   if (!d) return "—";
@@ -70,54 +131,22 @@ function statusPriority(s: Status) {
   return 4;
 }
 
-function statusChipStyle(s: Status | "all", active: boolean): React.CSSProperties {
-  const base: React.CSSProperties = {
-    border: "1px solid #e5e5e5",
-    borderRadius: 999,
-    padding: "6px 10px",
-    fontSize: 12,
-    cursor: "pointer",
-    background: "white",
-    userSelect: "none",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 6,
-  };
-
-  const map: Record<string, React.CSSProperties> = {
-    red: { background: "#ffeaea", borderColor: "#ffd0d0" },
-    orange: { background: "#fff0e6", borderColor: "#ffd7bf" },
-    yellow: { background: "#fff6d8", borderColor: "#ffe7a6" },
-    green: { background: "#e9ffe9", borderColor: "#cfffcc" },
-    none: { background: "#f6f6f6", borderColor: "#e7e7e7" },
-    all: { background: "#f3f7ff", borderColor: "#d7e6ff" },
-  };
-
-  const act: React.CSSProperties = active ? { boxShadow: "0 0 0 2px rgba(0,0,0,0.06)" } : { opacity: 0.85 };
-  return { ...base, ...(map[s] ?? {}), ...act };
-}
-
-function badgeStyle(): React.CSSProperties {
-  return {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 6,
-    fontSize: 12,
-    padding: "4px 10px",
-    borderRadius: 999,
-    border: "1px solid #eee",
-    background: "white",
-    opacity: 0.9,
-  };
-}
-
 function statusTone(s: Status): { border: string; soft: string; strong: string } {
-  if (s === "red") return { border: "#f5c2c2", soft: "#fff2f2", strong: "#c72b2b" };
-  if (s === "orange") return { border: "#ffd4b8", soft: "#fff5ee", strong: "#cc5a1c" };
-  if (s === "yellow") return { border: "#ffe39c", soft: "#fff9e8", strong: "#9b7300" };
-  if (s === "green") return { border: "#c7ebc7", soft: "#f1fff1", strong: "#2f7a2f" };
-  return { border: "#e5e5e5", soft: "#fafafa", strong: "#666" };
+  if (s === "red") return { border: "#f5c2c2", soft: "#fff2f2", strong: "#b91c1c" };
+  if (s === "orange") return { border: "#ffd4b8", soft: "#fff5ee", strong: "#c2410c" };
+  if (s === "yellow") return { border: "#ffe39c", soft: "#fff9e8", strong: "#a16207" };
+  if (s === "green") return { border: "#c7ebc7", soft: "#f1fff1", strong: "#166534" };
+  return { border: "#e2e8f0", soft: "#f8fafc", strong: "#475569" };
 }
+
+const statusFilterMeta: Array<{ key: Status | "all"; title: string }> = [
+  { key: "all", title: "Todos" },
+  { key: "red", title: "Vencido" },
+  { key: "orange", title: "Urgente" },
+  { key: "yellow", title: "Por vencer" },
+  { key: "green", title: "Al día" },
+  { key: "none", title: "Sin info" },
+];
 
 export default function AppDashboard() {
   const router = useRouter();
@@ -134,6 +163,8 @@ export default function AppDashboard() {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [viewMode, setViewMode] = useState<ViewMode>("cards");
+  const [dashboardPanelCollapsed, setDashboardPanelCollapsed] = useState(true);
 
   const [semaphore, setSemaphore] = useState<SemaphoreSettings>({
     yellow_days: 60,
@@ -143,6 +174,15 @@ export default function AppDashboard() {
 
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handler = () => {
+      void load();
+    };
+    window.addEventListener("dashboard-refresh", handler);
+    return () => window.removeEventListener("dashboard-refresh", handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -172,20 +212,13 @@ export default function AppDashboard() {
     setEntities(json.entities ?? []);
     setUsage(json.latest_usage_by_entity ?? {});
 
-    // settings semáforo
     const sres = await fetch("/api/settings/semaphore", { headers: { Authorization: `Bearer ${token}` } });
     const sjson = await sres.json().catch(() => ({}));
     if (sres.ok && sjson?.settings) {
       setSemaphore({
-        yellow_days: Number(
-          sjson.settings.yellow_days ?? sjson.settings.date_yellow_days ?? sjson.settings.usage_yellow_days ?? 60
-        ),
-        orange_days: Number(
-          sjson.settings.orange_days ?? sjson.settings.date_orange_days ?? sjson.settings.usage_orange_days ?? 30
-        ),
-        red_days: Number(
-          sjson.settings.red_days ?? sjson.settings.date_red_days ?? sjson.settings.usage_red_days ?? 15
-        ),
+        yellow_days: Number(sjson.settings.yellow_days ?? 60),
+        orange_days: Number(sjson.settings.orange_days ?? 30),
+        red_days: Number(sjson.settings.red_days ?? 15),
       });
     }
 
@@ -239,7 +272,12 @@ export default function AppDashboard() {
     const out = computedAll.filter((r) => {
       if (filterEntityType !== "all" && r.entity.entity_type_id !== filterEntityType) return false;
       if (filterStatus !== "all" && r.status !== filterStatus) return false;
-      if (needle && !r.entity.name.toLowerCase().includes(needle)) return false;
+      if (needle) {
+        const name = r.entity.name.toLowerCase();
+        const typeName = (r.entity.entity_types?.name ?? "").toLowerCase();
+        const nearestName = (r.nearest?.typeName ?? "").toLowerCase();
+        if (!name.includes(needle) && !typeName.includes(needle) && !nearestName.includes(needle)) return false;
+      }
       return true;
     });
 
@@ -268,331 +306,328 @@ export default function AppDashboard() {
   const pagedRows = rows.slice(pageStart, pageStart + pageSize);
 
   const hasEntities = (meta?.entity_count_in_org ?? entities.length) > 0;
-  const touchActionButtonStyle: React.CSSProperties = {
-    minWidth: 46,
-    minHeight: 46,
-    borderRadius: 12,
-    border: "1px solid #d9d9d9",
-    background: "white",
-    fontSize: 18,
-    fontWeight: 800,
-    lineHeight: 1,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-  };
+  const hasActiveFilters = q.trim().length > 0 || filterEntityType !== "all" || filterStatus !== "all";
+
+  function countByStatus(s: Status | "all") {
+    if (s === "all") return countsAll.total;
+    if (s === "red") return countsAll.red;
+    if (s === "orange") return countsAll.orange;
+    if (s === "yellow") return countsAll.yellow;
+    if (s === "green") return countsAll.green;
+    return countsAll.none;
+  }
+
+  function statusChipClasses(s: Status | "all", active: boolean) {
+    const tone =
+      s === "red"
+        ? "!border-rose-300 !bg-rose-100 !text-rose-800 hover:!bg-rose-200"
+        : s === "orange"
+          ? "!border-orange-300 !bg-orange-100 !text-orange-800 hover:!bg-orange-200"
+          : s === "yellow"
+            ? "!border-amber-300 !bg-amber-100 !text-amber-800 hover:!bg-amber-200"
+            : s === "green"
+              ? "!border-emerald-300 !bg-emerald-100 !text-emerald-800 hover:!bg-emerald-200"
+              : s === "none"
+                ? "!border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200"
+                : "!border-blue-300 !bg-blue-100 !text-blue-800 hover:!bg-blue-200";
+
+    return cn(
+      "min-w-[54px] justify-center border font-semibold",
+      tone,
+      active ? "!border-slate-500 opacity-100" : "opacity-80"
+    );
+  }
 
   return (
-    <main style={{ padding: 16, maxWidth: 1400, margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Dashboard</h2>
-        </div>
-
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <Link href="/app/entities?new=1" style={{ textDecoration: "none" }}>
-            <button
-              style={touchActionButtonStyle}
-              title="Nueva entidad"
-              aria-label="Nueva entidad"
-            >
-              ➕
-            </button>
-          </Link>
-
-          <Link href="/app/entities" style={{ textDecoration: "none" }}>
-            <button
-              style={touchActionButtonStyle}
-              title="Ver entidades"
-              aria-label="Ver entidades"
-            >
-              📋
-            </button>
-          </Link>
-
-          <Link href="/app/settings/semaphore" style={{ textDecoration: "none" }}>
-            <button
-              style={touchActionButtonStyle}
-              title="Semáforo"
-              aria-label="Semáforo"
-            >
-              🚦
-            </button>
-          </Link>
-
-          <button
-            onClick={load}
-            style={{
-              ...touchActionButtonStyle,
-              opacity: loading ? 0.55 : 1,
-            }}
-            disabled={loading}
-            title="Refrescar"
-            aria-label="Refrescar"
-          >
-            ↻
-          </button>
-        </div>
-      </div>
-
-      {errorMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{errorMsg}</p>}
-
-      <section style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 16, padding: 12, background: "white" }}>
-        <div style={{ display: "grid", gap: 10 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 220px 220px", gap: 10 }}>
-            <div>
-              <label style={{ fontSize: 12, opacity: 0.7 }}>Buscar</label>
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Buscar entidad por nombre..."
-                style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e5e5", marginTop: 6 }}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, opacity: 0.7 }}>Tipo</label>
-              <select
-                value={filterEntityType}
-                onChange={(e) => setFilterEntityType(e.target.value)}
-                style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e5e5", marginTop: 6 }}
-              >
-                <option value="all">Todos</option>
-                {entityTypeOptions.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name}
-                  </option>
+    <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <CardTitle className="shrink-0">Dashboard</CardTitle>
+            <div className="min-w-0 flex-1 overflow-x-auto pl-8 md:pl-16">
+              <div className="flex w-max items-center gap-2 pr-2">
+                {statusFilterMeta.map((s) => (
+                  <Button
+                    key={s.key}
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setFilterStatus(s.key)}
+                    className={statusChipClasses(s.key, filterStatus === s.key)}
+                    title={s.title}
+                  >
+                    <IconStatus status={s.key} />
+                    {filterStatus === s.key ? <span>✓</span> : null}
+                    <span>{s.title}</span>
+                    <span className="font-semibold">{countByStatus(s.key)}</span>
+                  </Button>
                 ))}
-              </select>
+                <span className="mx-1 h-5 w-px bg-slate-200" aria-hidden />
+                <Button
+                  size="sm"
+                  variant={viewMode === "cards" ? "secondary" : "outline"}
+                  onClick={() => setViewMode("cards")}
+                >
+                  <IconGrid />
+                  Tarjetas
+                </Button>
+                <Button
+                  size="sm"
+                  variant={viewMode === "list" ? "secondary" : "outline"}
+                  onClick={() => setViewMode("list")}
+                >
+                  <IconList />
+                  Lista
+                </Button>
+              </div>
             </div>
-            <div>
-              <label style={{ fontSize: 12, opacity: 0.7 }}>Filas por página</label>
-              <select
-                value={String(pageSize)}
-                onChange={(e) => setPageSize(Number(e.target.value))}
-                style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e5e5", marginTop: 6 }}
-              >
-                <option value="25">25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-              </select>
-            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setDashboardPanelCollapsed((v) => !v)}
+              className="min-w-[110px] shrink-0 justify-between"
+            >
+              <span>{dashboardPanelCollapsed ? "Buscar" : "Ocultar"}</span>
+              <span className="text-xs">{dashboardPanelCollapsed ? "▼" : "▲"}</span>
+            </Button>
           </div>
+        </CardHeader>
+        <CardContent className="py-3">
+          {!dashboardPanelCollapsed ? (
+            <div className="mt-3 rounded-xl border bg-slate-50/80 px-3 py-2">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:flex-nowrap">
+                <Input
+                  id="dashboard_search"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Buscar por nombre, tipo o vencimiento..."
+                  className="min-w-[240px] flex-1"
+                />
+                <select
+                  id="dashboard_type"
+                  aria-label="Filtrar por tipo"
+                  value={filterEntityType}
+                  onChange={(e) => setFilterEntityType(e.target.value)}
+                  className="h-10 min-w-[180px] rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                >
+                  <option value="all">Todos los tipos</option>
+                  {entityTypeOptions.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  id="dashboard_page_size"
+                  aria-label="Filas por página"
+                  value={String(pageSize)}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  className="h-10 min-w-[150px] rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                >
+                  <option value="25">25 / página</option>
+                  <option value="50">50 / página</option>
+                  <option value="100">100 / página</option>
+                </select>
+                <Button
+                  variant="outline"
+                  className="h-10 min-w-[140px]"
+                  onClick={() => {
+                    setQ("");
+                    setFilterEntityType("all");
+                    setFilterStatus("all");
+                  }}
+                  disabled={!hasActiveFilters}
+                >
+                  Limpiar filtros
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 12, opacity: 0.7, marginRight: 6 }}>Estado:</span>
+      {errorMsg ? <p className="whitespace-pre-wrap text-sm text-rose-600">{errorMsg}</p> : null}
 
-          <span onClick={() => setFilterStatus("all")} style={statusChipStyle("all", filterStatus === "all")}>
-            📌 Todos
-          </span>
-          <span onClick={() => setFilterStatus("red")} style={statusChipStyle("red", filterStatus === "red")}>
-            🔴 Rojo
-          </span>
-          <span onClick={() => setFilterStatus("orange")} style={statusChipStyle("orange", filterStatus === "orange")}>
-            🟠 Naranja
-          </span>
-          <span onClick={() => setFilterStatus("yellow")} style={statusChipStyle("yellow", filterStatus === "yellow")}>
-            🟡 Amarillo
-          </span>
-          <span onClick={() => setFilterStatus("green")} style={statusChipStyle("green", filterStatus === "green")}>
-            🟢 Verde
-          </span>
-          <span onClick={() => setFilterStatus("none")} style={statusChipStyle("none", filterStatus === "none")}>
-            ⚪ Sin info
-          </span>
-
-          <span style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <span style={badgeStyle()}>🔴 {countsAll.red}</span>
-            <span style={badgeStyle()}>🟠 {countsAll.orange}</span>
-            <span style={badgeStyle()}>🟡 {countsAll.yellow}</span>
-            <span style={badgeStyle()}>🟢 {countsAll.green}</span>
-            <span style={badgeStyle()}>⚪ {countsAll.none}</span>
-          </span>
-        </div>
-        </div>
-      </section>
-
-      <section style={{ marginTop: 14 }}>
+      <section className="space-y-3">
         {loading ? (
-          <p>Cargando…</p>
-        ) : rows.length === 0 ? (
-          <div>
-            {!hasEntities ? (
-              <p style={{ opacity: 0.8 }}>Aún no hay entidades. Crea tu primera entidad para comenzar.</p>
-            ) : (
-              <p style={{ opacity: 0.8 }}>No hay entidades para mostrar con estos filtros.</p>
-            )}
+          <div className="flex justify-center py-6">
+            <Loader label="Cargando dashboard..." />
           </div>
+        ) : rows.length === 0 ? (
+          <Card>
+            <CardContent className="pt-6">
+              {!hasEntities ? (
+                <p className="text-sm text-slate-600">Aún no hay entidades. Crea tu primera entidad para comenzar.</p>
+              ) : (
+                <p className="text-sm text-slate-600">No hay entidades para mostrar con estos filtros.</p>
+              )}
+            </CardContent>
+          </Card>
         ) : (
           <>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
-                gap: 10,
-              }}
-            >
-              {pagedRows.map((r) => {
-                const e = r.entity;
-                const nearest = r.nearest;
-                const tone = statusTone(r.status);
-                const hasLatestUsage = r.latestUsage != null;
-                const hasLatestUsageAt = Boolean(r.latestUsageAt);
+            {viewMode === "cards" ? (
+              <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
+                {pagedRows.map((r) => {
+                  const e = r.entity;
+                  const nearest = r.nearest;
+                  const tone = statusTone(r.status);
+                  const hasLatestUsage = r.latestUsage != null;
+                  const hasLatestUsageAt = Boolean(r.latestUsageAt);
+                  const dueLabel = !r.hasActiveDeadlines
+                    ? "Sin vencimientos"
+                    : nearest?.due
+                      ? fmtDate(nearest.due)
+                      : "Sin fecha estimada";
 
-                return (
-                  <article
-                    key={e.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => router.push(`/app/entities/${e.id}`)}
-                    onKeyDown={(ev) => {
-                      if (ev.key === "Enter" || ev.key === " ") {
-                        ev.preventDefault();
-                        router.push(`/app/entities/${e.id}`);
-                      }
-                    }}
-                    style={{
-                      border: `1px solid ${tone.border}`,
-                      background: tone.soft,
-                      borderRadius: 14,
-                      padding: 11,
-                      minHeight: 156,
-                      cursor: "pointer",
-                      display: "grid",
-                      alignContent: "space-between",
-                      gap: 9,
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.04)",
-                    }}
-                    title="Abrir ficha"
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontWeight: 900,
-                            fontSize: 15,
-                            lineHeight: 1.2,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {e.name}
-                        </div>
-                        <div style={{ marginTop: 4, opacity: 0.78, fontSize: 12 }}>
-                          {e.entity_types?.name ?? "Sin tipo"}
-                        </div>
-                      </div>
-                      <span
-                        style={{
-                          ...statusChipStyle(r.status, true),
-                          background: "white",
-                          borderColor: tone.border,
-                          color: tone.strong,
-                          fontWeight: 700,
-                        }}
-                      >
-                        {r.hasActiveDeadlines ? nearest?.label ?? "Sin info" : "Sin vencimientos"}
-                      </span>
-                    </div>
-
-                    <div
-                      style={{
-                        background: "white",
-                        border: `1px solid ${tone.border}`,
-                        borderRadius: 10,
-                        padding: "8px 9px",
+                  return (
+                    <article
+                      key={e.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => router.push(`/app/entities/${e.id}`)}
+                      onKeyDown={(ev) => {
+                        if (ev.key === "Enter" || ev.key === " ") {
+                          ev.preventDefault();
+                          router.push(`/app/entities/${e.id}`);
+                        }
                       }}
+                      className="grid min-h-[112px] cursor-pointer content-between gap-1.5 rounded-2xl border p-2.5 shadow-sm transition-shadow hover:shadow-md"
+                      style={{ borderColor: tone.border, background: tone.soft }}
+                      title="Abrir ficha"
                     >
-                      <div style={{ fontSize: 11, opacity: 0.72 }}>Próximo vencimiento</div>
-                      <div style={{ marginTop: 2, fontWeight: 900, fontSize: 14 }}>
-                        {!r.hasActiveDeadlines
-                          ? "Sin vencimientos"
-                          : nearest?.due
-                          ? fmtDate(nearest.due)
-                          : "Sin fecha estimada"}
+                      <div className="flex items-center justify-between gap-2">
+                        <Badge variant="outline" className="text-[11px] font-semibold" style={{ borderColor: tone.border, color: tone.strong }}>
+                          {r.hasActiveDeadlines ? nearest?.label ?? "Sin info" : "Sin vencimientos"}
+                        </Badge>
+                        <div className="text-[11px] font-medium text-slate-600">{dueLabel}</div>
                       </div>
-                      <div style={{ marginTop: 2, fontSize: 12, opacity: 0.82 }}>
-                        {!r.hasActiveDeadlines
-                          ? "Asocia un vencimiento para calcular estado."
-                          : `${nearest?.typeName ?? "Sin tipo"}${
-                              nearest?.measureBy === "usage"
-                                ? " · por uso"
-                                : nearest?.measureBy === "date"
-                                ? " · por fecha"
-                                : ""
-                            }`}
+
+                      <div className="min-w-0">
+                        <div className="truncate text-[14px] font-semibold leading-tight text-slate-900">{e.name}</div>
+                        <div className="mt-0.5 truncate text-[11px] text-slate-500">{e.entity_types?.name ?? "Sin tipo"}</div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge variant="outline" className="bg-white text-[10px] font-medium text-slate-600">
+                          {!r.hasActiveDeadlines
+                            ? "Sin vencimiento asignado"
+                            : `${nearest?.typeName ?? "Sin tipo"}${
+                                nearest?.measureBy === "usage"
+                                  ? " · uso"
+                                  : nearest?.measureBy === "date"
+                                    ? " · fecha"
+                                    : ""
+                              }`}
+                        </Badge>
+                        {hasLatestUsage ? (
+                          <Badge variant="outline" className="bg-white text-[10px] font-medium text-slate-700">
+                            Uso: {r.latestUsage}
+                          </Badge>
+                        ) : null}
+                        {hasLatestUsageAt ? (
+                          <Badge variant="outline" className="bg-white text-[10px] font-medium text-slate-700">
+                            Último: {new Date(r.latestUsageAt as string).toLocaleDateString()}
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-2xl border bg-white">
+                <div className="grid grid-cols-[1.3fr_0.95fr_1.55fr_0.8fr] border-b bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+                  <div>Entidad</div>
+                  <div>Estado</div>
+                  <div>Próximo vencimiento</div>
+                  <div className="text-right">Uso</div>
+                </div>
+                {pagedRows.map((r) => {
+                  const e = r.entity;
+                  const nearest = r.nearest;
+                  const tone = statusTone(r.status);
+                  return (
+                    <div
+                      key={e.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => router.push(`/app/entities/${e.id}`)}
+                      onKeyDown={(ev) => {
+                        if (ev.key === "Enter" || ev.key === " ") {
+                          ev.preventDefault();
+                          router.push(`/app/entities/${e.id}`);
+                        }
+                      }}
+                      className="grid cursor-pointer grid-cols-[1.3fr_0.95fr_1.55fr_0.8fr] items-center gap-0 border-b px-3 py-2.5 text-sm transition-colors hover:bg-slate-50"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-slate-900">{e.name}</div>
+                        <div className="truncate text-[11px] text-slate-500">{e.entity_types?.name ?? "Sin tipo"}</div>
+                      </div>
+                      <div>
+                        <Badge variant="outline" className="font-semibold" style={{ borderColor: tone.border, color: tone.strong }}>
+                          {r.hasActiveDeadlines ? nearest?.label ?? "Sin info" : "Sin vencimientos"}
+                        </Badge>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-[13px] font-medium text-slate-900">
+                          {!r.hasActiveDeadlines
+                            ? "Sin vencimientos"
+                            : nearest?.due
+                              ? fmtDate(nearest.due)
+                              : "Sin fecha estimada"}
+                        </div>
+                        <div className="truncate text-[11px] text-slate-500">
+                          {!r.hasActiveDeadlines
+                            ? "Asocia un vencimiento"
+                            : `${nearest?.typeName ?? "Sin tipo"}${
+                                nearest?.measureBy === "usage"
+                                  ? " · por uso"
+                                  : nearest?.measureBy === "date"
+                                    ? " · por fecha"
+                                    : ""
+                              }`}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[13px] font-medium text-slate-800">{r.latestUsage != null ? r.latestUsage : "—"}</div>
+                        <div className="text-[11px] text-slate-500">
+                          {r.latestUsageAt ? new Date(r.latestUsageAt).toLocaleDateString() : ""}
+                        </div>
                       </div>
                     </div>
+                  );
+                })}
+              </div>
+            )}
 
-                    {(hasLatestUsage || hasLatestUsageAt) && (
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
-                        {hasLatestUsage && (
-                          <div style={{ background: "white", border: "1px solid #ececec", borderRadius: 9, padding: "7px 8px" }}>
-                            <div style={{ fontSize: 11, opacity: 0.68 }}>Uso actual</div>
-                            <div style={{ marginTop: 2, fontWeight: 800 }}>{r.latestUsage}</div>
-                          </div>
-                        )}
-                        {hasLatestUsageAt && (
-                          <div style={{ background: "white", border: "1px solid #ececec", borderRadius: 9, padding: "7px 8px" }}>
-                            <div style={{ fontSize: 11, opacity: 0.68 }}>Último registro</div>
-                            <div style={{ marginTop: 2, fontWeight: 800 }}>
-                              {new Date(r.latestUsageAt as string).toLocaleDateString()}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 4px 2px 4px" }}>
-              <div style={{ fontSize: 12, opacity: 0.75 }}>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2">
+              <div className="text-xs text-slate-500">
                 Mostrando {rows.length === 0 ? 0 : pageStart + 1}-{Math.min(pageStart + pageSize, rows.length)} de {rows.length}
               </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button
+              <div className="flex items-center gap-1.5">
+                <Button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={safePage <= 1}
-                  style={{
-                    minWidth: 46,
-                    minHeight: 46,
-                    borderRadius: 12,
-                    border: "1px solid #d9d9d9",
-                    background: "white",
-                    fontSize: 18,
-                    fontWeight: 800,
-                    lineHeight: 1,
-                    opacity: safePage <= 1 ? 0.45 : 1,
-                  }}
+                  variant="outline"
+                  size="sm"
+                  className="h-8 min-w-8 px-2"
                   title="Página anterior"
                   aria-label="Página anterior"
                 >
                   ◀
-                </button>
-                <div style={{ fontSize: 12, opacity: 0.8, alignSelf: "center" }}>
-                  Página {safePage} de {totalPages}
-                </div>
-                <button
+                </Button>
+                <div className="px-1 text-xs text-slate-600">Página {safePage} de {totalPages}</div>
+                <Button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={safePage >= totalPages}
-                  style={{
-                    minWidth: 46,
-                    minHeight: 46,
-                    borderRadius: 12,
-                    border: "1px solid #d9d9d9",
-                    background: "white",
-                    fontSize: 18,
-                    fontWeight: 800,
-                    lineHeight: 1,
-                    opacity: safePage >= totalPages ? 0.45 : 1,
-                  }}
+                  variant="outline"
+                  size="sm"
+                  className="h-8 min-w-8 px-2"
                   title="Página siguiente"
                   aria-label="Página siguiente"
                 >
                   ▶
-                </button>
+                </Button>
               </div>
             </div>
           </>

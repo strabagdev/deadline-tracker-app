@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import { Loader } from "@/components/ui/loader";
 
 /**
  * Semáforo (umbral en días) aplicado a:
@@ -21,13 +22,6 @@ type SettingsPayload = {
     yellow_days: number;
     orange_days: number;
     red_days: number;
-    // legacy fallback
-    date_yellow_days: number;
-    date_orange_days: number;
-    date_red_days: number;
-    usage_yellow_days: number;
-    usage_orange_days: number;
-    usage_red_days: number;
   }>;
 };
 
@@ -113,9 +107,9 @@ export default function SemaphoreSettingsPage() {
 
     const s = json.settings || {};
     setT({
-      yellow_days: Number(s.yellow_days ?? s.date_yellow_days ?? s.usage_yellow_days ?? 60),
-      orange_days: Number(s.orange_days ?? s.date_orange_days ?? s.usage_orange_days ?? 30),
-      red_days: Number(s.red_days ?? s.date_red_days ?? s.usage_red_days ?? 15),
+      yellow_days: Number(s.yellow_days ?? 60),
+      orange_days: Number(s.orange_days ?? 30),
+      red_days: Number(s.red_days ?? 15),
     });
     setLoading(false);
   }
@@ -207,7 +201,9 @@ export default function SemaphoreSettingsPage() {
         }}
       >
         {loading ? (
-          <p>Cargando…</p>
+          <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
+            <Loader label="Cargando configuración..." />
+          </div>
         ) : (
           <>
             <div style={{ fontSize: 12, opacity: 0.7 }}>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import { Loader } from "@/components/ui/loader";
 
 type Role = "admin" | "member" | "viewer" | "owner";
 
@@ -195,12 +196,21 @@ export default function UsersAdminPage() {
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
           <h3 style={{ marginTop: 0 }}>Miembros</h3>
           <button onClick={loadMembers} disabled={busy || loading} style={{ padding: 10 }}>
-            {loading ? "Cargando..." : "Refrescar"}
+            {loading ? (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <span aria-hidden className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
+                Actualizando
+              </span>
+            ) : (
+              "Refrescar"
+            )}
           </button>
         </div>
 
         {loading ? (
-          <p>Cargando miembros...</p>
+          <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
+            <Loader label="Cargando miembros..." />
+          </div>
         ) : members.length === 0 ? (
           <p style={{ opacity: 0.75 }}>
             No hay miembros para mostrar (o no tienes permisos admin/owner).
