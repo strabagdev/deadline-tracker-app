@@ -40,6 +40,35 @@ function IconRefresh({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+function IconMenu({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M3 6h18" />
+      <path d="M3 12h18" />
+      <path d="M3 18h18" />
+    </svg>
+  );
+}
+
+function IconUser({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M20 21a8 8 0 0 0-16 0" />
+      <circle cx="12" cy="8" r="4" />
+    </svg>
+  );
+}
+
+function IconLogout({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <path d="M16 17l5-5-5-5" />
+      <path d="M21 12H9" />
+    </svg>
+  );
+}
+
 function NavLink({ href, label }: { href: string; label: string }) {
   const pathname = usePathname();
   const active = pathname === href || (href !== "/app" && pathname.startsWith(href + "/"));
@@ -216,17 +245,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <IconRefresh />
                 </Button>
                 <Link href="/app/entities">
-                  <Button variant="outline" size="sm" className="shrink-0">
-                    Menú
+                  <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" title="Menú" aria-label="Menú">
+                    <IconMenu />
                   </Button>
                 </Link>
                 <Link href="/app/profile">
-                  <Button variant="outline" size="sm" className="shrink-0">
-                    Perfil
+                  <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" title="Perfil" aria-label="Perfil">
+                    <IconUser />
                   </Button>
                 </Link>
-                <Button onClick={logout} variant="outline" size="sm" className="shrink-0">
-                  Salir
+                <Button
+                  onClick={logout}
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 shrink-0"
+                  title="Salir"
+                  aria-label="Salir"
+                >
+                  <IconLogout />
                 </Button>
                 {userInfoCapsule}
               </div>
