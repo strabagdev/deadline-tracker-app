@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getOrgAccess } from "@/lib/server/orgAccess";
+import { getOrgAccess, isAdminRole } from "@/lib/server/orgAccess";
 import {
   handleEntitiesDelete,
   handleEntitiesPost,
@@ -278,6 +278,9 @@ export async function DELETE(req: Request) {
         { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
         { status: access.error === "no active organization" ? 400 : 403 }
       );
+    }
+    if (!isAdminRole(access.role)) {
+      return NextResponse.json({ error: "admin/owner only", code: "FORBIDDEN" }, { status: 403 });
     }
     const url = new URL(req.url);
     const id = url.searchParams.get("id");

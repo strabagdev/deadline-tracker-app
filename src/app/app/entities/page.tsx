@@ -146,7 +146,9 @@ export default function EntitiesPage() {
   const searchParams = useSearchParams();
 
   const autoOpenCreate = searchParams.get("new") === "1";
+  const deletedSuccess = searchParams.get("deleted") === "1";
   const [showCreate, setShowCreate] = useState<boolean>(autoOpenCreate);
+  const [flashMsg, setFlashMsg] = useState<string>("");
 
   const [createName, setCreateName] = useState<string>("");
   const [createEntityTypeId, setCreateEntityTypeId] = useState<string>("");
@@ -166,6 +168,7 @@ export default function EntitiesPage() {
   const [sortMode, setSortMode] = useState<SortMode>("critical");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [searchPanelCollapsed, setSearchPanelCollapsed] = useState(true);
 
   const [semaphore, setSemaphore] = useState<SemaphoreSettings>({
     yellow_days: 60,
@@ -177,6 +180,12 @@ export default function EntitiesPage() {
     void loadEntityTypes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!deletedSuccess) return;
+    setFlashMsg("Entidad eliminada correctamente.");
+    router.replace("/app/entities", { scroll: false });
+  }, [deletedSuccess, router]);
 
   useEffect(() => {
     void load();
@@ -409,6 +418,14 @@ export default function EntitiesPage() {
               <p className="mt-1 text-sm text-slate-500">Gestión compacta para alta densidad de registros.</p>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setShowCreate(true)}
+                size="sm"
+                disabled={typesLoading}
+                className="border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
+              >
+                + Entidad
+              </Button>
               <Link href="/app">
                 <Button variant="outline" size="sm">Dashboard</Button>
               </Link>
@@ -421,21 +438,21 @@ export default function EntitiesPage() {
       </Card>
 
       {errorMsg ? <p className="whitespace-pre-wrap text-sm text-rose-600">{errorMsg}</p> : null}
+      {flashMsg ? <p className="whitespace-pre-wrap text-sm text-emerald-700">{flashMsg}</p> : null}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle className="text-base">Crear entidad</CardTitle>
-              <p className="mt-1 text-xs text-slate-500">Flujo único para evitar redundancias.</p>
+      {showCreate ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
+          <div className="w-full max-w-[760px] rounded-2xl border bg-white p-4 shadow-xl">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">Crear entidad</h3>
+                <p className="mt-0.5 text-xs text-slate-500">Alta rápida y compacta.</p>
+              </div>
+              <Button onClick={() => setShowCreate(false)} variant="outline" size="sm" disabled={creating}>
+                Cerrar
+              </Button>
             </div>
-            <Button onClick={() => setShowCreate((v) => !v)} variant="outline" size="sm" disabled={typesLoading}>
-              {showCreate ? "Cerrar" : "+ Nueva entidad"}
-            </Button>
-          </div>
-        </CardHeader>
-        {showCreate ? (
-          <CardContent className="pt-0">
+
             {typesLoading ? (
               <Loader label="Cargando tipos..." />
             ) : entityTypes.length === 0 ? (
@@ -446,135 +463,155 @@ export default function EntitiesPage() {
                 </Link>
               </div>
             ) : (
-              <form onSubmit={createEntityInline} className="grid gap-3 md:max-w-[760px]">
-                <div className="grid gap-1.5">
-                  <label htmlFor="entity_name" className="text-xs text-slate-600">Nombre</label>
-                  <Input
-                    id="entity_name"
-                    value={createName}
-                    onChange={(e) => setCreateName(e.target.value)}
-                    placeholder="Ej: Retroexcavadora 320D / Daniel Silva"
-                  />
+              <form onSubmit={createEntityInline} className="grid gap-2">
+                <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_220px_auto_auto] md:items-center">
+                  <div className="grid gap-1">
+                    <label htmlFor="entity_name" className="text-[11px] font-medium text-slate-500">Nombre</label>
+                    <Input
+                      id="entity_name"
+                      value={createName}
+                      onChange={(e) => setCreateName(e.target.value)}
+                      placeholder="Ej: Retroexcavadora 320D / Daniel Silva"
+                      className="h-10"
+                    />
+                  </div>
+
+                  <div className="grid gap-1">
+                    <label htmlFor="entity_type" className="text-[11px] font-medium text-slate-500">Tipo</label>
+                    <select
+                      id="entity_type"
+                      value={createEntityTypeId}
+                      onChange={(e) => setCreateEntityTypeId(e.target.value)}
+                      className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                    >
+                      {entityTypes.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <label className="mt-1 flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 md:mt-5">
+                    <input
+                      id="create_tracks_usage"
+                      type="checkbox"
+                      checked={createTracksUsage}
+                      onChange={(e) => setCreateTracksUsage(e.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    Con uso
+                  </label>
+
+                  <Button type="submit" size="sm" disabled={creating} className="min-h-10 md:mt-5">
+                    {creating ? "Creando..." : "Crear"}
+                  </Button>
                 </div>
 
-                <div className="grid gap-1.5">
-                  <label htmlFor="entity_type" className="text-xs text-slate-600">Tipo de entidad</label>
-                  <select
-                    id="entity_type"
-                    value={createEntityTypeId}
-                    onChange={(e) => setCreateEntityTypeId(e.target.value)}
-                    className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
-                  >
-                    {entityTypes.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700">
-                  <input
-                    id="create_tracks_usage"
-                    type="checkbox"
-                    checked={createTracksUsage}
-                    onChange={(e) => setCreateTracksUsage(e.target.checked)}
-                    className="h-4 w-4"
-                  />
-                  Registra uso (usage logs) para vencimientos por uso (horas/km).
-                </label>
-
-                <Button type="submit" size="sm" disabled={creating} className="w-fit">
-                  {creating ? "Creando..." : "Crear entidad"}
-                </Button>
+                <p className="text-[11px] text-slate-500">
+                  Si activas <span className="font-medium">Con uso</span>, podrás registrar uso para vencimientos por horas/km.
+                </p>
               </form>
             )}
-          </CardContent>
-        ) : null}
-      </Card>
+          </div>
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader className="pb-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle className="text-base">Búsqueda y filtros</CardTitle>
-            <div className="text-xs text-slate-500">{rows.length} resultado(s)</div>
-          </div>
-          <div className="flex w-full flex-wrap items-center gap-2 pt-2">
-            {statusFilterMeta.map((s) => (
-              <Button
-                key={s.key}
-                size="sm"
-                variant="outline"
-                onClick={() => setFilterStatus(s.key)}
-                className={statusChipClasses(s.key, filterStatus === s.key)}
-                title={s.title}
-              >
-                <IconStatus status={s.key} />
-                <span>{s.title}</span>
-                <span>{countByStatus(s.key)}</span>
-              </Button>
-            ))}
-          </div>
-        </CardHeader>
-        <CardContent className="pt-2">
-          <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_190px_170px_140px_auto]">
-            <Input
-              id="entities_search"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar por entidad, tipo o vencimiento..."
-            />
-            <select
-              id="entities_type_filter"
-              aria-label="Filtrar por tipo"
-              value={filterEntityType}
-              onChange={(e) => setFilterEntityType(e.target.value)}
-              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
-            >
-              <option value="all">Todos los tipos</option>
-              {entityTypeOptions.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-            <select
-              id="entities_sort_mode"
-              aria-label="Ordenar"
-              value={sortMode}
-              onChange={(e) => setSortMode(e.target.value as SortMode)}
-              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
-            >
-              <option value="critical">Más crítico</option>
-              <option value="name">Nombre</option>
-              <option value="type">Tipo</option>
-              <option value="created">Creación</option>
-            </select>
-            <select
-              id="entities_page_size"
-              aria-label="Filas por página"
-              value={String(pageSize)}
-              onChange={(e) => setPageSize(Number(e.target.value))}
-              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
-            >
-              <option value="25">25 / pág</option>
-              <option value="50">50 / pág</option>
-              <option value="100">100 / pág</option>
-            </select>
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
+            <CardTitle className="shrink-0 text-base">Búsqueda y filtros</CardTitle>
+            <div className="min-w-0 lg:flex-1">
+              <div className="flex w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
+                {statusFilterMeta.map((s) => (
+                  <Button
+                    key={s.key}
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setFilterStatus(s.key)}
+                    className={cn("shrink-0", statusChipClasses(s.key, filterStatus === s.key))}
+                    title={s.title}
+                  >
+                    <IconStatus status={s.key} />
+                    <span>{s.title}</span>
+                    <span>{countByStatus(s.key)}</span>
+                  </Button>
+                ))}
+              </div>
+            </div>
             <Button
+              size="sm"
               variant="outline"
-              onClick={() => {
-                setQ("");
-                setFilterEntityType("all");
-                setFilterStatus("all");
-                setSortMode("critical");
-              }}
-              disabled={!hasActiveFilters}
+              onClick={() => setSearchPanelCollapsed((v) => !v)}
+              className="min-h-10 min-w-[108px] shrink-0 justify-between lg:min-h-9"
             >
-              Limpiar
+              <span>{searchPanelCollapsed ? "Buscar" : "Ocultar"}</span>
+              <span className="text-xs">{searchPanelCollapsed ? "▼" : "▲"}</span>
             </Button>
           </div>
-        </CardContent>
+          <div className="pt-1 text-xs text-slate-500">{rows.length} resultado(s)</div>
+        </CardHeader>
+        {!searchPanelCollapsed ? (
+          <CardContent className="pt-2">
+            <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_190px_170px_140px_auto]">
+              <Input
+                id="entities_search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar por entidad, tipo o vencimiento..."
+              />
+              <select
+                id="entities_type_filter"
+                aria-label="Filtrar por tipo"
+                value={filterEntityType}
+                onChange={(e) => setFilterEntityType(e.target.value)}
+                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+              >
+                <option value="all">Todos los tipos</option>
+                {entityTypeOptions.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                id="entities_sort_mode"
+                aria-label="Ordenar"
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value as SortMode)}
+                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+              >
+                <option value="critical">Más crítico</option>
+                <option value="name">Nombre</option>
+                <option value="type">Tipo</option>
+                <option value="created">Creación</option>
+              </select>
+              <select
+                id="entities_page_size"
+                aria-label="Filas por página"
+                value={String(pageSize)}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+              >
+                <option value="25">25 / pág</option>
+                <option value="50">50 / pág</option>
+                <option value="100">100 / pág</option>
+              </select>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setQ("");
+                  setFilterEntityType("all");
+                  setFilterStatus("all");
+                  setSortMode("critical");
+                }}
+                disabled={!hasActiveFilters}
+              >
+                Limpiar
+              </Button>
+            </div>
+          </CardContent>
+        ) : null}
       </Card>
 
       <section className="space-y-3">

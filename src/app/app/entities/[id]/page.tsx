@@ -49,6 +49,7 @@ export default function EntityDetailPage() {
   const [msg, setMsg] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [role, setRole] = useState<string>("");
 
   const [editMode, setEditMode] = useState(false);
   const [draftName, setDraftName] = useState("");
@@ -60,6 +61,7 @@ export default function EntityDetailPage() {
     if (draftName.trim() === "") return false;
     return true;
   }, [entity, draftName]);
+  const canDelete = role === "owner" || role === "admin";
 
   useEffect(() => {
     void load();
@@ -81,11 +83,18 @@ export default function EntityDetailPage() {
     const token = await getTokenOrRedirect(router);
     if (!token) return;
 
-    const res = await fetch(`/api/entities?id=${encodeURIComponent(id)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const [res, roleRes] = await Promise.all([
+      fetch(`/api/entities?id=${encodeURIComponent(id)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      fetch("/api/settings/semaphore", {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    ]);
 
     const json = await res.json().catch(() => ({}));
+    const roleJson = await roleRes.json().catch(() => ({}));
+    setRole(typeof roleJson?.role === "string" ? roleJson.role : "");
     if (!res.ok) {
       setMsg(json.error || "No se pudo cargar la entidad");
       setEntity(null);
@@ -141,8 +150,19 @@ export default function EntityDetailPage() {
 
   async function removeEntity() {
     if (!entity) return;
-    const ok = window.confirm("¿Eliminar esta entidad? Esto borrará también sus valores asociados.");
-    if (!ok) return;
+    if (!canDelete) {
+      setMsg("Solo owner/admin puede eliminar entidades.");
+      return;
+    }
+
+    const typed = window.prompt(
+      `Esta acción no se puede deshacer.\n\nPara eliminar la entidad, escribe su nombre exacto:\n${entity.name}`
+    );
+    if (typed === null) return;
+    if (typed.trim() !== entity.name) {
+      setMsg("El nombre ingresado no coincide. Eliminación cancelada.");
+      return;
+    }
 
     setBusy(true);
     setMsg("");
@@ -162,7 +182,7 @@ export default function EntityDetailPage() {
       return;
     }
 
-    router.push("/app/entities");
+    router.push("/app/entities?deleted=1");
   }
 
   return (
@@ -209,7 +229,12 @@ export default function EntityDetailPage() {
                   </Button>
                 </>
               )}
-              <Button onClick={removeEntity} variant="outline" size="sm" disabled={!entity || busy}>
+              <Button
+                onClick={removeEntity}
+                variant="destructive"
+                size="sm"
+                disabled={!entity || busy || !canDelete}
+              >
                 Eliminar
               </Button>
             </div>
@@ -234,12 +259,13 @@ export default function EntityDetailPage() {
           <Card>
             <CardHeader className="pb-2">
               {!editMode ? (
-                <div className="space-y-2">
-                  <CardTitle>{entity.name}</CardTitle>
-                  <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3 md:overflow-x-auto md:whitespace-nowrap md:pb-1">
+                  <CardTitle className="shrink-0">{entity.name}</CardTitle>
+                  <div className="flex flex-wrap items-center gap-2 md:shrink-0 md:flex-nowrap">
                     <Badge variant="outline">Tipo: {entity.entity_type?.name ?? "(sin tipo)"}</Badge>
                     <Badge variant="outline">{entity.tracks_usage ? "Registra uso" : "Sin uso"}</Badge>
                     <Badge variant="outline">Creado: {new Date(entity.created_at).toLocaleDateString()}</Badge>
+                    {!canDelete ? <Badge variant="outline">Eliminar: solo owner/admin</Badge> : null}
                   </div>
                 </div>
               ) : (

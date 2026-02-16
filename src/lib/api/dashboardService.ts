@@ -43,6 +43,13 @@ type DashboardEntityRow = {
   deadlines?: DashboardDeadlineRow[] | null;
 };
 
+type DashboardCardField = {
+  name: string;
+  value_text: string;
+  show_in_card: boolean;
+  created_at: string | null;
+};
+
 type ComputedDashboardDeadline = DashboardDeadlineRow & {
   computed?: ReturnType<typeof computeDateComputed> | ReturnType<typeof computeUsageComputed> | { status: "incomplete"; reason: string };
   __tmp_usage?: { mode: UsageDailyAverageMode; manualAvg: number | null };
@@ -53,12 +60,14 @@ type ComputedDashboardEntity = Omit<DashboardEntityRow, "deadlines"> & {
   current_usage?: number | null;
   current_usage_logged_at?: string | null;
   auto_usage_daily_average?: number | null;
+  card_fields?: Array<{ name: string; value_text: string }>;
 };
 
 export type DashboardRepo = {
   listEntitiesWithDeadlines: (orgId: string) => Promise<DashboardEntityRow[]>;
   getLatestUsageByEntity: (orgId: string, entityIds: string[]) => Promise<Record<string, LatestUsage>>;
   getRecentUsageLogsByEntity: (orgId: string, entityIds: string[], sinceIso: string) => Promise<Record<string, UsageLogPoint[]>>;
+  getCardFieldsByEntity: (orgId: string, entityIds: string[]) => Promise<Record<string, DashboardCardField[]>>;
 };
 
 type ServiceResponse = {
@@ -78,9 +87,11 @@ export async function handleDashboardGet(
 
   const logsByEntity: Record<string, UsageLogPoint[]> = {};
   const latestUsageByEntity: Record<string, LatestUsage> = {};
+  const cardFieldsByEntity: Record<string, DashboardCardField[]> = {};
 
   if (entityIds.length > 0) {
     Object.assign(latestUsageByEntity, await repo.getLatestUsageByEntity(orgId, entityIds));
+    Object.assign(cardFieldsByEntity, await repo.getCardFieldsByEntity(orgId, entityIds));
 
     const since = new Date(Date.now() - 30 * MS_PER_DAY).toISOString();
     Object.assign(logsByEntity, await repo.getRecentUsageLogsByEntity(orgId, entityIds, since));
@@ -110,7 +121,22 @@ export async function handleDashboardGet(
       };
     });
 
-    return { ...entity, deadlines, current_usage: latest?.value ?? null, current_usage_logged_at: latest?.logged_at ?? null };
+    const cardFields = (cardFieldsByEntity[entity.id] ?? [])
+      .filter((f) => f.show_in_card && String(f.value_text ?? "").trim() !== "")
+      .sort((a, b) => {
+        const aTs = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bTs = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return aTs - bTs;
+      })
+      .map((f) => ({ name: f.name, value_text: String(f.value_text ?? "").trim() }));
+
+    return {
+      ...entity,
+      deadlines,
+      current_usage: latest?.value ?? null,
+      current_usage_logged_at: latest?.logged_at ?? null,
+      card_fields: cardFields,
+    };
   });
 
   for (const entity of computedEntities) {

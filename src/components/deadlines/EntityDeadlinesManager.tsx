@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 import { Loader } from "@/components/ui/loader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 
 type DeadlineType = {
   id: string;
@@ -56,11 +59,11 @@ async function getToken() {
   return data.session?.access_token ?? null;
 }
 
-function isoToLocalDatetimeInput(iso: string) {
-  // "YYYY-MM-DDTHH:mm" in local time
+function isoToLocalDateInput(iso: string) {
+  // "YYYY-MM-DD" in local time
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 export default function EntityDeadlinesManager({
@@ -82,11 +85,15 @@ export default function EntityDeadlinesManager({
   // usage logs
   const [usageLogs, setUsageLogs] = useState<UsageLogRow[]>([]);
   const [usageLogValue, setUsageLogValue] = useState<string>("");
-  const [usageLogLoggedAt, setUsageLogLoggedAt] = useState<string>(() => isoToLocalDatetimeInput(new Date().toISOString()));
+  const [usageLogLoggedAt, setUsageLogLoggedAt] = useState<string>(() => isoToLocalDateInput(new Date().toISOString()));
   const [usageLogsBusy, setUsageLogsBusy] = useState(false);
   const [usageLogsMsg, setUsageLogsMsg] = useState<string>("");
   const [editingDeadlineId, setEditingDeadlineId] = useState<string>("");
   const [editDraft, setEditDraft] = useState<DeadlineEditDraft | null>(null);
+  const [showUsagePanel, setShowUsagePanel] = useState(false);
+  const [sectionExpanded, setSectionExpanded] = useState(false);
+  const [loadedTypes, setLoadedTypes] = useState(false);
+  const [loadedDetails, setLoadedDetails] = useState(false);
 
   // form
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -104,14 +111,28 @@ export default function EntityDeadlinesManager({
   const anyBusy = createBusy || editBusy;
 
   useEffect(() => {
-    void bootstrap();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setSectionExpanded(false);
+    setLoadedTypes(false);
+    setLoadedDetails(false);
+    setTypes([]);
+    setDeadlines([]);
+    setUsageLogs([]);
+    setDeadlineTypeId("");
+    setShowCreateForm(false);
+    setGeneralMsg("");
+    setCreateMsg("");
+    setEditMsg("");
   }, [entityId]);
 
-  async function bootstrap() {
+  async function bootstrap(loadDetails = true) {
     setLoading(true);
     setGeneralMsg("");
-    await Promise.all([loadTypes(), loadDeadlines(), tracksUsage ? loadUsageLogs() : Promise.resolve()]);
+    await loadTypes();
+    setLoadedTypes(true);
+    if (loadDetails) {
+      await Promise.all([loadDeadlines(), tracksUsage ? loadUsageLogs() : Promise.resolve()]);
+      setLoadedDetails(true);
+    }
     setLoading(false);
   }
 
@@ -183,6 +204,19 @@ export default function EntityDeadlinesManager({
   useEffect(() => {
     resetFormForType();
   }, [deadlineTypeId]);
+
+  useEffect(() => {
+    if (!sectionExpanded) return;
+    if (!deadlineTypeId) return;
+    if (loadedDetails) return;
+    void (async () => {
+      setLoading(true);
+      await Promise.all([loadDeadlines(), tracksUsage ? loadUsageLogs() : Promise.resolve()]);
+      setLoadedDetails(true);
+      setLoading(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionExpanded, deadlineTypeId, loadedDetails, tracksUsage]);
 
   async function createDeadline() {
     if (!deadlineTypeId) {
@@ -267,7 +301,9 @@ export default function EntityDeadlinesManager({
       return;
     }
 
-    const loggedAtIso = usageLogLoggedAt ? new Date(usageLogLoggedAt).toISOString() : new Date().toISOString();
+    const loggedAtIso = usageLogLoggedAt
+      ? new Date(`${usageLogLoggedAt}T00:00:00`).toISOString()
+      : new Date().toISOString();
 
     const res = await fetch("/api/usage-logs", {
       method: "POST",
@@ -287,7 +323,7 @@ export default function EntityDeadlinesManager({
     }
 
     setUsageLogValue("");
-    setUsageLogLoggedAt(isoToLocalDatetimeInput(new Date().toISOString()));
+    setUsageLogLoggedAt(isoToLocalDateInput(new Date().toISOString()));
     await loadUsageLogs();
     setUsageLogsBusy(false);
   }
@@ -435,169 +471,160 @@ export default function EntityDeadlinesManager({
     setEditBusy(false);
   }
 
-  const card: React.CSSProperties = {
-    border: "1px solid #eee",
-    borderRadius: 14,
-    padding: 14,
-    background: "white",
-  };
-
   return (
-    <section style={{ marginTop: 14, ...card }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <div>
-          <h3 style={{ margin: 0 }}>Vencimientos</h3>
-          <p style={{ marginTop: 6, opacity: 0.75 }}>
-            Todo vencimiento se crea desde un tipo (catálogo de la organización).
-          </p>
-        </div>
-        <button onClick={bootstrap} disabled={anyBusy || usageLogsBusy} style={{ padding: "12px 14px" }}>
-          Refrescar
-        </button>
-      </div>
-
-      {generalMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{generalMsg}</p>}
-
-      {/* -------------------------- Usage Logs (Opción 1) -------------------------- */}
-      {tracksUsage ? (
-      <div style={{ marginTop: 12, border: "1px solid #f0f0f0", borderRadius: 12, padding: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <div>
-            <h4 style={{ margin: 0 }}>Registro de uso</h4>
-            <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-              Estos registros alimentan el cálculo automático del promedio diario (modo auto).
-            </div>
-          </div>
-          <button onClick={() => loadUsageLogs()} disabled={usageLogsBusy} style={{ padding: "12px 14px" }}>
-            Actualizar
-          </button>
-        </div>
-
-        {usageLogsMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{usageLogsMsg}</p>}
-
-        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-          <div>
-            <label>Valor de uso</label>
-            <input
-              inputMode="decimal"
-              value={usageLogValue}
-              onChange={(e) => setUsageLogValue(e.target.value)}
-              placeholder="Ej: 1530"
-              style={{ width: "100%", padding: 10, marginTop: 6 }}
-              disabled={usageLogsBusy}
-            />
-          </div>
-
-          <div>
-            <label>Fecha / hora</label>
-            <input
-              type="datetime-local"
-              value={usageLogLoggedAt}
-              onChange={(e) => setUsageLogLoggedAt(e.target.value)}
-              style={{ width: "100%", padding: 10, marginTop: 6 }}
-              disabled={usageLogsBusy}
-            />
-          </div>
-
-          <div style={{ display: "flex", alignItems: "flex-end" }}>
-            <button
-              onClick={createUsageLog}
-              disabled={usageLogsBusy}
-              style={{ padding: "12px 14px", fontWeight: 800, width: "100%" }}
-            >
-              {usageLogsBusy ? "Guardando..." : "Guardar"}
-            </button>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 12 }}>
-          <div style={{ fontWeight: 800, marginBottom: 6 }}>Últimos registros</div>
-          {usageLogs.length === 0 ? (
-            <div style={{ opacity: 0.7 }}>Aún no hay registros de uso para esta entidad.</div>
-          ) : (
-            <div style={{ display: "grid", gap: 8 }}>
-              {usageLogs.map((l) => (
-                <div
-                  key={l.id}
-                  style={{
-                    border: "1px solid #eee",
-                    borderRadius: 10,
-                    padding: 10,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    gap: 10,
+    <section className="mt-3 space-y-3 rounded-xl border bg-white p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="m-0 text-base font-semibold">Vencimientos</h3>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => {
+              const next = !sectionExpanded;
+              setSectionExpanded(next);
+              if (next && !loadedTypes) {
+                void bootstrap(false);
+              }
+            }}
+            variant="outline"
+            size="sm"
+          >
+            {sectionExpanded ? "Ocultar" : "Mostrar"}
+          </Button>
+          {types.length > 0 ? (
+            <>
+              <Button
+                onClick={() => {
+                  setShowCreateForm(true);
+                  setCreateMsg("");
+                }}
+                disabled={createBusy || showCreateForm}
+                size="sm"
+                className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700"
+              >
+                Agregar vencimiento
+              </Button>
+              {showCreateForm && sectionExpanded ? (
+                <Button
+                  onClick={() => {
+                    setShowCreateForm(false);
+                    setCreateMsg("");
+                    setDeadlineTypeId("");
                   }}
+                  disabled={createBusy}
+                  variant="outline"
+                  size="sm"
                 >
-                  <div>
-                    <div style={{ fontWeight: 900 }}>{l.value}</div>
-                    <div style={{ fontSize: 12, opacity: 0.75 }}>{new Date(l.logged_at).toLocaleString()}</div>
-                  </div>
-                  <button
-                    onClick={() => deleteUsageLog(l.id)}
-                    disabled={usageLogsBusy}
-                    style={{ padding: "10px 12px" }}
-                    title="Eliminar registro"
-                  >
-                    Eliminar
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+                  Cancelar
+                </Button>
+              ) : null}
+            </>
+          ) : null}
+          <Button
+            onClick={() => void bootstrap(Boolean(deadlineTypeId))}
+            disabled={anyBusy || usageLogsBusy || !sectionExpanded}
+            variant="outline"
+            size="sm"
+          >
+            Refrescar
+          </Button>
         </div>
       </div>
-      ) : null}
-      {/* ------------------------------------------------------------------------ */}
 
-      <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+      {!sectionExpanded ? null : generalMsg ? <p className="whitespace-pre-wrap text-sm text-rose-600">{generalMsg}</p> : null}
+
+      {sectionExpanded && tracksUsage ? (
+        <div className="rounded-xl border bg-slate-50/50 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="m-0 text-sm font-semibold">Registro de uso</h4>
+              <p className="mt-1 text-xs text-slate-500">Fuente para cálculo automático del promedio diario.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button onClick={() => setShowUsagePanel((v) => !v)} variant="outline" size="sm" disabled={usageLogsBusy}>
+                {showUsagePanel ? "Ocultar" : "Mostrar"}
+              </Button>
+              <Button onClick={() => loadUsageLogs()} variant="outline" size="sm" disabled={usageLogsBusy}>
+                Actualizar
+              </Button>
+            </div>
+          </div>
+
+          {showUsagePanel ? (
+            <>
+              {usageLogsMsg ? <p className="mt-2 whitespace-pre-wrap text-sm text-rose-600">{usageLogsMsg}</p> : null}
+
+              <div className="mt-3 grid gap-2 md:grid-cols-[minmax(180px,1fr)_180px_auto] md:items-end">
+                <label className="grid gap-1 text-xs text-slate-600">
+                  Valor de uso
+                  <Input
+                    inputMode="decimal"
+                    value={usageLogValue}
+                    onChange={(e) => setUsageLogValue(e.target.value)}
+                    placeholder="Ej: 1530"
+                    disabled={usageLogsBusy}
+                  />
+                </label>
+
+                <label className="grid gap-1 text-xs text-slate-600">
+                  Fecha
+                  <Input
+                    type="date"
+                    value={usageLogLoggedAt}
+                    onChange={(e) => setUsageLogLoggedAt(e.target.value)}
+                    disabled={usageLogsBusy}
+                  />
+                </label>
+
+                <Button onClick={createUsageLog} disabled={usageLogsBusy} className="min-h-10">
+                  {usageLogsBusy ? "Guardando..." : "Guardar uso"}
+                </Button>
+              </div>
+
+              <div className="mt-3 space-y-2">
+                <div className="text-xs font-semibold text-slate-700">Últimos registros</div>
+                {usageLogs.length === 0 ? (
+                  <p className="text-sm text-slate-500">Aún no hay registros de uso para esta entidad.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {usageLogs.map((l) => (
+                      <div key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white px-2.5 py-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="font-semibold">{l.value}</Badge>
+                          <span className="text-xs text-slate-500">{new Date(l.logged_at).toLocaleDateString()}</span>
+                        </div>
+                        <Button onClick={() => deleteUsageLog(l.id)} disabled={usageLogsBusy} variant="outline" size="sm">
+                          Eliminar
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
+      {sectionExpanded ? (
+      <div className="grid gap-2">
         {types.length === 0 ? (
-          <div style={{ border: "1px dashed #ddd", borderRadius: 12, padding: 12, opacity: 0.85 }}>
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-600">
             <strong>No hay tipos de vencimiento disponibles.</strong>
-            <div style={{ marginTop: 6, fontSize: 13 }}>
+            <div className="mt-1 text-xs">
               Crea al menos un tipo de vencimiento en <code>/app/deadline-types</code> para poder agregar vencimientos a esta entidad.
             </div>
           </div>
         ) : (
           <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ fontSize: 13, opacity: 0.8 }}>
-                {showCreateForm
-                  ? "Completa los datos del nuevo vencimiento."
-                  : "Oculto para ahorrar espacio. Ábrelo solo cuando lo necesites."}
-              </div>
-              <button
-                onClick={() => {
-                  setShowCreateForm((prev) => !prev);
-                  setCreateMsg("");
-                  if (showCreateForm) {
-                    setDeadlineTypeId("");
-                  }
-                }}
-                disabled={createBusy}
-                style={{ padding: "10px 12px", fontWeight: 700 }}
-              >
-                {showCreateForm ? "Cancelar" : "Agregar vencimiento"}
-              </button>
-            </div>
-
             {showCreateForm ? (
               <>
-                {createMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap", margin: 0 }}>{createMsg}</p>}
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                    gap: 10,
-                  }}
-                >
-                  <div>
-                    <label>Tipo</label>
+                {createMsg ? <p className="m-0 whitespace-pre-wrap text-sm text-rose-600">{createMsg}</p> : null}
+                <div className="grid gap-2">
+                  <div className="grid gap-1 text-xs text-slate-600 md:max-w-[520px]">
+                    <span>Tipo</span>
                     <select
                       value={deadlineTypeId}
                       onChange={(e) => setDeadlineTypeId(e.target.value)}
-                      style={{ width: "100%", padding: 10, marginTop: 6 }}
+                      className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm"
                       disabled={createBusy}
                     >
                       <option value="">Selecciona un tipo…</option>
@@ -610,64 +637,60 @@ export default function EntityDeadlinesManager({
                   </div>
 
                   {selectedType ? (
-                    <div>
-                      <label>Última realización (opcional)</label>
-                      <input
+                    <div className="grid gap-1 text-xs text-slate-600 md:max-w-[220px]">
+                      <span>Última realización (opcional)</span>
+                      <Input
                         type="date"
                         value={lastDoneDate}
                         onChange={(e) => setLastDoneDate(e.target.value)}
-                        style={{ width: "100%", padding: 10, marginTop: 6 }}
                         disabled={createBusy}
                       />
                     </div>
                   ) : null}
 
-                  <div>
+                  <div className="grid gap-2">
                     {selectedType?.measure_by === "date" ? (
-                      <>
-                        <label>Next due date</label>
-                        <input
+                      <div className="grid gap-1 text-xs text-slate-600 md:max-w-[220px]">
+                        <span>Next due date</span>
+                        <Input
                           type="date"
                           value={nextDueDate}
                           onChange={(e) => setNextDueDate(e.target.value)}
-                          style={{ width: "100%", padding: 10, marginTop: 6 }}
                           disabled={createBusy}
                         />
-                      </>
+                      </div>
                     ) : selectedType?.measure_by === "usage" ? (
-                      <div style={{ display: "grid", gap: 8 }}>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
-                          <div>
-                            <label>Last done usage</label>
-                            <input
+                      <div className="grid gap-2">
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <div className="grid gap-1 text-xs text-slate-600">
+                            <span>Last done usage</span>
+                            <Input
                               inputMode="decimal"
                               value={lastDoneUsage}
                               onChange={(e) => setLastDoneUsage(e.target.value)}
                               placeholder="Ej: 1200"
-                              style={{ width: "100%", padding: 10, marginTop: 6 }}
                               disabled={createBusy}
                             />
                           </div>
-                          <div>
-                            <label>Frecuencia</label>
-                            <input
+                          <div className="grid gap-1 text-xs text-slate-600">
+                            <span>Frecuencia</span>
+                            <Input
                               inputMode="decimal"
                               value={frequency}
                               onChange={(e) => setFrequency(e.target.value)}
                               placeholder="Ej: 250"
-                              style={{ width: "100%", padding: 10, marginTop: 6 }}
                               disabled={createBusy}
                             />
                           </div>
                         </div>
 
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
-                          <div>
-                            <label>Unidad</label>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <div className="grid gap-1 text-xs text-slate-600">
+                            <span>Unidad</span>
                             <select
                               value={frequencyUnit}
                               onChange={(e) => setFrequencyUnit(e.target.value)}
-                              style={{ width: "100%", padding: 10, marginTop: 6 }}
+                              className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm"
                               disabled={createBusy}
                             >
                               <option value="hours">hours</option>
@@ -676,12 +699,12 @@ export default function EntityDeadlinesManager({
                               <option value="cycles">cycles</option>
                             </select>
                           </div>
-                          <div>
-                            <label>Promedio diario (modo)</label>
+                          <div className="grid gap-1 text-xs text-slate-600">
+                            <span>Promedio diario (modo)</span>
                             <select
                               value={usageDailyAverageMode}
                               onChange={(e) => setUsageDailyAverageMode(e.target.value as "manual" | "auto")}
-                              style={{ width: "100%", padding: 10, marginTop: 6 }}
+                              className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm"
                               disabled={createBusy}
                             >
                               <option value="manual">Manual</option>
@@ -690,164 +713,158 @@ export default function EntityDeadlinesManager({
                           </div>
                         </div>
 
-                        <div>
-                          <label>Promedio diario{usageDailyAverageMode === "auto" ? " (calculado por el sistema)" : ""}</label>
-                          <input
+                        <div className="grid gap-1 text-xs text-slate-600">
+                          <span>Promedio diario{usageDailyAverageMode === "auto" ? " (calculado por el sistema)" : ""}</span>
+                          <Input
                             inputMode="decimal"
                             value={usageDailyAverageMode === "manual" ? usageDailyAverage : ""}
                             onChange={(e) => setUsageDailyAverage(e.target.value)}
                             placeholder={usageDailyAverageMode === "manual" ? "Ej: 6" : "Se calculará automáticamente"}
-                            style={{ width: "100%", padding: 10, marginTop: 6 }}
                             disabled={createBusy || usageDailyAverageMode === "auto"}
                           />
                           {usageDailyAverageMode === "auto" && (
-                            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
+                            <div className="text-[11px] text-slate-500">
                               El promedio se calcula usando los usage_logs de la entidad (backend).
                             </div>
                           )}
                         </div>
                       </div>
                     ) : (
-                      <div style={{ marginTop: 24, fontSize: 12, opacity: 0.7 }}>
+                      <div className="text-xs text-slate-500">
                         Selecciona un tipo para completar el resto del formulario.
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <button onClick={createDeadline} disabled={createBusy || !deadlineTypeId} style={{ padding: "12px 14px", fontWeight: 800, width: "100%", maxWidth: 260 }}>
+                <div className="flex justify-end">
+                  <Button onClick={createDeadline} disabled={createBusy || !deadlineTypeId} className="w-full max-w-[240px]">
                     {createBusy ? "Guardando..." : "Guardar vencimiento"}
-                  </button>
+                  </Button>
                 </div>
               </>
             ) : null}
           </>
         )}
       </div>
+      ) : null}
 
-      <hr style={{ margin: "14px 0", border: "none", borderTop: "1px solid #eee" }} />
+      {sectionExpanded ? (
+      <div className="border-t pt-2">
+        <h4 className="m-0 text-sm font-semibold">Asignados</h4>
+      </div>
+      ) : null}
+      {sectionExpanded && editMsg ? <p className="mt-1 whitespace-pre-wrap text-sm text-rose-600">{editMsg}</p> : null}
 
-      <h4 style={{ marginTop: 0 }}>Asignados</h4>
-      {editMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap", marginTop: 8 }}>{editMsg}</p>}
-
-      {loading ? (
-        <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
+      {!sectionExpanded ? null : !loadedDetails ? (
+        <p className="text-sm text-slate-500">Selecciona un tipo de vencimiento para cargar los datos de esta sección.</p>
+      ) : loading ? (
+        <div className="flex justify-center py-3">
           <Loader label="Cargando vencimientos..." />
         </div>
       ) : deadlines.length === 0 ? (
-        <p style={{ opacity: 0.7 }}>Esta entidad aún no tiene vencimientos.</p>
+        <p className="text-sm text-slate-500">Esta entidad aún no tiene vencimientos.</p>
       ) : (
-        <div style={{ display: "grid", gap: 10 }}>
+        <div className="grid gap-2">
           {deadlines.map((d) => {
             const t = d.deadline_types;
             return (
-              <div key={d.id} style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div key={d.id} className="rounded-xl border bg-white p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <div style={{ fontWeight: 900 }}>{t?.name ?? "Tipo desconocido"}</div>
-                    <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                      {t?.measure_by === "date" ? "por fecha" : "por uso"} ·{" "}
-                      {t?.requires_document ? "requiere doc" : "sin doc"} ·{" "}
-                      {new Date(d.created_at).toLocaleString()}
+                    <div className="text-sm font-semibold text-slate-900">{t?.name ?? "Tipo desconocido"}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                      <Badge variant="outline">{t?.measure_by === "date" ? "Por fecha" : "Por uso"}</Badge>
+                      <Badge variant="outline">{t?.requires_document ? "Requiere doc" : "Sin doc"}</Badge>
+                      <span>{new Date(d.created_at).toLocaleDateString()}</span>
                     </div>
                   </div>
                   {editingDeadlineId === d.id ? (
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button onClick={() => saveEditedDeadline(d)} disabled={editBusy} style={{ padding: "10px 12px" }}>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button onClick={() => saveEditedDeadline(d)} disabled={editBusy} size="sm">
                         Guardar
-                      </button>
-                      <button onClick={cancelEditDeadline} disabled={editBusy} style={{ padding: "10px 12px" }}>
+                      </Button>
+                      <Button onClick={cancelEditDeadline} disabled={editBusy} variant="outline" size="sm">
                         Cancelar
-                      </button>
+                      </Button>
                     </div>
                   ) : (
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button onClick={() => startEditDeadline(d)} disabled={editBusy} style={{ padding: "10px 12px" }}>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button onClick={() => startEditDeadline(d)} disabled={editBusy} variant="outline" size="sm">
                         Editar
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={() => deleteDeadline(d.id)}
                         disabled={editBusy}
-                        style={{ padding: "10px 12px" }}
+                        variant="destructive"
+                        size="sm"
                         title="Eliminar vencimiento"
                       >
                         Eliminar
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>
 
-                <div
-                  style={{
-                    marginTop: 10,
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                    gap: 8,
-                  }}
-                >
-                  <div>
-                    <strong>Last done date:</strong>{" "}
+                <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid gap-1 text-xs text-slate-600">
+                    <span className="font-medium text-slate-700">Última realización</span>
                     {editingDeadlineId === d.id ? (
-                      <input
+                      <Input
                         type="date"
                         value={editDraft?.last_done_date ?? ""}
                         onChange={(e) =>
                           setEditDraft((prev) => (prev ? { ...prev, last_done_date: e.target.value } : prev))
                         }
-                        style={{ marginLeft: 8, marginTop: 6, padding: 8, width: "100%", maxWidth: 220 }}
                         disabled={editBusy}
                       />
                     ) : (
-                      (d.last_done_date ?? "-")
+                      <span className="text-sm text-slate-800">{d.last_done_date ?? "-"}</span>
                     )}
                   </div>
                   {t?.measure_by === "date" ? (
-                    <div>
-                      <strong>Next due date:</strong>{" "}
+                    <div className="grid gap-1 text-xs text-slate-600">
+                      <span className="font-medium text-slate-700">Próximo vencimiento</span>
                       {editingDeadlineId === d.id ? (
-                        <input
+                        <Input
                           type="date"
                           value={editDraft?.next_due_date ?? ""}
                           onChange={(e) =>
                             setEditDraft((prev) => (prev ? { ...prev, next_due_date: e.target.value } : prev))
                           }
-                          style={{ marginLeft: 8, marginTop: 6, padding: 8, width: "100%", maxWidth: 220 }}
                           disabled={editBusy}
                         />
                       ) : (
-                        (d.next_due_date ?? "-")
+                        <span className="text-sm text-slate-800">{d.next_due_date ?? "-"}</span>
                       )}
                     </div>
                   ) : (
                     <>
-                      <div>
-                        <strong>Last done usage:</strong>{" "}
+                      <div className="grid gap-1 text-xs text-slate-600">
+                        <span className="font-medium text-slate-700">Último uso</span>
                         {editingDeadlineId === d.id ? (
-                          <input
+                          <Input
                             inputMode="decimal"
                             value={editDraft?.last_done_usage ?? ""}
                             onChange={(e) =>
                               setEditDraft((prev) => (prev ? { ...prev, last_done_usage: e.target.value } : prev))
                             }
-                            style={{ marginLeft: 8, marginTop: 6, padding: 8, width: "100%", maxWidth: 220 }}
                             disabled={editBusy}
                           />
                         ) : (
-                          (d.last_done_usage ?? "-")
+                          <span className="text-sm text-slate-800">{d.last_done_usage ?? "-"}</span>
                         )}
                       </div>
-                      <div>
-                        <strong>Frecuencia:</strong>{" "}
+                      <div className="grid gap-1 text-xs text-slate-600">
+                        <span className="font-medium text-slate-700">Frecuencia</span>
                         {editingDeadlineId === d.id ? (
-                          <>
-                            <input
+                          <div className="grid gap-1">
+                            <Input
                               inputMode="decimal"
                               value={editDraft?.frequency ?? ""}
                               onChange={(e) =>
                                 setEditDraft((prev) => (prev ? { ...prev, frequency: e.target.value } : prev))
                               }
-                              style={{ marginLeft: 8, marginTop: 6, padding: 8, width: "100%", maxWidth: 120 }}
                               disabled={editBusy}
                             />
                             <select
@@ -855,7 +872,7 @@ export default function EntityDeadlinesManager({
                               onChange={(e) =>
                                 setEditDraft((prev) => (prev ? { ...prev, frequency_unit: e.target.value } : prev))
                               }
-                              style={{ marginLeft: 8, marginTop: 6, padding: 8, width: "100%", maxWidth: 180 }}
+                              className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm"
                               disabled={editBusy}
                             >
                               <option value="hours">hours</option>
@@ -863,17 +880,15 @@ export default function EntityDeadlinesManager({
                               <option value="days">days</option>
                               <option value="cycles">cycles</option>
                             </select>
-                          </>
+                          </div>
                         ) : (
-                          <>
-                            {d.frequency ?? "-"} {d.frequency_unit ?? ""}
-                          </>
+                          <span className="text-sm text-slate-800">{d.frequency ?? "-"} {d.frequency_unit ?? ""}</span>
                         )}
                       </div>
-                      <div>
-                        <strong>Promedio diario:</strong>{" "}
+                      <div className="grid gap-1 text-xs text-slate-600">
+                        <span className="font-medium text-slate-700">Promedio diario</span>
                         {editingDeadlineId === d.id ? (
-                          <>
+                          <div className="grid gap-1">
                             <select
                               value={editDraft?.usage_daily_average_mode ?? "manual"}
                               onChange={(e) =>
@@ -886,13 +901,13 @@ export default function EntityDeadlinesManager({
                                     : prev
                                 )
                               }
-                              style={{ marginLeft: 8, marginTop: 6, padding: 8, width: "100%", maxWidth: 180 }}
+                              className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm"
                               disabled={editBusy}
                             >
                               <option value="manual">manual</option>
                               <option value="auto">auto</option>
                             </select>
-                            <input
+                            <Input
                               inputMode="decimal"
                               value={
                                 (editDraft?.usage_daily_average_mode ?? "manual") === "manual"
@@ -904,17 +919,16 @@ export default function EntityDeadlinesManager({
                                   prev ? { ...prev, usage_daily_average: e.target.value } : prev
                                 )
                               }
-                              style={{ marginLeft: 8, marginTop: 6, padding: 8, width: "100%", maxWidth: 120 }}
                               disabled={editBusy || (editDraft?.usage_daily_average_mode ?? "manual") === "auto"}
                             />
-                          </>
+                          </div>
                         ) : (
-                          <>
+                          <span className="text-sm text-slate-800">
                             {d.usage_daily_average ?? "-"}{" "}
-                            <span style={{ opacity: 0.75 }}>
+                            <span className="text-slate-500">
                               ({(d.usage_daily_average_mode ?? "manual") === "auto" ? "auto" : "manual"})
                             </span>
-                          </>
+                          </span>
                         )}
                       </div>
                     </>

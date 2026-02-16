@@ -120,6 +120,74 @@ function makeDashboardRepo(db: DataClient): DashboardRepo {
 
       return out;
     },
+    getCardFieldsByEntity: async (orgId, entityIds) => {
+      const out: Record<
+        string,
+        Array<{ name: string; value_text: string; show_in_card: boolean; created_at: string | null }>
+      > = {};
+      if (entityIds.length === 0) return out;
+
+      const { data: values, error: valuesError } = await db
+        .from("entity_field_values")
+        .select("entity_id, entity_field_id, value_text")
+        .eq("organization_id", orgId)
+        .in("entity_id", entityIds);
+
+      if (valuesError) throw valuesError;
+
+      const fieldIds = Array.from(
+        new Set(
+          ((values ?? []) as Array<{ entity_field_id: string | null }>)
+            .map((v) => v.entity_field_id)
+            .filter((id): id is string => Boolean(id))
+        )
+      );
+      if (fieldIds.length === 0) return out;
+
+      const { data: fields, error: fieldsError } = await db
+        .from("entity_fields")
+        .select("id, name, show_in_card, created_at")
+        .eq("organization_id", orgId)
+        .in("id", fieldIds);
+
+      if (fieldsError) throw fieldsError;
+
+      const fieldMap = new Map<
+        string,
+        { name: string; show_in_card: boolean; created_at: string | null }
+      >();
+      for (const field of (fields ?? []) as Array<{
+        id: string;
+        name: string;
+        show_in_card: boolean;
+        created_at: string | null;
+      }>) {
+        fieldMap.set(field.id, {
+          name: String(field.name ?? ""),
+          show_in_card: Boolean(field.show_in_card),
+          created_at: field.created_at ?? null,
+        });
+      }
+
+      for (const row of (values ?? []) as Array<{
+        entity_id: string;
+        entity_field_id: string | null;
+        value_text: string | null;
+      }>) {
+        if (!row.entity_field_id) continue;
+        const field = fieldMap.get(row.entity_field_id);
+        if (!field) continue;
+        if (!out[row.entity_id]) out[row.entity_id] = [];
+        out[row.entity_id].push({
+          name: field.name,
+          show_in_card: field.show_in_card,
+          created_at: field.created_at,
+          value_text: String(row.value_text ?? ""),
+        });
+      }
+
+      return out;
+    },
   };
 }
 

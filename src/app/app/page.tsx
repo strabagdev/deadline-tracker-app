@@ -41,6 +41,7 @@ type EntityRow = {
   entity_type_id: string;
   entity_types?: EntityType | null;
   deadlines?: Deadline[] | null;
+  card_fields?: Array<{ name: string; value_text: string }>;
 };
 
 type LatestUsageByEntity = Record<string, { value: number; logged_at: string }>;
@@ -159,6 +160,7 @@ export default function AppDashboard() {
   const [errorMsg, setErrorMsg] = useState<string>("");
 
   const [filterStatus, setFilterStatus] = useState<Status | "all">("all");
+  const [filterSecondary, setFilterSecondary] = useState<string>("all");
   const [filterEntityType, setFilterEntityType] = useState<string>("all");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -267,11 +269,34 @@ export default function AppDashboard() {
     return { red, orange, yellow, green, none, total: computedAll.length };
   }, [computedAll]);
 
+  const secondaryFilterOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of computedAll) {
+      const values = new Set(
+        (row.entity.card_fields ?? [])
+          .map((f) => String(f.value_text ?? "").trim())
+          .filter((v) => v.length > 0)
+      );
+      for (const value of values) {
+        counts.set(value, (counts.get(value) ?? 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+  }, [computedAll]);
+
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const out = computedAll.filter((r) => {
       if (filterEntityType !== "all" && r.entity.entity_type_id !== filterEntityType) return false;
       if (filterStatus !== "all" && r.status !== filterStatus) return false;
+      if (filterSecondary !== "all") {
+        const hasSecondary = (r.entity.card_fields ?? []).some(
+          (f) => String(f.value_text ?? "").trim() === filterSecondary
+        );
+        if (!hasSecondary) return false;
+      }
       if (needle) {
         const name = r.entity.name.toLowerCase();
         const typeName = (r.entity.entity_types?.name ?? "").toLowerCase();
@@ -294,11 +319,11 @@ export default function AppDashboard() {
     });
 
     return out;
-  }, [computedAll, filterEntityType, filterStatus, q]);
+  }, [computedAll, filterEntityType, filterSecondary, filterStatus, q]);
 
   useEffect(() => {
     setPage(1);
-  }, [filterEntityType, filterStatus, q, pageSize]);
+  }, [filterEntityType, filterSecondary, filterStatus, q, pageSize]);
 
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -306,7 +331,8 @@ export default function AppDashboard() {
   const pagedRows = rows.slice(pageStart, pageStart + pageSize);
 
   const hasEntities = (meta?.entity_count_in_org ?? entities.length) > 0;
-  const hasActiveFilters = q.trim().length > 0 || filterEntityType !== "all" || filterStatus !== "all";
+  const hasActiveFilters =
+    q.trim().length > 0 || filterEntityType !== "all" || filterStatus !== "all" || filterSecondary !== "all";
 
   function countByStatus(s: Status | "all") {
     if (s === "all") return countsAll.total;
@@ -386,6 +412,42 @@ export default function AppDashboard() {
                   <span className="hidden sm:inline">Lista</span>
                 </Button>
               </div>
+              {secondaryFilterOptions.length > 0 ? (
+                <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setFilterSecondary("all")}
+                    className={cn(
+                      "min-w-[54px] shrink-0 justify-center border font-semibold",
+                      filterSecondary === "all"
+                        ? "!border-indigo-500 !bg-indigo-100 !text-indigo-800"
+                        : "!border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200"
+                    )}
+                    title="Todos los valores"
+                  >
+                    <span>Todos</span>
+                  </Button>
+                  {secondaryFilterOptions.map((opt) => (
+                    <Button
+                      key={opt.value}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setFilterSecondary(opt.value)}
+                      className={cn(
+                        "min-w-[54px] shrink-0 justify-center border font-semibold",
+                        filterSecondary === opt.value
+                          ? "!border-indigo-500 !bg-indigo-100 !text-indigo-800"
+                          : "!border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200"
+                      )}
+                      title={opt.value}
+                    >
+                      <span className="max-w-[180px] truncate">{opt.value}</span>
+                      <span className="font-semibold">{opt.count}</span>
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             <Button
@@ -442,6 +504,7 @@ export default function AppDashboard() {
                     setQ("");
                     setFilterEntityType("all");
                     setFilterStatus("all");
+                    setFilterSecondary("all");
                   }}
                   disabled={!hasActiveFilters}
                 >
@@ -480,8 +543,11 @@ export default function AppDashboard() {
                   const tone = statusTone(r.status);
                   const hasLatestUsage = r.latestUsage != null;
                   const hasLatestUsageAt = Boolean(r.latestUsageAt);
+                  const cardFields = (e.card_fields ?? []).filter(
+                    (f) => String(f.name ?? "").trim() !== "" && String(f.value_text ?? "").trim() !== ""
+                  );
                   const dueLabel = !r.hasActiveDeadlines
-                    ? "Sin vencimientos"
+                    ? "—"
                     : nearest?.due
                       ? fmtDate(nearest.due)
                       : "Sin fecha estimada";
@@ -512,20 +578,29 @@ export default function AppDashboard() {
                       <div className="min-w-0">
                         <div className="truncate text-[14px] font-semibold leading-tight text-slate-900">{e.name}</div>
                         <div className="mt-0.5 truncate text-[11px] text-slate-500">{e.entity_types?.name ?? "Sin tipo"}</div>
+                        {cardFields.length > 0 ? (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {cardFields.slice(0, 3).map((field) => (
+                              <Badge key={`${e.id}-${field.name}`} variant="outline" className="bg-white text-[10px] font-normal text-slate-600">
+                                {field.value_text}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <Badge variant="outline" className="bg-white text-[10px] font-medium text-slate-600">
-                          {!r.hasActiveDeadlines
-                            ? "Sin vencimiento asignado"
-                            : `${nearest?.typeName ?? "Sin tipo"}${
-                                nearest?.measureBy === "usage"
-                                  ? " · uso"
-                                  : nearest?.measureBy === "date"
-                                    ? " · fecha"
-                                    : ""
-                              }`}
-                        </Badge>
+                        {r.hasActiveDeadlines ? (
+                          <Badge variant="outline" className="bg-white text-[10px] font-medium text-slate-600">
+                            {`${nearest?.typeName ?? "Sin tipo"}${
+                              nearest?.measureBy === "usage"
+                                ? " · uso"
+                                : nearest?.measureBy === "date"
+                                  ? " · fecha"
+                                  : ""
+                            }`}
+                          </Badge>
+                        ) : null}
                         {hasLatestUsage ? (
                           <Badge variant="outline" className="bg-white text-[10px] font-medium text-slate-700">
                             Uso: {r.latestUsage}
@@ -553,6 +628,7 @@ export default function AppDashboard() {
                   const e = r.entity;
                   const nearest = r.nearest;
                   const tone = statusTone(r.status);
+                  const cardFields = (e.card_fields ?? []).filter((f) => String(f.value_text ?? "").trim() !== "");
                   return (
                     <div
                       key={e.id}
@@ -579,14 +655,14 @@ export default function AppDashboard() {
                       <div className="min-w-0">
                         <div className="truncate text-[13px] font-medium text-slate-900">
                           {!r.hasActiveDeadlines
-                            ? "Sin vencimientos"
+                            ? "—"
                             : nearest?.due
                               ? fmtDate(nearest.due)
                               : "Sin fecha estimada"}
                         </div>
                         <div className="truncate text-[11px] text-slate-500">
                           {!r.hasActiveDeadlines
-                            ? "Asocia un vencimiento"
+                            ? ""
                             : `${nearest?.typeName ?? "Sin tipo"}${
                                 nearest?.measureBy === "usage"
                                   ? " · por uso"
@@ -595,6 +671,15 @@ export default function AppDashboard() {
                                     : ""
                               }`}
                         </div>
+                        {cardFields.length > 0 ? (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {cardFields.slice(0, 2).map((field) => (
+                              <Badge key={`${e.id}-${field.name}`} variant="outline" className="bg-slate-50 text-[10px] font-normal text-slate-600">
+                                {field.value_text}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                       <div className="text-right">
                         <div className="text-[13px] font-medium text-slate-800">{r.latestUsage != null ? r.latestUsage : "—"}</div>
