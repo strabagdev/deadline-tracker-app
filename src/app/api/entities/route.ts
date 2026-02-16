@@ -179,7 +179,7 @@ export async function GET(req: Request) {
       .maybeSingle();
 
     if (eErr) throw eErr;
-    if (!entity) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (!entity) return NextResponse.json({ error: "not found", code: "ENTITY_NOT_FOUND" }, { status: 404 });
 
     const { data: entityType, error: etErr } = await db
       .from("entity_types")
