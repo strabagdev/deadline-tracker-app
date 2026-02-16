@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { bootstrapFirstSuperAdmin } from "@/lib/server/superAdmin";
+import { validateBootstrapConfirmPayload } from "@/lib/api/platformSuperAdminInput";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
@@ -17,15 +18,9 @@ export async function POST(req: Request) {
     const confirmEmail = String(body.confirmEmail || "").trim().toLowerCase();
     const authEmail = String(user.email || "").trim().toLowerCase();
 
-    if (!authEmail) {
-      return NextResponse.json({ error: "Authenticated user has no email", code: "BAD_REQUEST" }, { status: 400 });
-    }
-
-    if (!confirmEmail || confirmEmail !== authEmail) {
-      return NextResponse.json(
-        { error: "Debes confirmar exactamente el correo autenticado para crear el super admin.", code: "BAD_REQUEST" },
-        { status: 400 }
-      );
+    const confirmationValidation = validateBootstrapConfirmPayload({ authEmail, confirmEmail });
+    if (!confirmationValidation.ok) {
+      return NextResponse.json(confirmationValidation.body, { status: confirmationValidation.status });
     }
 
     const result = await bootstrapFirstSuperAdmin(db, user.id, authEmail);

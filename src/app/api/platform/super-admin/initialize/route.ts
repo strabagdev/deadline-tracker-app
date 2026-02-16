@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { hasAnySuperAdmin } from "@/lib/server/superAdmin";
+import {
+  parseSuperAdminInitializePayload,
+  validateSuperAdminSetupKey,
+} from "@/lib/api/platformSuperAdminInput";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
@@ -17,26 +21,13 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const email = String(body.email || "").trim().toLowerCase();
-    const password = String(body.password || "");
-    const setupKey = String(body.setupKey || "").trim();
-
-    if (!email) return NextResponse.json({ error: "email required", code: "BAD_REQUEST" }, { status: 400 });
-    if (password.length < 8) {
-      return NextResponse.json({ error: "password min length is 8", code: "BAD_REQUEST" }, { status: 400 });
-    }
+    const parsed = parseSuperAdminInitializePayload(body);
+    if (!parsed.ok) return NextResponse.json(parsed.body, { status: parsed.status });
+    const { email, password, setupKey } = parsed;
 
     const expectedSetupKey = process.env.PLATFORM_SETUP_KEY;
-    if (!expectedSetupKey) {
-      return NextResponse.json(
-        { error: "Missing PLATFORM_SETUP_KEY in server environment", code: "INTERNAL_ERROR" },
-        { status: 500 }
-      );
-    }
-
-    if (setupKey !== expectedSetupKey) {
-      return NextResponse.json({ error: "invalid setup key", code: "FORBIDDEN" }, { status: 403 });
-    }
+    const setupValidation = validateSuperAdminSetupKey({ setupKey, expectedSetupKey });
+    if (!setupValidation.ok) return NextResponse.json(setupValidation.body, { status: setupValidation.status });
 
     const authAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_AUTH_URL!,

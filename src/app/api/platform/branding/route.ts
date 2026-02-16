@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { isSuperAdmin } from "@/lib/server/superAdmin";
+import { validateLogoFile } from "@/lib/api/platformBrandingInput";
 
 const PLATFORM_LOGO_BUCKET = "platform-assets";
 const MAX_LOGO_SIZE_BYTES = 4 * 1024 * 1024;
@@ -95,19 +96,15 @@ export async function POST(req: Request) {
     if (!allowed) return NextResponse.json({ error: "super admin only", code: "FORBIDDEN" }, { status: 403 });
 
     const form = await req.formData();
-    const file = form.get("file");
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Missing file", code: "BAD_REQUEST" }, { status: 400 });
-    }
-    if (file.size <= 0) {
-      return NextResponse.json({ error: "Empty file", code: "BAD_REQUEST" }, { status: 400 });
-    }
-    if (file.size > MAX_LOGO_SIZE_BYTES) {
-      return NextResponse.json({ error: "El logo excede 4MB", code: "BAD_REQUEST" }, { status: 400 });
-    }
-    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-      return NextResponse.json({ error: "Formato no permitido (PNG, JPG, WEBP, SVG)", code: "BAD_REQUEST" }, { status: 400 });
-    }
+    const rawFile = form.get("file");
+    const file = rawFile instanceof File ? rawFile : null;
+    const fileValidation = validateLogoFile(file, {
+      maxBytes: MAX_LOGO_SIZE_BYTES,
+      allowedMimeTypes: ALLOWED_MIME_TYPES,
+      tooLargeMessage: "El logo excede 4MB",
+      invalidFormatMessage: "Formato no permitido (PNG, JPG, WEBP, SVG)",
+    });
+    if (!fileValidation.ok) return NextResponse.json(fileValidation.body, { status: fileValidation.status });
 
     const current = await getCurrentSettings(db);
     await ensurePlatformLogoBucket(db);
