@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     const db = createDataServerClient();
     const alreadyExists = await hasAnySuperAdmin(db);
     if (alreadyExists) {
-      return NextResponse.json({ error: "super admin already configured" }, { status: 403 });
+      return NextResponse.json({ error: "super admin already configured", code: "FORBIDDEN" }, { status: 403 });
     }
 
     const body = await req.json().catch(() => ({}));
@@ -21,21 +21,21 @@ export async function POST(req: Request) {
     const password = String(body.password || "");
     const setupKey = String(body.setupKey || "").trim();
 
-    if (!email) return NextResponse.json({ error: "email required" }, { status: 400 });
+    if (!email) return NextResponse.json({ error: "email required", code: "BAD_REQUEST" }, { status: 400 });
     if (password.length < 8) {
-      return NextResponse.json({ error: "password min length is 8" }, { status: 400 });
+      return NextResponse.json({ error: "password min length is 8", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     const expectedSetupKey = process.env.PLATFORM_SETUP_KEY;
     if (!expectedSetupKey) {
       return NextResponse.json(
-        { error: "Missing PLATFORM_SETUP_KEY in server environment" },
+        { error: "Missing PLATFORM_SETUP_KEY in server environment", code: "INTERNAL_ERROR" },
         { status: 500 }
       );
     }
 
     if (setupKey !== expectedSetupKey) {
-      return NextResponse.json({ error: "invalid setup key" }, { status: 403 });
+      return NextResponse.json({ error: "invalid setup key", code: "FORBIDDEN" }, { status: 403 });
     }
 
     const authAdmin = createClient(
@@ -50,12 +50,12 @@ export async function POST(req: Request) {
     });
 
     if (createErr) {
-      return NextResponse.json({ error: createErr.message }, { status: 400 });
+      return NextResponse.json({ error: createErr.message, code: "BAD_REQUEST" }, { status: 400 });
     }
 
     const userId = created.user?.id;
     if (!userId) {
-      return NextResponse.json({ error: "failed to create super admin user" }, { status: 400 });
+      return NextResponse.json({ error: "failed to create super admin user", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     const { error: profileErr } = await db.from("profiles").upsert(
@@ -72,6 +72,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, email, user_id: userId });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

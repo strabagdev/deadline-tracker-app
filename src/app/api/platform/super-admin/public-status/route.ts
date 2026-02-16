@@ -13,6 +13,6 @@ export async function GET() {
     const hasSuperAdmin = await hasAnySuperAdmin(db);
     return NextResponse.json({ has_super_admin: hasSuperAdmin });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

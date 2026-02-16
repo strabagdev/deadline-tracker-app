@@ -24,6 +24,6 @@ export async function GET(req: Request) {
       email: user.email ?? null,
     });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

@@ -17,17 +17,17 @@ export async function POST(req: Request) {
     const db = createDataServerClient();
 
     const allowed = await isSuperAdmin(db, user.id);
-    if (!allowed) return NextResponse.json({ error: "super admin only" }, { status: 403 });
+    if (!allowed) return NextResponse.json({ error: "super admin only", code: "FORBIDDEN" }, { status: 403 });
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const organizationId = String(body.organizationId ?? "").trim();
     const email = String(body.email ?? "").trim().toLowerCase();
     const role = String(body.role ?? "member").trim().toLowerCase();
 
-    if (!organizationId) return NextResponse.json({ error: "organizationId required" }, { status: 400 });
-    if (!email) return NextResponse.json({ error: "email required" }, { status: 400 });
+    if (!organizationId) return NextResponse.json({ error: "organizationId required", code: "BAD_REQUEST" }, { status: 400 });
+    if (!email) return NextResponse.json({ error: "email required", code: "BAD_REQUEST" }, { status: 400 });
     if (!VALID_ROLES.includes(role as (typeof VALID_ROLES)[number])) {
-      return NextResponse.json({ error: "invalid role" }, { status: 400 });
+      return NextResponse.json({ error: "invalid role", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     const { data: org, error: orgErr } = await db
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
       .eq("id", organizationId)
       .maybeSingle();
     if (orgErr) throw orgErr;
-    if (!org?.id) return NextResponse.json({ error: "organization not found" }, { status: 404 });
+    if (!org?.id) return NextResponse.json({ error: "organization not found", code: "ORGANIZATION_NOT_FOUND" }, { status: 404 });
 
     const authUrl = process.env.NEXT_PUBLIC_SUPABASE_AUTH_URL;
     const authServiceRole = process.env.SUPABASE_AUTH_SERVICE_ROLE_KEY;
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
         if (existingErr) throw existingErr;
         invitedUserId = existingProfile?.user_id ?? null;
       } else {
-        return NextResponse.json({ error: inviteErr.message }, { status: 400 });
+        return NextResponse.json({ error: inviteErr.message, code: "BAD_REQUEST" }, { status: 400 });
       }
     }
 
@@ -87,7 +87,10 @@ export async function POST(req: Request) {
 
     if (!invitedUserId) {
       return NextResponse.json(
-        { error: "No se pudo resolver el usuario invitado. Pídele iniciar sesión una vez e intenta de nuevo." },
+        {
+          error: "No se pudo resolver el usuario invitado. Pídele iniciar sesión una vez e intenta de nuevo.",
+          code: "INVITED_USER_NOT_RESOLVED",
+        },
         { status: 400 }
       );
     }
@@ -117,6 +120,6 @@ export async function POST(req: Request) {
       invited: { user_id: invitedUserId, email, role },
     });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

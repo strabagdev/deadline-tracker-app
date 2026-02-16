@@ -82,7 +82,7 @@ export async function GET() {
       },
     });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
 
@@ -92,21 +92,21 @@ export async function POST(req: Request) {
     const db = createDataServerClient();
 
     const allowed = await isSuperAdmin(db, user.id);
-    if (!allowed) return NextResponse.json({ error: "super admin only" }, { status: 403 });
+    if (!allowed) return NextResponse.json({ error: "super admin only", code: "FORBIDDEN" }, { status: 403 });
 
     const form = await req.formData();
     const file = form.get("file");
     if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Missing file" }, { status: 400 });
+      return NextResponse.json({ error: "Missing file", code: "BAD_REQUEST" }, { status: 400 });
     }
     if (file.size <= 0) {
-      return NextResponse.json({ error: "Empty file" }, { status: 400 });
+      return NextResponse.json({ error: "Empty file", code: "BAD_REQUEST" }, { status: 400 });
     }
     if (file.size > MAX_LOGO_SIZE_BYTES) {
-      return NextResponse.json({ error: "El logo excede 4MB" }, { status: 400 });
+      return NextResponse.json({ error: "El logo excede 4MB", code: "BAD_REQUEST" }, { status: 400 });
     }
     if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-      return NextResponse.json({ error: "Formato no permitido (PNG, JPG, WEBP, SVG)" }, { status: 400 });
+      return NextResponse.json({ error: "Formato no permitido (PNG, JPG, WEBP, SVG)", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     const current = await getCurrentSettings(db);
@@ -154,11 +154,11 @@ export async function POST(req: Request) {
   } catch (error: unknown) {
     if (isMissingTableError(error)) {
       return NextResponse.json(
-        { error: "Missing table platform_settings. Run supabase/004_platform_branding.sql" },
+        { error: "Missing table platform_settings. Run supabase/004_platform_branding.sql", code: "MISSING_TABLE" },
         { status: 400 }
       );
     }
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 400 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "BAD_REQUEST" }, { status: 400 });
   }
 }
 
@@ -168,7 +168,7 @@ export async function DELETE(req: Request) {
     const db = createDataServerClient();
 
     const allowed = await isSuperAdmin(db, user.id);
-    if (!allowed) return NextResponse.json({ error: "super admin only" }, { status: 403 });
+    if (!allowed) return NextResponse.json({ error: "super admin only", code: "FORBIDDEN" }, { status: 403 });
 
     const current = await getCurrentSettings(db);
     const { data: updated, error: updateError } = await db
@@ -200,10 +200,10 @@ export async function DELETE(req: Request) {
   } catch (error: unknown) {
     if (isMissingTableError(error)) {
       return NextResponse.json(
-        { error: "Missing table platform_settings. Run supabase/004_platform_branding.sql" },
+        { error: "Missing table platform_settings. Run supabase/004_platform_branding.sql", code: "MISSING_TABLE" },
         { status: 400 }
       );
     }
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 400 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "BAD_REQUEST" }, { status: 400 });
   }
 }

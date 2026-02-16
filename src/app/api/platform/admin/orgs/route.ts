@@ -60,7 +60,7 @@ export async function GET(req: Request) {
     const db = createDataServerClient();
 
     const allowed = await isSuperAdmin(db, user.id);
-    if (!allowed) return NextResponse.json({ error: "super admin only" }, { status: 403 });
+    if (!allowed) return NextResponse.json({ error: "super admin only", code: "FORBIDDEN" }, { status: 403 });
 
     const { data: orgsData, error: orgErr } = await db
       .from("organizations")
@@ -122,7 +122,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ organizations: result });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
 
@@ -132,14 +132,14 @@ export async function PUT(req: Request) {
     const db = createDataServerClient();
 
     const allowed = await isSuperAdmin(db, user.id);
-    if (!allowed) return NextResponse.json({ error: "super admin only" }, { status: 403 });
+    if (!allowed) return NextResponse.json({ error: "super admin only", code: "FORBIDDEN" }, { status: 403 });
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const organizationId = String(body.organizationId ?? "").trim();
     const ownerEmail = String(body.ownerEmail ?? "").trim().toLowerCase();
 
-    if (!organizationId) return NextResponse.json({ error: "organizationId required" }, { status: 400 });
-    if (!ownerEmail) return NextResponse.json({ error: "ownerEmail required" }, { status: 400 });
+    if (!organizationId) return NextResponse.json({ error: "organizationId required", code: "BAD_REQUEST" }, { status: 400 });
+    if (!ownerEmail) return NextResponse.json({ error: "ownerEmail required", code: "BAD_REQUEST" }, { status: 400 });
 
     const { data: org, error: orgErr } = await db
       .from("organizations")
@@ -147,7 +147,7 @@ export async function PUT(req: Request) {
       .eq("id", organizationId)
       .maybeSingle();
     if (orgErr) throw orgErr;
-    if (!org?.id) return NextResponse.json({ error: "organization not found" }, { status: 404 });
+    if (!org?.id) return NextResponse.json({ error: "organization not found", code: "ORGANIZATION_NOT_FOUND" }, { status: 404 });
 
     const { data: profile, error: profErr } = await db
       .from("profiles")
@@ -164,7 +164,7 @@ export async function PUT(req: Request) {
       const authUserId = await resolveAuthUserIdByEmail(ownerEmail);
       if (!authUserId) {
         return NextResponse.json(
-          { error: "Owner email does not exist in Auth. Invite/login first." },
+          { error: "Owner email does not exist in Auth. Invite/login first.", code: "OWNER_NOT_FOUND_IN_AUTH" },
           { status: 400 }
         );
       }
@@ -195,7 +195,7 @@ export async function PUT(req: Request) {
       owner: { user_id: ownerUserId, email: ownerResolvedEmail },
     });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
 
@@ -205,14 +205,14 @@ export async function DELETE(req: Request) {
     const db = createDataServerClient();
 
     const allowed = await isSuperAdmin(db, user.id);
-    if (!allowed) return NextResponse.json({ error: "super admin only" }, { status: 403 });
+    if (!allowed) return NextResponse.json({ error: "super admin only", code: "FORBIDDEN" }, { status: 403 });
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const organizationId = String(body.organizationId ?? "").trim();
     const ownerUserId = String(body.ownerUserId ?? "").trim();
 
-    if (!organizationId) return NextResponse.json({ error: "organizationId required" }, { status: 400 });
-    if (!ownerUserId) return NextResponse.json({ error: "ownerUserId required" }, { status: 400 });
+    if (!organizationId) return NextResponse.json({ error: "organizationId required", code: "BAD_REQUEST" }, { status: 400 });
+    if (!ownerUserId) return NextResponse.json({ error: "ownerUserId required", code: "BAD_REQUEST" }, { status: 400 });
 
     const { data: target, error: targetErr } = await db
       .from("organization_members")
@@ -221,8 +221,8 @@ export async function DELETE(req: Request) {
       .eq("user_id", ownerUserId)
       .maybeSingle();
     if (targetErr) throw targetErr;
-    if (!target?.user_id) return NextResponse.json({ error: "owner not found in organization" }, { status: 404 });
-    if (target.role !== "owner") return NextResponse.json({ error: "target user is not owner" }, { status: 400 });
+    if (!target?.user_id) return NextResponse.json({ error: "owner not found in organization", code: "OWNER_NOT_FOUND" }, { status: 404 });
+    if (target.role !== "owner") return NextResponse.json({ error: "target user is not owner", code: "BAD_REQUEST" }, { status: 400 });
 
     const { data: owners, error: ownersErr } = await db
       .from("organization_members")
@@ -233,7 +233,7 @@ export async function DELETE(req: Request) {
 
     if ((owners ?? []).length <= 1) {
       return NextResponse.json(
-        { error: "Cannot remove the last owner. Assign another owner first." },
+        { error: "Cannot remove the last owner. Assign another owner first.", code: "LAST_OWNER" },
         { status: 400 }
       );
     }
@@ -247,6 +247,6 @@ export async function DELETE(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

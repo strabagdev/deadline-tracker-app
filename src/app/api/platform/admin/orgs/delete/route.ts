@@ -14,11 +14,11 @@ export async function DELETE(req: Request) {
     const db = createDataServerClient();
 
     const allowed = await isSuperAdmin(db, user.id);
-    if (!allowed) return NextResponse.json({ error: "super admin only" }, { status: 403 });
+    if (!allowed) return NextResponse.json({ error: "super admin only", code: "FORBIDDEN" }, { status: 403 });
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const organizationId = String(body.organizationId ?? "").trim();
-    if (!organizationId) return NextResponse.json({ error: "organizationId required" }, { status: 400 });
+    if (!organizationId) return NextResponse.json({ error: "organizationId required", code: "BAD_REQUEST" }, { status: 400 });
 
     const { data: org, error: orgErr } = await db
       .from("organizations")
@@ -26,7 +26,7 @@ export async function DELETE(req: Request) {
       .eq("id", organizationId)
       .maybeSingle();
     if (orgErr) throw orgErr;
-    if (!org?.id) return NextResponse.json({ error: "organization not found" }, { status: 404 });
+    if (!org?.id) return NextResponse.json({ error: "organization not found", code: "ORGANIZATION_NOT_FOUND" }, { status: 404 });
 
     // Limpieza manual para evitar bloqueos por FK cuando no hay ON DELETE CASCADE.
     const { error: usageErr } = await db.from("usage_logs").delete().eq("organization_id", organizationId);
@@ -73,6 +73,6 @@ export async function DELETE(req: Request) {
 
     return NextResponse.json({ ok: true, organization: { id: org.id, name: org.name } });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

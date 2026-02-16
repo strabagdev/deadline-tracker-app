@@ -15,14 +15,14 @@ export async function POST(req: Request) {
 
     const allowed = await isSuperAdmin(db, user.id);
     if (!allowed) {
-      return NextResponse.json({ error: "super admin only" }, { status: 403 });
+      return NextResponse.json({ error: "super admin only", code: "FORBIDDEN" }, { status: 403 });
     }
 
     const body = await req.json().catch(() => ({}));
     const organizationName = String(body.organizationName || "").trim();
 
     if (organizationName.length < 2) {
-      return NextResponse.json({ error: "organizationName required (min 2 chars)" }, { status: 400 });
+      return NextResponse.json({ error: "organizationName required (min 2 chars)", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     const { data: org, error: orgErr } = await db
@@ -39,6 +39,6 @@ export async function POST(req: Request) {
       owner: null,
     });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

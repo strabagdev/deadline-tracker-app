@@ -18,12 +18,12 @@ export async function POST(req: Request) {
     const authEmail = String(user.email || "").trim().toLowerCase();
 
     if (!authEmail) {
-      return NextResponse.json({ error: "Authenticated user has no email" }, { status: 400 });
+      return NextResponse.json({ error: "Authenticated user has no email", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     if (!confirmEmail || confirmEmail !== authEmail) {
       return NextResponse.json(
-        { error: "Debes confirmar exactamente el correo autenticado para crear el super admin." },
+        { error: "Debes confirmar exactamente el correo autenticado para crear el super admin.", code: "BAD_REQUEST" },
         { status: 400 }
       );
     }
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     const result = await bootstrapFirstSuperAdmin(db, user.id, authEmail);
 
     if (!result.created && !result.alreadySuperAdmin) {
-      return NextResponse.json({ error: "super admin already exists" }, { status: 403 });
+      return NextResponse.json({ error: "super admin already exists", code: "FORBIDDEN" }, { status: 403 });
     }
 
     return NextResponse.json({
@@ -42,6 +42,6 @@ export async function POST(req: Request) {
       email: user.email ?? null,
     });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

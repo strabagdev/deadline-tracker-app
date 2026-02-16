@@ -49,7 +49,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ organization: null, role: null });
     }
     if ("error" in access) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "Forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
     const organizationId = access.organizationId;
 
@@ -64,7 +64,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ organization: organization ?? null, role: access.role });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unauthorized";
-    return NextResponse.json({ error: message }, { status: 401 });
+    return NextResponse.json({ error: message, code: "UNAUTHORIZED" }, { status: 401 });
   }
 }
 
@@ -74,28 +74,34 @@ export async function POST(req: Request) {
     const db = createDataServerClient();
     const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      return NextResponse.json({ error: access.error === "no active organization" ? "No active organization" : "Forbidden" }, { status: access.error === "no active organization" ? 400 : 403 });
+      return NextResponse.json(
+        {
+          error: access.error === "no active organization" ? "No active organization" : "Forbidden",
+          code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN",
+        },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
     }
     const organizationId = access.organizationId;
     const role = await getMemberRole(db, organizationId, user.id);
     if (role !== "owner") {
-      return NextResponse.json({ error: "Only owner can update organization logo" }, { status: 403 });
+      return NextResponse.json({ error: "Only owner can update organization logo", code: "FORBIDDEN" }, { status: 403 });
     }
 
     const form = await req.formData();
     const file = form.get("file");
     if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Missing file" }, { status: 400 });
+      return NextResponse.json({ error: "Missing file", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     if (file.size <= 0) {
-      return NextResponse.json({ error: "Empty file" }, { status: 400 });
+      return NextResponse.json({ error: "Empty file", code: "BAD_REQUEST" }, { status: 400 });
     }
     if (file.size > MAX_LOGO_SIZE_BYTES) {
-      return NextResponse.json({ error: "El logo excede 2MB" }, { status: 400 });
+      return NextResponse.json({ error: "El logo excede 2MB", code: "BAD_REQUEST" }, { status: 400 });
     }
     if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-      return NextResponse.json({ error: "Formato no permitido (PNG, JPG, WEBP, SVG)" }, { status: 400 });
+      return NextResponse.json({ error: "Formato no permitido (PNG, JPG, WEBP, SVG)", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     const { data: organization, error: orgError } = await db
@@ -105,7 +111,7 @@ export async function POST(req: Request) {
       .maybeSingle();
     if (orgError) throw orgError;
     if (!organization) {
-      return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+      return NextResponse.json({ error: "Organization not found", code: "ORGANIZATION_NOT_FOUND" }, { status: 404 });
     }
 
     await ensureLogoBucket(db);
@@ -142,7 +148,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ organization: updated });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Error updating logo";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json({ error: message, code: "BAD_REQUEST" }, { status: 400 });
   }
 }
 
@@ -152,12 +158,18 @@ export async function DELETE(req: Request) {
     const db = createDataServerClient();
     const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      return NextResponse.json({ error: access.error === "no active organization" ? "No active organization" : "Forbidden" }, { status: access.error === "no active organization" ? 400 : 403 });
+      return NextResponse.json(
+        {
+          error: access.error === "no active organization" ? "No active organization" : "Forbidden",
+          code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN",
+        },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
     }
     const organizationId = access.organizationId;
     const role = await getMemberRole(db, organizationId, user.id);
     if (role !== "owner") {
-      return NextResponse.json({ error: "Only owner can update organization logo" }, { status: 403 });
+      return NextResponse.json({ error: "Only owner can update organization logo", code: "FORBIDDEN" }, { status: 403 });
     }
 
     const { data: organization, error: orgError } = await db
@@ -167,7 +179,7 @@ export async function DELETE(req: Request) {
       .maybeSingle();
     if (orgError) throw orgError;
     if (!organization) {
-      return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+      return NextResponse.json({ error: "Organization not found", code: "ORGANIZATION_NOT_FOUND" }, { status: 404 });
     }
 
     const { data: updated, error: updateError } = await db
@@ -188,6 +200,6 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ organization: updated });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Error removing logo";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json({ error: message, code: "BAD_REQUEST" }, { status: 400 });
   }
 }
