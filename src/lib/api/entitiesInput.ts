@@ -31,3 +31,35 @@ export function normalizeFieldValues(fieldValues: unknown[]): FieldValueInput[] 
       value_text: String(fv.value_text).trim(),
     }));
 }
+
+export function parseEntityUpdateBody(body: unknown) {
+  const payload = (body ?? {}) as Record<string, unknown>;
+  const name = payload.name != null ? String(payload.name).trim() : null;
+  const tracksUsage = payload.tracks_usage != null ? Boolean(payload.tracks_usage) : null;
+  const fieldValues = Array.isArray(payload.field_values) ? (payload.field_values as unknown[]) : null;
+
+  return { name, tracksUsage, fieldValues };
+}
+
+export function splitUpdateFieldValues(fieldValues: unknown[]) {
+  const normalized = fieldValues.map((fv) => {
+    const row = (fv ?? {}) as Record<string, unknown>;
+    return {
+      entity_field_id: String(row.entity_field_id ?? "").trim(),
+      value_text: row.value_text == null ? "" : String(row.value_text),
+    };
+  });
+
+  const toUpsert = normalized
+    .filter((fv) => fv.entity_field_id && String(fv.value_text ?? "").trim() !== "")
+    .map((fv) => ({
+      entity_field_id: fv.entity_field_id,
+      value_text: String(fv.value_text).trim(),
+    }));
+
+  const toDeleteIds = normalized
+    .filter((fv) => fv.entity_field_id && String(fv.value_text ?? "").trim() === "")
+    .map((fv) => fv.entity_field_id);
+
+  return { toUpsert, toDeleteIds };
+}

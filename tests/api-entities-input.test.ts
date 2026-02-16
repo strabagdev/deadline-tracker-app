@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeFieldValues, parseEntityCreateBody } from "../src/lib/api/entitiesInput";
+import {
+  normalizeFieldValues,
+  parseEntityCreateBody,
+  parseEntityUpdateBody,
+  splitUpdateFieldValues,
+} from "../src/lib/api/entitiesInput";
 
 test("parseEntityCreateBody valida nombre y tipo", () => {
   const bad = parseEntityCreateBody({});
@@ -29,4 +34,22 @@ test("normalizeFieldValues filtra vacios y trimea", () => {
 
   assert.equal(rows.length, 1);
   assert.deepEqual(rows[0], { entity_field_id: "f1", value_text: "abc" });
+});
+
+test("parseEntityUpdateBody y splitUpdateFieldValues separan upsert/delete", () => {
+  const parsed = parseEntityUpdateBody({
+    name: "Nuevo",
+    tracks_usage: false,
+    field_values: [
+      { entity_field_id: "f1", value_text: "abc" },
+      { entity_field_id: "f2", value_text: " " },
+    ],
+  });
+  assert.equal(parsed.name, "Nuevo");
+  assert.equal(parsed.tracksUsage, false);
+
+  const split = splitUpdateFieldValues(parsed.fieldValues ?? []);
+  assert.equal(split.toUpsert.length, 1);
+  assert.equal(split.toDeleteIds.length, 1);
+  assert.equal(split.toDeleteIds[0], "f2");
 });
