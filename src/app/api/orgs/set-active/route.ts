@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unauthorized";
+}
+
 export async function POST(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
@@ -40,9 +44,9 @@ export async function POST(req: Request) {
     if (setErr) throw setErr;
 
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
+  } catch (e: unknown) {
     return NextResponse.json(
-      { error: e?.message ?? "Unauthorized" },
+      { error: getErrorMessage(e) },
       { status: 401 }
     );
   }

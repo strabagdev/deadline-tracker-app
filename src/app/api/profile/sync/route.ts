@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "error";
+}
+
 export async function POST(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
@@ -21,7 +25,7 @@ export async function POST(req: Request) {
     if (error) throw error;
 
     return NextResponse.json({ ok: true, user_id: user.id, email });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
   }
 }
