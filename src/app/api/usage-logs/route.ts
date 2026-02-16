@@ -87,12 +87,15 @@ export async function GET(req: Request) {
     const db = createDataServerClient();
     const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
     }
     const response = await handleUsageLogsGet(access.organizationId, req.url, makeRepo(db));
     return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
 
@@ -106,13 +109,16 @@ export async function POST(req: Request) {
     const db = createDataServerClient();
     const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
     }
     const body = await req.json().catch(() => ({}));
     const response = await handleUsageLogsPost(access.organizationId, body, makeRepo(db));
     return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
 
@@ -125,11 +131,14 @@ export async function DELETE(req: Request) {
     const db = createDataServerClient();
     const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
     }
     const response = await handleUsageLogsDelete(access.organizationId, req.url, makeRepo(db));
     return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

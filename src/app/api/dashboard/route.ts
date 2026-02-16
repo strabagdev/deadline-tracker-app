@@ -105,7 +105,10 @@ export async function GET(req: Request) {
     const db = createDataServerClient();
     const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
     }
     const orgId = access.organizationId;
 
@@ -253,6 +256,6 @@ export async function GET(req: Request) {
       latest_usage_by_entity: latestUsageByEntity,
     });
   } catch (e: unknown) {
-    return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(e), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

@@ -127,7 +127,10 @@ export async function GET(req: Request) {
     const db = createDataServerClient();
     const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
     }
     const orgId = access.organizationId;
 
@@ -221,7 +224,7 @@ export async function GET(req: Request) {
       },
     });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
 
@@ -231,13 +234,16 @@ export async function POST(req: Request) {
     const db = createDataServerClient();
     const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
     }
     const body = await req.json().catch(() => ({}));
     const response = await handleEntitiesPost(access.organizationId, body, makeRepo(db));
     return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
 
@@ -247,7 +253,10 @@ export async function PUT(req: Request) {
     const db = createDataServerClient();
     const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
     }
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
@@ -255,7 +264,7 @@ export async function PUT(req: Request) {
     const response = await handleEntitiesPut(access.organizationId, id ?? "", body, makeRepo(db));
     return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
 
@@ -265,13 +274,16 @@ export async function DELETE(req: Request) {
     const db = createDataServerClient();
     const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
     }
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
     const response = await handleEntitiesDelete(access.organizationId, id ?? "", makeRepo(db));
     return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
