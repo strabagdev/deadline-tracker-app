@@ -6,9 +6,13 @@ import {
   computeDateStatus,
   computeUsageStatus,
   normalizeDeadlinesMode,
-  numOrNaN,
 } from "@/lib/api/deadlinesComputations";
-import { handleDeadlinesPost, type DeadlinesRepo } from "@/lib/api/deadlinesService";
+import {
+  handleDeadlinesDelete,
+  handleDeadlinesPost,
+  handleDeadlinesPut,
+  type DeadlinesRepo,
+} from "@/lib/api/deadlinesService";
 
 type MeasureBy = "date" | "usage";
 type DataClient = ReturnType<typeof createDataServerClient>;
@@ -41,14 +45,6 @@ type DeadlineRow = {
   created_at: string;
   deadline_types?: DeadlineTypeRow | null;
   measure_by?: MeasureBy | null;
-};
-
-type ExistingDeadlineRow = {
-  id: string;
-  entity_id: string;
-  deadline_type_id: string;
-  usage_daily_average_mode: string | null;
-  deadline_types?: DeadlineTypeRow | null;
 };
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -195,6 +191,29 @@ async function attachComputed(db: DataClient, orgId: string, entityId: string, d
 
 function makeDeadlinesRepo(db: DataClient): DeadlinesRepo {
   return {
+    getDeadlineById: async (orgId, id) => {
+      const { data, error } = await db
+        .from("deadlines")
+        .select(
+          `
+          id,
+          entity_id,
+          deadline_type_id,
+          usage_daily_average_mode,
+          deadline_types(id, name, measure_by, requires_document, is_active)
+        `
+        )
+        .eq("organization_id", orgId)
+        .eq("id", id)
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as {
+        id: string;
+        entity_id: string;
+        deadline_type_id: string;
+        usage_daily_average_mode: string | null;
+      } | null;
+    },
     getEntity: async (orgId, entityId) => {
       const entity = await getEntity(db, orgId, entityId);
       if (!entity) return null;
@@ -243,6 +262,14 @@ function makeDeadlinesRepo(db: DataClient): DeadlinesRepo {
       if (error) throw error;
       return { id: String(data?.id ?? "") };
     },
+    updateDeadline: async (orgId, id, patch) => {
+      const { error } = await db.from("deadlines").update(patch).eq("organization_id", orgId).eq("id", id);
+      if (error) throw error;
+    },
+    deleteDeadline: async (orgId, id) => {
+      const { error } = await db.from("deadlines").delete().eq("organization_id", orgId).eq("id", id);
+      if (error) throw error;
+    },
   };
 }
 
@@ -265,10 +292,10 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url);
     const entityId = url.searchParams.get("entity_id");
-    if (!entityId) return NextResponse.json({ error: "entity_id required" }, { status: 400 });
+    if (!entityId) return NextResponse.json({ error: "entity_id required", code: "BAD_REQUEST" }, { status: 400 });
 
     const entity = await getEntity(db, orgId, entityId);
-    if (!entity) return NextResponse.json({ error: "entity not found" }, { status: 404 });
+    if (!entity) return NextResponse.json({ error: "entity not found", code: "ENTITY_NOT_FOUND" }, { status: 404 });
 
     const { data, error } = await db
       .from("deadlines")
@@ -332,117 +359,9 @@ export async function PUT(req: Request) {
         { status: access.error === "no active organization" ? 400 : 403 }
       );
     }
-    const orgId = access.organizationId;
-
     const body = await req.json().catch(() => ({}));
-    const id = String(body?.id ?? "").trim();
-    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-
-    const { data: existing, error: exErr } = await db
-      .from("deadlines")
-      .select(
-        `
-        id,
-        entity_id,
-        deadline_type_id,
-        usage_daily_average_mode,
-        deadline_types(id, name, measure_by, requires_document, is_active)
-      `
-      )
-      .eq("organization_id", orgId)
-      .eq("id", id)
-      .maybeSingle();
-    if (exErr) throw exErr;
-    const existingRow = existing as ExistingDeadlineRow | null;
-    if (!existingRow) return NextResponse.json({ error: "not found" }, { status: 404 });
-
-    const entity = await getEntity(db, orgId, existingRow.entity_id);
-    if (!entity) return NextResponse.json({ error: "entity not found" }, { status: 404 });
-
-    const dt = await getDeadlineType(db, orgId, existingRow.deadline_type_id);
-    if (!dt) return NextResponse.json({ error: "deadline type not found" }, { status: 404 });
-
-    const measureBy = dt.measure_by as MeasureBy;
-
-    const patch: Record<string, string | number | null> = {
-      // legacy columns
-      title: dt.name,
-      measure_by: measureBy,
-    };
-
-    const lastDoneDate = body?.last_done_date !== undefined ? (body?.last_done_date ? String(body.last_done_date) : null) : undefined;
-    if (lastDoneDate !== undefined) patch.last_done_date = lastDoneDate;
-
-    if (measureBy === "date") {
-      const nextDueDate =
-        body?.next_due_date !== undefined ? (body?.next_due_date ? String(body.next_due_date) : null) : undefined;
-
-      if (nextDueDate !== undefined && !nextDueDate) {
-        return NextResponse.json({ error: "next_due_date required for type measure_by=date" }, { status: 400 });
-      }
-      if (nextDueDate !== undefined) patch.next_due_date = nextDueDate;
-
-      // ensure usage fields are null-ish when editing date-based (keeps data clean but doesn't break older rows)
-      patch.last_done_usage = null;
-      patch.frequency = null;
-      patch.frequency_unit = null;
-      patch.usage_daily_average = null;
-      // Column is NOT NULL in DB; keep a valid sentinel mode for date-based deadlines.
-      patch.usage_daily_average_mode = "manual";
-
-      const { error } = await db.from("deadlines").update(patch).eq("organization_id", orgId).eq("id", id);
-      if (error) throw error;
-
-      return NextResponse.json({ ok: true });
-    }
-
-    // usage
-    if (!entity.tracks_usage) {
-      return NextResponse.json(
-        { error: "entity does not track usage; cannot update a usage-based deadline", code: "TRACKS_USAGE_FALSE" },
-        { status: 400 }
-      );
-    }
-
-    const mode =
-      body?.usage_daily_average_mode !== undefined
-        ? normalizeDeadlinesMode(body?.usage_daily_average_mode)
-        : normalizeDeadlinesMode(existingRow.usage_daily_average_mode);
-
-    const lastDoneUsage = body?.last_done_usage !== undefined ? numOrNaN(body?.last_done_usage) : NaN;
-    const frequency = body?.frequency !== undefined ? numOrNaN(body?.frequency) : NaN;
-    const frequencyUnit = body?.frequency_unit !== undefined ? (body?.frequency_unit ? String(body.frequency_unit) : "") : undefined;
-    const usageDailyAverage = body?.usage_daily_average !== undefined ? numOrNaN(body?.usage_daily_average) : NaN;
-
-    if (body?.last_done_usage !== undefined && !Number.isFinite(lastDoneUsage))
-      return NextResponse.json({ error: "last_done_usage must be a number" }, { status: 400 });
-    if (body?.frequency !== undefined && !Number.isFinite(frequency))
-      return NextResponse.json({ error: "frequency must be a number" }, { status: 400 });
-    if (body?.frequency_unit !== undefined && !frequencyUnit)
-      return NextResponse.json({ error: "frequency_unit required" }, { status: 400 });
-
-    if (mode === "manual" && body?.usage_daily_average_mode !== undefined) {
-      // if user explicitly switches to manual, require avg on the same request
-      if (!Number.isFinite(usageDailyAverage) || usageDailyAverage <= 0) {
-        return NextResponse.json(
-          { error: "usage_daily_average required when switching to usage_daily_average_mode=manual" },
-          { status: 400 }
-        );
-      }
-    }
-
-    patch.usage_daily_average_mode = mode;
-
-    if (body?.last_done_usage !== undefined) patch.last_done_usage = lastDoneUsage;
-    if (body?.frequency !== undefined) patch.frequency = frequency;
-    if (body?.frequency_unit !== undefined) patch.frequency_unit = frequencyUnit;
-    if (body?.usage_daily_average !== undefined)
-      patch.usage_daily_average = Number.isFinite(usageDailyAverage) && usageDailyAverage > 0 ? usageDailyAverage : null;
-
-    const { error } = await db.from("deadlines").update(patch).eq("organization_id", orgId).eq("id", id);
-    if (error) throw error;
-
-    return NextResponse.json({ ok: true });
+    const response = await handleDeadlinesPut(access.organizationId, body, makeDeadlinesRepo(db));
+    return NextResponse.json(response.body, { status: response.status });
   } catch (e: unknown) {
     return NextResponse.json({ error: getErrorMessage(e), code: "INTERNAL_ERROR" }, { status: 500 });
   }
@@ -459,16 +378,10 @@ export async function DELETE(req: Request) {
         { status: access.error === "no active organization" ? 400 : 403 }
       );
     }
-    const orgId = access.organizationId;
-
     const url = new URL(req.url);
     const id = String(url.searchParams.get("id") ?? "").trim();
-    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-
-    const { error } = await db.from("deadlines").delete().eq("organization_id", orgId).eq("id", id);
-    if (error) throw error;
-
-    return NextResponse.json({ ok: true });
+    const response = await handleDeadlinesDelete(access.organizationId, id, makeDeadlinesRepo(db));
+    return NextResponse.json(response.body, { status: response.status });
   } catch (e: unknown) {
     return NextResponse.json({ error: getErrorMessage(e), code: "INTERNAL_ERROR" }, { status: 500 });
   }
