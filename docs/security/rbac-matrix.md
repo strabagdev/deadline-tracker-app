@@ -48,4 +48,6 @@
 
 ## Notes
 - Esta matriz documenta el baseline actual de código.
-- Recomendación siguiente: forzar consistencia por helper central (`requireOrgRole`) para evitar drift entre endpoints.
+- Avance Sprint 1: helper central implementado en `src/lib/server/orgAccess.ts`.
+- Endpoints ya migrados al helper: `entity-types`, `entity-fields`, `deadline-types`, `settings/semaphore`.
+- Pendiente: migrar progresivamente el resto de endpoints de dominio para eliminar duplicación de checks.

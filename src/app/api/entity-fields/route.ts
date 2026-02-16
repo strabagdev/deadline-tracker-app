@@ -1,39 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-
-type DataServerClient = ReturnType<typeof createDataServerClient>;
+import { getAdminOrgAccess, getOrgAccess } from "@/lib/server/orgAccess";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return "error";
-}
-
-async function getActiveOrgId(db: DataServerClient, userId: string) {
-  const { data, error } = await db
-    .from("user_settings")
-    .select("active_organization_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return (data?.active_organization_id as string) || null;
-}
-
-async function requireMember(db: DataServerClient, organizationId: string, userId: string) {
-  const { data, error } = await db
-    .from("organization_members")
-    .select("role")
-    .eq("organization_id", organizationId)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data?.role ?? null;
-}
-
-function isAdminRole(role: string | null) {
-  return role === "owner" || role === "admin";
 }
 
 function toSlugKey(input: string) {
@@ -49,12 +21,10 @@ export async function GET(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-
-    const orgId = await getActiveOrgId(db, user.id);
-    if (!orgId) return NextResponse.json({ error: "no active organization" }, { status: 400 });
-
-    const role = await requireMember(db, orgId, user.id);
-    if (!role) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    const access = await getOrgAccess(db, user.id);
+    if ("error" in access) {
+      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+    }
 
     const url = new URL(req.url);
     const entityTypeId = url.searchParams.get("entity_type_id");
@@ -63,7 +33,7 @@ export async function GET(req: Request) {
     const { data, error } = await db
       .from("entity_fields")
       .select("id, entity_type_id, name, key, field_type, show_in_card, options, created_at")
-      .eq("organization_id", orgId)
+      .eq("organization_id", access.organizationId)
       .eq("entity_type_id", entityTypeId)
       .order("created_at", { ascending: true });
 
@@ -78,12 +48,12 @@ export async function POST(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-
-    const orgId = await getActiveOrgId(db, user.id);
-    if (!orgId) return NextResponse.json({ error: "no active organization" }, { status: 400 });
-
-    const role = await requireMember(db, orgId, user.id);
-    if (!isAdminRole(role)) return NextResponse.json({ error: "admin required" }, { status: 403 });
+    const access = await getAdminOrgAccess(db, user.id);
+    if ("error" in access) {
+      const status = access.error === "no active organization" ? 400 : 403;
+      const error = access.error === "forbidden" ? "admin required" : access.error;
+      return NextResponse.json({ error }, { status });
+    }
 
     const body = await req.json().catch(() => ({}));
     const entityTypeId = String(body?.entity_type_id ?? "").trim();
@@ -108,7 +78,7 @@ export async function POST(req: Request) {
     const { data, error } = await db
       .from("entity_fields")
       .insert({
-        organization_id: orgId,
+        organization_id: access.organizationId,
         entity_type_id: entityTypeId,
         name,
         key,
@@ -130,12 +100,12 @@ export async function PUT(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-
-    const orgId = await getActiveOrgId(db, user.id);
-    if (!orgId) return NextResponse.json({ error: "no active organization" }, { status: 400 });
-
-    const role = await requireMember(db, orgId, user.id);
-    if (!isAdminRole(role)) return NextResponse.json({ error: "admin required" }, { status: 403 });
+    const access = await getAdminOrgAccess(db, user.id);
+    if ("error" in access) {
+      const status = access.error === "no active organization" ? 400 : 403;
+      const error = access.error === "forbidden" ? "admin required" : access.error;
+      return NextResponse.json({ error }, { status });
+    }
 
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
@@ -144,7 +114,7 @@ export async function PUT(req: Request) {
     const { data: existing, error: existingErr } = await db
       .from("entity_fields")
       .select("id, organization_id, name, key, field_type, show_in_card, options")
-      .eq("organization_id", orgId)
+      .eq("organization_id", access.organizationId)
       .eq("id", id)
       .maybeSingle();
 
@@ -190,7 +160,7 @@ export async function PUT(req: Request) {
     const { data, error } = await db
       .from("entity_fields")
       .update(patch)
-      .eq("organization_id", orgId)
+      .eq("organization_id", access.organizationId)
       .eq("id", id)
       .select("id, entity_type_id, name, key, field_type, show_in_card, options, created_at")
       .single();

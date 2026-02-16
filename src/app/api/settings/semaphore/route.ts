@@ -1,34 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-
-type DataClient = ReturnType<typeof createDataServerClient>;
+import { getAdminOrgAccess, getOrgAccess } from "@/lib/server/orgAccess";
 
 function getErrorMessage(err: unknown) {
   return err instanceof Error ? err.message : "error";
-}
-
-async function getActiveOrgId(db: DataClient, userId: string) {
-  const { data, error } = await db
-    .from("user_settings")
-    .select("active_organization_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return (data?.active_organization_id as string) || null;
-}
-
-async function getMemberRole(db: DataClient, organizationId: string, userId: string) {
-  const { data, error } = await db
-    .from("organization_members")
-    .select("role")
-    .eq("organization_id", organizationId)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return (data?.role as string) || null;
 }
 
 function validateThresholds(y: number, o: number, r: number) {
@@ -43,33 +19,31 @@ export async function GET(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-
-    const orgId = await getActiveOrgId(db, user.id);
-    if (!orgId) return NextResponse.json({ error: "no active organization" }, { status: 400 });
-
-    const role = await getMemberRole(db, orgId, user.id);
-    if (!role) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    const access = await getOrgAccess(db, user.id);
+    if ("error" in access) {
+      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+    }
 
     const { data, error } = await db
       .from("organization_settings")
       .select(
         "organization_id, yellow_days, orange_days, red_days, updated_at"
       )
-      .eq("organization_id", orgId)
+      .eq("organization_id", access.organizationId)
       .maybeSingle();
 
     if (error) throw error;
 
     const settings =
       data ?? ({
-        organization_id: orgId,
+        organization_id: access.organizationId,
         yellow_days: 60,
         orange_days: 30,
         red_days: 15,
         updated_at: null,
       } as const);
 
-    return NextResponse.json({ organization_id: orgId, role, settings });
+    return NextResponse.json({ organization_id: access.organizationId, role: access.role, settings });
   } catch (e: unknown) {
     return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
   }
@@ -79,14 +53,11 @@ export async function PUT(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-
-    const orgId = await getActiveOrgId(db, user.id);
-    if (!orgId) return NextResponse.json({ error: "no active organization" }, { status: 400 });
-
-    const role = await getMemberRole(db, orgId, user.id);
-    if (!role) return NextResponse.json({ error: "forbidden" }, { status: 403 });
-    if (role !== "owner" && role !== "admin") {
-      return NextResponse.json({ error: "admin/owner only" }, { status: 403 });
+    const access = await getAdminOrgAccess(db, user.id);
+    if ("error" in access) {
+      const status = access.error === "no active organization" ? 400 : 403;
+      const error = access.error === "forbidden" ? "admin/owner only" : access.error;
+      return NextResponse.json({ error }, { status });
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -100,7 +71,7 @@ export async function PUT(req: Request) {
 
     const { error: upErr } = await db.from("organization_settings").upsert(
       {
-        organization_id: orgId,
+        organization_id: access.organizationId,
         yellow_days: yellow,
         orange_days: orange,
         red_days: red,
@@ -116,12 +87,12 @@ export async function PUT(req: Request) {
       .select(
         "organization_id, yellow_days, orange_days, red_days, updated_at"
       )
-      .eq("organization_id", orgId)
+      .eq("organization_id", access.organizationId)
       .maybeSingle();
 
     if (error) throw error;
 
-    return NextResponse.json({ organization_id: orgId, role, settings: data });
+    return NextResponse.json({ organization_id: access.organizationId, role: access.role, settings: data });
   } catch (e: unknown) {
     return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
   }
