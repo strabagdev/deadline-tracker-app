@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { isSuperAdmin } from "@/lib/server/superAdmin";
+import { parseOrganizationIdPayload } from "@/lib/api/platformAdminInput";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
@@ -17,8 +18,9 @@ export async function DELETE(req: Request) {
     if (!allowed) return NextResponse.json({ error: "super admin only", code: "FORBIDDEN" }, { status: 403 });
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const organizationId = String(body.organizationId ?? "").trim();
-    if (!organizationId) return NextResponse.json({ error: "organizationId required", code: "BAD_REQUEST" }, { status: 400 });
+    const parsed = parseOrganizationIdPayload(body);
+    if (!parsed.ok) return NextResponse.json(parsed.body, { status: parsed.status });
+    const { organizationId } = parsed;
 
     const { data: org, error: orgErr } = await db
       .from("organizations")

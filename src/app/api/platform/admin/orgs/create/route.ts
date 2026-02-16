@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { isSuperAdmin } from "@/lib/server/superAdmin";
+import { parseOrganizationNamePayload } from "@/lib/api/platformAdminInput";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
@@ -19,11 +20,9 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const organizationName = String(body.organizationName || "").trim();
-
-    if (organizationName.length < 2) {
-      return NextResponse.json({ error: "organizationName required (min 2 chars)", code: "BAD_REQUEST" }, { status: 400 });
-    }
+    const parsed = parseOrganizationNamePayload(body);
+    if (!parsed.ok) return NextResponse.json(parsed.body, { status: parsed.status });
+    const { organizationName } = parsed;
 
     const { data: org, error: orgErr } = await db
       .from("organizations")

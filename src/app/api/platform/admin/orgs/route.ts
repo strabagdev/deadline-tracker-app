@@ -3,6 +3,10 @@ import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { isSuperAdmin } from "@/lib/server/superAdmin";
 import { createClient } from "@supabase/supabase-js";
+import {
+  parseAssignOwnerPayload,
+  parseRemoveOwnerPayload,
+} from "@/lib/api/platformAdminInput";
 
 type OrgRow = {
   id: string;
@@ -135,11 +139,9 @@ export async function PUT(req: Request) {
     if (!allowed) return NextResponse.json({ error: "super admin only", code: "FORBIDDEN" }, { status: 403 });
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const organizationId = String(body.organizationId ?? "").trim();
-    const ownerEmail = String(body.ownerEmail ?? "").trim().toLowerCase();
-
-    if (!organizationId) return NextResponse.json({ error: "organizationId required", code: "BAD_REQUEST" }, { status: 400 });
-    if (!ownerEmail) return NextResponse.json({ error: "ownerEmail required", code: "BAD_REQUEST" }, { status: 400 });
+    const parsed = parseAssignOwnerPayload(body);
+    if (!parsed.ok) return NextResponse.json(parsed.body, { status: parsed.status });
+    const { organizationId, ownerEmail } = parsed;
 
     const { data: org, error: orgErr } = await db
       .from("organizations")
@@ -208,11 +210,9 @@ export async function DELETE(req: Request) {
     if (!allowed) return NextResponse.json({ error: "super admin only", code: "FORBIDDEN" }, { status: 403 });
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const organizationId = String(body.organizationId ?? "").trim();
-    const ownerUserId = String(body.ownerUserId ?? "").trim();
-
-    if (!organizationId) return NextResponse.json({ error: "organizationId required", code: "BAD_REQUEST" }, { status: 400 });
-    if (!ownerUserId) return NextResponse.json({ error: "ownerUserId required", code: "BAD_REQUEST" }, { status: 400 });
+    const parsed = parseRemoveOwnerPayload(body);
+    if (!parsed.ok) return NextResponse.json(parsed.body, { status: parsed.status });
+    const { organizationId, ownerUserId } = parsed;
 
     const { data: target, error: targetErr } = await db
       .from("organization_members")

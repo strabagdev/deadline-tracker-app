@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { isSuperAdmin } from "@/lib/server/superAdmin";
+import { parsePlatformInvitePayload } from "@/lib/api/platformAdminInput";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
@@ -20,15 +21,9 @@ export async function POST(req: Request) {
     if (!allowed) return NextResponse.json({ error: "super admin only", code: "FORBIDDEN" }, { status: 403 });
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const organizationId = String(body.organizationId ?? "").trim();
-    const email = String(body.email ?? "").trim().toLowerCase();
-    const role = String(body.role ?? "member").trim().toLowerCase();
-
-    if (!organizationId) return NextResponse.json({ error: "organizationId required", code: "BAD_REQUEST" }, { status: 400 });
-    if (!email) return NextResponse.json({ error: "email required", code: "BAD_REQUEST" }, { status: 400 });
-    if (!VALID_ROLES.includes(role as (typeof VALID_ROLES)[number])) {
-      return NextResponse.json({ error: "invalid role", code: "BAD_REQUEST" }, { status: 400 });
-    }
+    const parsed = parsePlatformInvitePayload(body, VALID_ROLES);
+    if (!parsed.ok) return NextResponse.json(parsed.body, { status: parsed.status });
+    const { organizationId, email, role } = parsed;
 
     const { data: org, error: orgErr } = await db
       .from("organizations")
