@@ -49,5 +49,13 @@
 ## Notes
 - Esta matriz documenta el baseline actual de código.
 - Avance Sprint 1: helper central implementado en `src/lib/server/orgAccess.ts`.
-- Endpoints ya migrados al helper: `entity-types`, `entity-fields`, `deadline-types`, `settings/semaphore`.
-- Pendiente: migrar progresivamente el resto de endpoints de dominio para eliminar duplicación de checks.
+- Endpoints ya migrados al helper:
+  - `entity-types`
+  - `entity-fields`
+  - `deadline-types`
+  - `settings/semaphore`
+  - `dashboard`
+  - `entities`
+  - `deadlines`
+  - `usage-logs`
+- Pendiente: migrar endpoints restantes de org/admin para unificar por completo.

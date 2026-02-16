@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
+import { getOrgAccess } from "@/lib/server/orgAccess";
 
 /**
  * Phase 1.3
@@ -8,39 +9,15 @@ import { createDataServerClient } from "@/lib/supabase/dataServer";
  * - Uses query param ?id= to avoid dynamic route type validation issues.
  */
 
-async function getActiveOrgId(db: any, userId: string) {
-  const { data, error } = await db
-    .from("user_settings")
-    .select("active_organization_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return (data?.active_organization_id as string) || null;
-}
-
-async function requireMember(db: any, organizationId: string, userId: string) {
-  const { data, error } = await db
-    .from("organization_members")
-    .select("role")
-    .eq("organization_id", organizationId)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data?.role ?? null;
-}
-
 export async function GET(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-
-    const orgId = await getActiveOrgId(db, user.id);
-    if (!orgId) return NextResponse.json({ error: "no active organization" }, { status: 400 });
-
-    const role = await requireMember(db, orgId, user.id);
-    if (!role) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    const access = await getOrgAccess(db, user.id);
+    if ("error" in access) {
+      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+    }
+    const orgId = access.organizationId;
 
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
@@ -140,12 +117,11 @@ export async function POST(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-
-    const orgId = await getActiveOrgId(db, user.id);
-    if (!orgId) return NextResponse.json({ error: "no active organization" }, { status: 400 });
-
-    const role = await requireMember(db, orgId, user.id);
-    if (!role) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    const access = await getOrgAccess(db, user.id);
+    if ("error" in access) {
+      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+    }
+    const orgId = access.organizationId;
 
     const body = await req.json().catch(() => ({}));
     const name = String(body?.name ?? "").trim();
@@ -197,12 +173,11 @@ export async function PUT(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-
-    const orgId = await getActiveOrgId(db, user.id);
-    if (!orgId) return NextResponse.json({ error: "no active organization" }, { status: 400 });
-
-    const role = await requireMember(db, orgId, user.id);
-    if (!role) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    const access = await getOrgAccess(db, user.id);
+    if ("error" in access) {
+      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+    }
+    const orgId = access.organizationId;
 
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
@@ -289,12 +264,11 @@ export async function DELETE(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-
-    const orgId = await getActiveOrgId(db, user.id);
-    if (!orgId) return NextResponse.json({ error: "no active organization" }, { status: 400 });
-
-    const role = await requireMember(db, orgId, user.id);
-    if (!role) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    const access = await getOrgAccess(db, user.id);
+    if ("error" in access) {
+      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+    }
+    const orgId = access.organizationId;
 
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
