@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
+import { getMemberRole, getOrgAccess } from "@/lib/server/orgAccess";
 
 const ORG_LOGO_BUCKET = "organization-assets";
 const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024;
@@ -10,33 +11,6 @@ const ALLOWED_MIME_TYPES = [
   "image/webp",
   "image/svg+xml",
 ];
-
-async function getActiveOrganizationId(db: ReturnType<typeof createDataServerClient>, userId: string) {
-  const { data, error } = await db
-    .from("user_settings")
-    .select("active_organization_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data?.active_organization_id ?? null;
-}
-
-async function getMembershipRole(
-  db: ReturnType<typeof createDataServerClient>,
-  userId: string,
-  organizationId: string
-) {
-  const { data, error } = await db
-    .from("organization_members")
-    .select("role")
-    .eq("organization_id", organizationId)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data?.role ?? null;
-}
 
 function buildLogoPath(organizationId: string, originalName: string) {
   const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -70,16 +44,14 @@ export async function GET(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-
-    const organizationId = await getActiveOrganizationId(db, user.id);
-    if (!organizationId) {
+    const access = await getOrgAccess(db, user.id);
+    if ("error" in access && access.error === "no active organization") {
       return NextResponse.json({ organization: null, role: null });
     }
-
-    const role = await getMembershipRole(db, user.id, organizationId);
-    if (!role) {
+    if ("error" in access) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    const organizationId = access.organizationId;
 
     const { data: organization, error: orgError } = await db
       .from("organizations")
@@ -89,7 +61,7 @@ export async function GET(req: Request) {
 
     if (orgError) throw orgError;
 
-    return NextResponse.json({ organization: organization ?? null, role });
+    return NextResponse.json({ organization: organization ?? null, role: access.role });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unauthorized";
     return NextResponse.json({ error: message }, { status: 401 });
@@ -100,13 +72,12 @@ export async function POST(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-
-    const organizationId = await getActiveOrganizationId(db, user.id);
-    if (!organizationId) {
-      return NextResponse.json({ error: "No active organization" }, { status: 400 });
+    const access = await getOrgAccess(db, user.id);
+    if ("error" in access) {
+      return NextResponse.json({ error: access.error === "no active organization" ? "No active organization" : "Forbidden" }, { status: access.error === "no active organization" ? 400 : 403 });
     }
-
-    const role = await getMembershipRole(db, user.id, organizationId);
+    const organizationId = access.organizationId;
+    const role = await getMemberRole(db, organizationId, user.id);
     if (role !== "owner") {
       return NextResponse.json({ error: "Only owner can update organization logo" }, { status: 403 });
     }
@@ -179,13 +150,12 @@ export async function DELETE(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-
-    const organizationId = await getActiveOrganizationId(db, user.id);
-    if (!organizationId) {
-      return NextResponse.json({ error: "No active organization" }, { status: 400 });
+    const access = await getOrgAccess(db, user.id);
+    if ("error" in access) {
+      return NextResponse.json({ error: access.error === "no active organization" ? "No active organization" : "Forbidden" }, { status: access.error === "no active organization" ? 400 : 403 });
     }
-
-    const role = await getMembershipRole(db, user.id, organizationId);
+    const organizationId = access.organizationId;
+    const role = await getMemberRole(db, organizationId, user.id);
     if (role !== "owner") {
       return NextResponse.json({ error: "Only owner can update organization logo" }, { status: 403 });
     }

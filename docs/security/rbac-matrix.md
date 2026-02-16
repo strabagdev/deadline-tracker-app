@@ -58,4 +58,7 @@
   - `entities`
   - `deadlines`
   - `usage-logs`
+- `org/admin` también alineado:
+  - `orgs/branding` usa helper central para org activa/membership.
+  - `adminOrgAccess` delega en helper central para evitar drift.
 - Pendiente: migrar endpoints restantes de org/admin para unificar por completo.
