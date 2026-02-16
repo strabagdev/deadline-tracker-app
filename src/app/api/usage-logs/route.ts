@@ -2,18 +2,13 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { getOrgAccess } from "@/lib/server/orgAccess";
+import { parseUsageLogsCreateBody, parseUsageLogsGetParams } from "@/lib/api/usageLogsInput";
 
 type DataClient = ReturnType<typeof createDataServerClient>;
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return "error";
-}
-
-function numOrNaN(v: unknown) {
-  if (v == null) return NaN;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : NaN;
 }
 
 async function requireEntityInOrg(db: DataClient, orgId: string, entityId: string) {
@@ -52,10 +47,9 @@ export async function GET(req: Request) {
     const orgId = access.organizationId;
 
     const url = new URL(req.url);
-    const entityId = String(url.searchParams.get("entity_id") ?? "").trim();
-    const limit = Math.min(Math.max(parseInt(String(url.searchParams.get("limit") ?? "10"), 10) || 10, 1), 100);
-
-    if (!entityId) return NextResponse.json({ error: "entity_id required" }, { status: 400 });
+    const parsed = parseUsageLogsGetParams(url);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const { entityId, limit } = parsed;
 
     const okEntity = await requireEntityInOrg(db, orgId, entityId);
     if (!okEntity) return NextResponse.json({ error: "entity not found" }, { status: 404 });
@@ -90,13 +84,9 @@ export async function POST(req: Request) {
     const orgId = access.organizationId;
 
     const body = await req.json().catch(() => ({}));
-
-    const entityId = String(body?.entity_id ?? "").trim();
-    const value = numOrNaN(body?.value);
-    const loggedAt = body?.logged_at ? String(body.logged_at) : new Date().toISOString();
-
-    if (!entityId) return NextResponse.json({ error: "entity_id required" }, { status: 400 });
-    if (!Number.isFinite(value)) return NextResponse.json({ error: "value required" }, { status: 400 });
+    const parsed = parseUsageLogsCreateBody(body);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const { entityId, value, loggedAt } = parsed;
 
     const okEntity = await requireEntityInOrg(db, orgId, entityId);
     if (!okEntity) return NextResponse.json({ error: "entity not found" }, { status: 404 });

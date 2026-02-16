@@ -13,7 +13,8 @@
   },
   "include": [
     "tests/**/*.ts",
-    "src/lib/deadlines/calculateDeadlineStatus.ts"
+    "src/lib/deadlines/calculateDeadlineStatus.ts",
+    "src/lib/api/**/*.ts"
   ],
   "exclude": ["node_modules", ".next"]
 }

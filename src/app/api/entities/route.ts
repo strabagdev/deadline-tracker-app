@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { getOrgAccess } from "@/lib/server/orgAccess";
+import {
+  normalizeFieldValues,
+  parseEntityCreateBody,
+  type FieldValueInput as FieldValueInputLib,
+} from "@/lib/api/entitiesInput";
 
 /**
  * Phase 1.3
@@ -38,10 +43,7 @@ type EntityFieldValueRow = {
   updated_at: string | null;
 };
 
-type FieldValueInput = {
-  entity_field_id: string;
-  value_text: string;
-};
+type FieldValueInput = FieldValueInputLib;
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
@@ -163,13 +165,9 @@ export async function POST(req: Request) {
     const orgId = access.organizationId;
 
     const body = await req.json().catch(() => ({}));
-    const name = String(body?.name ?? "").trim();
-    const entityTypeId = String(body?.entity_type_id ?? "").trim();
-    const tracksUsage = Boolean(body?.tracks_usage ?? false);
-    const fieldValues = Array.isArray(body?.field_values) ? body.field_values : [];
-
-    if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
-    if (!entityTypeId) return NextResponse.json({ error: "entity_type_id required" }, { status: 400 });
+    const parsed = parseEntityCreateBody(body);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const { name, entityTypeId, tracksUsage, fieldValues } = parsed;
 
     const { data: entity, error: insErr } = await db
       .from("entities")
@@ -184,13 +182,7 @@ export async function POST(req: Request) {
 
     if (insErr) throw insErr;
 
-    const rows = (fieldValues as FieldValueInput[])
-      .map((fv) => ({
-        entity_field_id: String(fv?.entity_field_id ?? "").trim(),
-        value_text: fv?.value_text == null ? "" : String(fv.value_text),
-      }))
-      .filter((fv) => fv.entity_field_id && String(fv.value_text ?? "").trim() !== "")
-      .map((fv) => ({
+    const rows = normalizeFieldValues(fieldValues).map((fv) => ({
         organization_id: orgId,
         entity_id: entity.id,
         entity_field_id: fv.entity_field_id,

@@ -2,9 +2,14 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { getOrgAccess } from "@/lib/server/orgAccess";
+import {
+  computeDateStatus,
+  computeUsageStatus,
+  normalizeDeadlinesMode,
+  numOrNaN,
+} from "@/lib/api/deadlinesComputations";
 
 type MeasureBy = "date" | "usage";
-type UsageDailyAverageMode = "manual" | "auto";
 type DataClient = ReturnType<typeof createDataServerClient>;
 
 type DeadlineTypeRow = {
@@ -51,31 +56,6 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "error";
 }
 
-function normalizeMode(val: unknown): UsageDailyAverageMode {
-  const s = String(val ?? "").trim().toLowerCase();
-  return s === "auto" ? "auto" : "manual";
-}
-
-function numOrNaN(v: unknown) {
-  if (v == null) return NaN;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : NaN;
-}
-
-function daysDiffFromNowISO(dateIso: string) {
-  const d = new Date(dateIso);
-  const now = new Date();
-  return Math.ceil((d.getTime() - now.getTime()) / MS_PER_DAY);
-}
-
-function semaphoreFromDays(days: number): "ok" | "warn" | "urgent" | "critical" | "expired" {
-  // thresholds: 60 / 30 / 15 / 0 (expired)
-  if (days <= 0) return "expired";
-  if (days <= 15) return "critical";
-  if (days <= 30) return "urgent";
-  if (days <= 60) return "warn";
-  return "ok";
-}
 
 async function getDeadlineType(db: DataClient, orgId: string, deadlineTypeId: string): Promise<DeadlineTypeRow | null> {
   const { data, error } = await db
@@ -156,62 +136,6 @@ async function computeAutoDailyAverage(db: DataClient, orgId: string, entityId: 
   return avg;
 }
 
-function computeUsageStatus(args: {
-  latestUsage: number | null;
-  lastDoneUsage: number | null;
-  frequency: number | null;
-  dailyAverage: number | null;
-}) {
-  const { latestUsage, lastDoneUsage, frequency, dailyAverage } = args;
-
-  if (!Number.isFinite(latestUsage as number)) {
-    return { status: "incomplete" as const, reason: "no_usage_logs" as const };
-  }
-  if (!Number.isFinite(lastDoneUsage as number) || !Number.isFinite(frequency as number)) {
-    return { status: "incomplete" as const, reason: "missing_deadline_fields" as const };
-  }
-  const usedSinceLast = (latestUsage as number) - (lastDoneUsage as number);
-  if (!Number.isFinite(usedSinceLast)) {
-    return { status: "incomplete" as const, reason: "bad_usage_values" as const };
-  }
-  const remainingUsage = (frequency as number) - usedSinceLast;
-
-  if (!Number.isFinite(dailyAverage as number) || (dailyAverage as number) <= 0) {
-    return {
-      status: "incomplete" as const,
-      reason: "missing_daily_average" as const,
-      used_since_last: usedSinceLast,
-      remaining_usage: remainingUsage,
-    };
-  }
-
-  const estimatedDays = remainingUsage / (dailyAverage as number);
-  if (!Number.isFinite(estimatedDays)) {
-    return { status: "incomplete" as const, reason: "bad_estimate" as const };
-  }
-
-  // If remaining is <= 0 => expired
-  const daysToDue = Math.floor(estimatedDays);
-
-  return {
-    status: "ok" as const,
-    used_since_last: usedSinceLast,
-    remaining_usage: remainingUsage,
-    estimated_days: estimatedDays,
-    days_to_due: daysToDue,
-    semaphore: semaphoreFromDays(daysToDue),
-  };
-}
-
-function computeDateStatus(nextDueDate: string | null) {
-  if (!nextDueDate) return { status: "incomplete" as const, reason: "missing_next_due_date" as const };
-  const daysToDue = daysDiffFromNowISO(nextDueDate);
-  return {
-    status: "ok" as const,
-    days_to_due: daysToDue,
-    semaphore: semaphoreFromDays(daysToDue),
-  };
-}
 
 async function attachComputed(db: DataClient, orgId: string, entityId: string, deadline: DeadlineRow) {
   const measureBy = (deadline?.deadline_types?.measure_by ?? deadline?.measure_by) as MeasureBy | undefined;
@@ -226,7 +150,7 @@ async function attachComputed(db: DataClient, orgId: string, entityId: string, d
   const latestUsage = latest?.value ?? null;
 
   // Hybrid daily average: manual from deadlines OR auto computed from usage_logs
-  const mode = normalizeMode(deadline?.usage_daily_average_mode);
+  const mode = normalizeDeadlinesMode(deadline?.usage_daily_average_mode);
   const manualAvg = Number.isFinite(Number(deadline?.usage_daily_average)) ? Number(deadline.usage_daily_average) : null;
 
   let effectiveAvg: number | null = null;
@@ -386,7 +310,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const mode = normalizeMode(body?.usage_daily_average_mode);
+    const mode = normalizeDeadlinesMode(body?.usage_daily_average_mode);
     const lastDoneUsage = numOrNaN(body?.last_done_usage);
     const frequency = numOrNaN(body?.frequency);
     const frequencyUnit = body?.frequency_unit ? String(body.frequency_unit) : "";
@@ -515,8 +439,8 @@ export async function PUT(req: Request) {
 
     const mode =
       body?.usage_daily_average_mode !== undefined
-        ? normalizeMode(body?.usage_daily_average_mode)
-        : normalizeMode(existingRow.usage_daily_average_mode);
+        ? normalizeDeadlinesMode(body?.usage_daily_average_mode)
+        : normalizeDeadlinesMode(existingRow.usage_daily_average_mode);
 
     const lastDoneUsage = body?.last_done_usage !== undefined ? numOrNaN(body?.last_done_usage) : NaN;
     const frequency = body?.frequency !== undefined ? numOrNaN(body?.frequency) : NaN;
