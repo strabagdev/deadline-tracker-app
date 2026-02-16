@@ -111,6 +111,37 @@ test("deadlines PUT rechaza usage si tracks_usage=false", async () => {
   assert.equal(res.body.code, "TRACKS_USAGE_FALSE");
 });
 
+test("deadlines PUT exige usage_daily_average al cambiar a manual", async () => {
+  const res = await handleDeadlinesPut(
+    "o1",
+    {
+      id: "d1",
+      usage_daily_average_mode: "manual",
+      last_done_usage: 100,
+      frequency: 50,
+      frequency_unit: "km",
+    },
+    repo({
+      getDeadlineType: async () => ({ id: "dt1", name: "Horas", measure_by: "usage", is_active: true }),
+      getDeadlineById: async () => ({ id: "d1", entity_id: "e1", deadline_type_id: "dt1", usage_daily_average_mode: "auto" }),
+    })
+  );
+  assert.equal(res.status, 400);
+  assert.equal(res.body.code, "BAD_REQUEST");
+});
+
+test("deadlines PUT valida tipo numerico en frequency", async () => {
+  const res = await handleDeadlinesPut(
+    "o1",
+    { id: "d1", frequency: "abc" },
+    repo({
+      getDeadlineType: async () => ({ id: "dt1", name: "Horas", measure_by: "usage", is_active: true }),
+    })
+  );
+  assert.equal(res.status, 400);
+  assert.equal(res.body.code, "BAD_REQUEST");
+});
+
 test("deadlines DELETE valida id", async () => {
   const res = await handleDeadlinesDelete("o1", "", repo());
   assert.equal(res.status, 400);
