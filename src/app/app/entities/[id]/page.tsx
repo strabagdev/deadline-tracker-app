@@ -5,6 +5,10 @@ import { useParams, useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 import EntityDeadlinesManager from "@/components/deadlines/EntityDeadlinesManager";
 import { Loader } from "@/components/ui/loader";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 
 type EntityDetail = {
   id: string;
@@ -46,7 +50,6 @@ export default function EntityDetailPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  // edit state
   const [editMode, setEditMode] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [draftTracksUsage, setDraftTracksUsage] = useState(false);
@@ -66,7 +69,6 @@ export default function EntityDetailPage() {
   function hydrateDraft(from: EntityDetail) {
     setDraftName(from.name);
     setDraftTracksUsage(from.tracks_usage);
-
     const map: Record<string, string> = {};
     from.fields.forEach((f) => (map[f.id] = f.value_text ?? ""));
     setDraftValues(map);
@@ -99,8 +101,7 @@ export default function EntityDetailPage() {
   }
 
   async function save() {
-    if (!entity) return;
-    if (!canSave) return;
+    if (!entity || !canSave) return;
 
     setBusy(true);
     setMsg("");
@@ -140,7 +141,6 @@ export default function EntityDetailPage() {
 
   async function removeEntity() {
     if (!entity) return;
-
     const ok = window.confirm("¿Eliminar esta entidad? Esto borrará también sus valores asociados.");
     if (!ok) return;
 
@@ -166,153 +166,162 @@ export default function EntityDetailPage() {
   }
 
   return (
-    <main style={{ padding: 16, maxWidth: 1000, margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <button onClick={() => router.push("/app/entities")} style={{ padding: "12px 14px" }}>
-          ← Volver
-        </button>
-
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginLeft: "auto" }}>
-          <button onClick={load} style={{ padding: "12px 14px" }} disabled={busy}>
-            Refrescar
-          </button>
-
-          {!editMode ? (
-            <button
-              onClick={() => {
-                if (entity) hydrateDraft(entity);
-                setEditMode(true);
-              }}
-              style={{ padding: "12px 14px" }}
-              disabled={!entity || busy}
-            >
-              Editar
-            </button>
-          ) : (
-            <>
-              <button
-                onClick={() => {
-                  if (entity) hydrateDraft(entity);
-                  setEditMode(false);
-                  setMsg("");
-                }}
-                style={{ padding: "12px 14px" }}
-                disabled={busy}
-              >
-                Cancelar
-              </button>
-              <button onClick={save} style={{ padding: "12px 14px", fontWeight: 700 }} disabled={busy || !canSave}>
-                {busy ? "Guardando..." : "Guardar"}
-              </button>
-            </>
-          )}
-
-          <button onClick={removeEntity} style={{ padding: "12px 14px" }} disabled={!entity || busy}>
-            Eliminar
-          </button>
-        </div>
-      </div>
+    <main className="mx-auto max-w-[1200px] space-y-4 px-4 py-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle>Ficha de entidad</CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={() => router.push("/app/entities")} variant="outline" size="sm">
+                ← Volver
+              </Button>
+              <Button onClick={load} variant="outline" size="sm" disabled={busy}>
+                Refrescar
+              </Button>
+              {!editMode ? (
+                <Button
+                  onClick={() => {
+                    if (entity) hydrateDraft(entity);
+                    setEditMode(true);
+                  }}
+                  variant="outline"
+                  size="sm"
+                  disabled={!entity || busy}
+                >
+                  Editar
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    onClick={() => {
+                      if (entity) hydrateDraft(entity);
+                      setEditMode(false);
+                      setMsg("");
+                    }}
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button onClick={save} size="sm" disabled={busy || !canSave}>
+                    {busy ? "Guardando..." : "Guardar"}
+                  </Button>
+                </>
+              )}
+              <Button onClick={removeEntity} variant="outline" size="sm" disabled={!entity || busy}>
+                Eliminar
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
 
       {loading ? (
-        <div style={{ marginTop: 16, display: "flex", justifyContent: "center" }}>
+        <div className="flex justify-center py-6">
           <Loader label="Cargando entidad..." />
         </div>
       ) : msg ? (
-        <p style={{ marginTop: 16, color: "crimson", whiteSpace: "pre-wrap" }}>{msg}</p>
+        <p className="whitespace-pre-wrap text-sm text-rose-600">{msg}</p>
       ) : !entity ? (
-        <p style={{ marginTop: 16, opacity: 0.75 }}>No encontrada.</p>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-slate-600">No encontrada.</p>
+          </CardContent>
+        </Card>
       ) : (
         <>
-          <section style={{ marginTop: 16, border: "1px solid #eee", borderRadius: 14, padding: 12 }}>
-            {!editMode ? (
-              <>
-                <h2 style={{ margin: 0 }}>{entity.name}</h2>
-                <div style={{ opacity: 0.75, marginTop: 6 }}>
-                  Tipo: <strong>{entity.entity_type?.name ?? "(sin tipo)"}</strong> ·{" "}
-                  {entity.tracks_usage ? "tracks_usage" : "no usage"}
+          <Card>
+            <CardHeader className="pb-2">
+              {!editMode ? (
+                <div className="space-y-2">
+                  <CardTitle>{entity.name}</CardTitle>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">Tipo: {entity.entity_type?.name ?? "(sin tipo)"}</Badge>
+                    <Badge variant="outline">{entity.tracks_usage ? "Registra uso" : "Sin uso"}</Badge>
+                    <Badge variant="outline">Creado: {new Date(entity.created_at).toLocaleDateString()}</Badge>
+                  </div>
                 </div>
-                <div style={{ opacity: 0.6, fontSize: 12, marginTop: 6 }}>
-                  Creado: {new Date(entity.created_at).toLocaleString()}
-                </div>
-              </>
-            ) : (
-              <>
-                <h2 style={{ marginTop: 0 }}>Editar entidad</h2>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
-                  <div>
-                    <label>Nombre</label>
-                    <input
+              ) : (
+                <CardTitle>Editar entidad</CardTitle>
+              )}
+            </CardHeader>
+            {editMode ? (
+              <CardContent className="pt-0">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="grid gap-1.5 text-xs text-slate-600">
+                    Nombre
+                    <Input
                       value={draftName}
                       onChange={(e) => setDraftName(e.target.value)}
-                      style={{ width: "100%", padding: 10, marginTop: 6 }}
                       disabled={busy}
                     />
-                  </div>
-                  <div>
-                    <label>Tipo</label>
-                    <input
-                      value={entity.entity_type?.name ?? ""}
-                      disabled
-                      style={{ width: "100%", padding: 10, marginTop: 6, opacity: 0.7 }}
-                    />
-                    <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
+                  </label>
+                  <div className="grid gap-1.5 text-xs text-slate-600">
+                    <span>Tipo</span>
+                    <Input value={entity.entity_type?.name ?? ""} disabled />
+                    <label className="mt-1 flex items-center gap-2 text-sm text-slate-700">
                       <input
                         type="checkbox"
                         checked={draftTracksUsage}
                         onChange={(e) => setDraftTracksUsage(e.target.checked)}
                         disabled={busy}
+                        className="h-4 w-4"
                       />
                       tracks_usage (registrar uso)
                     </label>
                   </div>
                 </div>
-              </>
-            )}
-          </section>
+              </CardContent>
+            ) : null}
+          </Card>
 
-          <section style={{ marginTop: 16, border: "1px solid #eee", borderRadius: 14, padding: 12 }}>
-            <h3 style={{ marginTop: 0 }}>Campos</h3>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Campos</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {entity.fields.length === 0 ? (
+                <p className="text-sm text-slate-600">Este tipo no tiene campos definidos.</p>
+              ) : (
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {entity.fields.map((f) => (
+                    <div key={f.id} className="rounded-xl border bg-slate-50 p-3">
+                      <div className="text-sm font-semibold text-slate-900">{f.name}</div>
+                      <div className="mt-1 text-[11px] text-slate-500">
+                        <span className="font-mono">{f.key}</span> · {f.field_type}
+                      </div>
 
-            {entity.fields.length === 0 ? (
-              <p style={{ opacity: 0.7 }}>Este tipo no tiene campos definidos.</p>
-            ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10 }}>
-                {entity.fields.map((f) => (
-                  <div key={f.id} style={{ border: "1px solid #f3f3f3", padding: 10 }}>
-                    <div style={{ fontWeight: 700 }}>{f.name}</div>
-                    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-                      <span style={{ fontFamily: "monospace" }}>{f.key}</span> · {f.field_type}
+                      {!editMode ? (
+                        <div className="mt-3 text-sm">
+                          {f.value_text ? (
+                            <span className="font-medium text-slate-900">{f.value_text}</span>
+                          ) : (
+                            <span className="text-slate-500">(sin valor)</span>
+                          )}
+                        </div>
+                      ) : (
+                        <Input
+                          value={draftValues[f.id] ?? ""}
+                          onChange={(e) => setDraftValues((prev) => ({ ...prev, [f.id]: e.target.value }))}
+                          className="mt-3"
+                          disabled={busy}
+                        />
+                      )}
+
+                      {!editMode && f.value_updated_at ? (
+                        <div className="mt-2 text-[11px] text-slate-500">
+                          actualizado: {new Date(f.value_updated_at).toLocaleString()}
+                        </div>
+                      ) : null}
                     </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-                    {!editMode ? (
-                      <div style={{ marginTop: 10, fontSize: 14 }}>
-                        {f.value_text ? (
-                          <strong>{f.value_text}</strong>
-                        ) : (
-                          <span style={{ opacity: 0.55 }}>(sin valor)</span>
-                        )}
-                      </div>
-                    ) : (
-                      <input
-                        value={draftValues[f.id] ?? ""}
-                        onChange={(e) => setDraftValues((prev) => ({ ...prev, [f.id]: e.target.value }))}
-                        style={{ width: "100%", padding: 10, marginTop: 10 }}
-                        disabled={busy}
-                      />
-                    )}
-
-                    {!editMode && f.value_updated_at && (
-                      <div style={{ marginTop: 6, fontSize: 12, opacity: 0.6 }}>
-                        actualizado: {new Date(f.value_updated_at).toLocaleString()}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section style={{ marginTop: 16 }}>
+          <section>
             <EntityDeadlinesManager entityId={entity.id} tracksUsage={entity.tracks_usage} />
           </section>
         </>

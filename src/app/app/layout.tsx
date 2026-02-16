@@ -76,8 +76,8 @@ function NavLink({ href, label }: { href: string; label: string }) {
     <Link
       href={href}
       className={cn(
-        "rounded-xl border px-3 py-2 text-sm text-slate-700 transition-colors",
-        active ? "border-slate-300 bg-slate-100 text-slate-900" : "border-transparent hover:bg-slate-100"
+        "rounded-xl border bg-transparent px-3 py-2 text-sm text-slate-700 transition-colors",
+        active ? "border-slate-300 text-slate-900" : "border-transparent hover:border-slate-300"
       )}
     >
       {label}
@@ -156,15 +156,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const userInfoCapsule = !isSuperAdmin ? (
-    <div className="hidden min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1 md:flex">
+  const userInfoCapsuleDesktop = !isSuperAdmin ? (
+    <div className="hidden min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1 xl:flex">
       {activeOrgLogoUrl ? (
         <img
           src={activeOrgLogoUrl}
           alt="Logo organización"
           width={20}
           height={20}
-          className="h-5 w-5 rounded-md border object-cover"
+          className="h-5 w-5 rounded-md object-cover"
+        />
+      ) : null}
+      <div className="min-w-0">
+        <div className="truncate text-[11px] font-medium text-slate-700">
+          {activeOrgName || "Sin organización"}
+        </div>
+        <div className="truncate text-[11px] text-slate-500">
+          {sessionEmail || "(sin email)"}
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  const userInfoCapsuleMobile = !isSuperAdmin ? (
+    <div className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1 lg:hidden">
+      {activeOrgLogoUrl ? (
+        <img
+          src={activeOrgLogoUrl}
+          alt="Logo organización"
+          width={18}
+          height={18}
+          className="h-[18px] w-[18px] rounded-md object-cover"
         />
       ) : null}
       <div className="min-w-0">
@@ -180,10 +202,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-10 border-b bg-white/90 backdrop-blur">
-        <div className={cn("mx-auto grid gap-1 px-4", isDashboardHome ? "max-w-[1400px] py-2" : "max-w-[1100px] py-2")}>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2 whitespace-nowrap">
+      <header className="sticky top-0 z-10 border-b bg-white/95 backdrop-blur">
+        <div className={cn("mx-auto grid gap-2 px-4 py-2", isDashboardHome ? "max-w-[1400px]" : "max-w-[1100px]")}>
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-center gap-2 whitespace-nowrap">
               {platformLogoUrl ? (
                 <img
                   src={platformLogoUrl}
@@ -193,41 +215,41 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   className="h-9 w-9 rounded-lg object-cover"
                 />
               ) : null}
-              <Link href={isSuperAdmin ? "/app/super-admin" : "/app"} className="text-base font-semibold text-slate-900">
+              <Link href={isSuperAdmin ? "/app/super-admin" : "/app"} className="truncate text-base font-semibold text-slate-900">
                 OpsAhead
               </Link>
               {isSuperAdmin ? <Badge variant="secondary">Global</Badge> : null}
             </div>
 
             {isSuperAdmin ? (
-              <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+              <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:w-auto">
                 <Link href="/app/super-admin">
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" className="bg-transparent">
                     Panel global
                   </Button>
                 </Link>
-                <Button onClick={logout} variant="outline" size="sm">
+                <Button onClick={logout} variant="outline" size="sm" className="bg-transparent">
                   Salir
                 </Button>
               </div>
             ) : isDashboardHome ? (
-              <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 sm:w-auto sm:overflow-visible sm:pb-0">
-                <Link href="/app/entities?new=1">
+              <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:w-auto lg:flex-nowrap">
+                <Link href="/app/entities?new=1" className="block">
                   <Button
                     variant="outline"
                     size="icon"
-                    className="h-10 w-10 shrink-0"
+                    className="h-11 w-full bg-transparent sm:h-10 sm:w-10"
                     title="Nueva entidad"
                     aria-label="Nueva entidad"
                   >
                     <IconPlus />
                   </Button>
                 </Link>
-                <Link href="/app/settings/semaphore">
+                <Link href="/app/settings/semaphore" className="block">
                   <Button
                     variant="outline"
                     size="icon"
-                    className="h-10 w-10 shrink-0"
+                    className="h-11 w-full bg-transparent sm:h-10 sm:w-10"
                     title="Semáforo"
                     aria-label="Semáforo"
                   >
@@ -238,19 +260,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   onClick={refreshDashboard}
                   variant="outline"
                   size="icon"
-                  className="h-10 w-10 shrink-0"
+                  className="h-11 w-full bg-transparent sm:h-10 sm:w-10"
                   title="Refrescar"
                   aria-label="Refrescar"
                 >
                   <IconRefresh />
                 </Button>
-                <Link href="/app/entities">
-                  <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" title="Menú" aria-label="Menú">
+                <Link href="/app/entities" className="block">
+                  <Button variant="outline" size="icon" className="h-11 w-full bg-transparent sm:h-10 sm:w-10" title="Menú" aria-label="Menú">
                     <IconMenu />
                   </Button>
                 </Link>
-                <Link href="/app/profile">
-                  <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" title="Perfil" aria-label="Perfil">
+                <Link href="/app/profile" className="block">
+                  <Button variant="outline" size="icon" className="h-11 w-full bg-transparent sm:h-10 sm:w-10" title="Perfil" aria-label="Perfil">
                     <IconUser />
                   </Button>
                 </Link>
@@ -258,37 +280,38 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   onClick={logout}
                   variant="outline"
                   size="icon"
-                  className="h-10 w-10 shrink-0"
+                  className="h-11 w-full bg-transparent sm:h-10 sm:w-10"
                   title="Salir"
                   aria-label="Salir"
                 >
                   <IconLogout />
                 </Button>
-                {userInfoCapsule}
+                {userInfoCapsuleDesktop}
               </div>
             ) : (
-              <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-1 sm:flex-row sm:items-center">
-                <nav className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto">
+              <div className="flex w-full min-w-0 flex-col gap-2 lg:flex-1 lg:flex-row lg:items-center lg:gap-2">
+                <nav className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto p-1 lg:flex-1 lg:overflow-visible">
                   <NavLink href="/app" label="Dashboard" />
                   <NavLink href="/app/entities" label="Entidades" />
                   <NavLink href="/app/entity-types" label="Tipos entidad" />
                   <NavLink href="/app/deadline-types" label="Tipos vencimiento" />
                   <NavLink href="/app/users" label="Usuarios" />
                 </nav>
-                <div className="ml-auto flex w-full items-center justify-end gap-2 sm:w-auto">
+                <div className="ml-auto flex w-full items-center justify-end gap-2 lg:w-auto lg:flex-nowrap">
                   <Link href="/app/profile">
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" className="bg-transparent">
                       Perfil
                     </Button>
                   </Link>
-                  <Button onClick={logout} variant="outline" size="sm">
+                  <Button onClick={logout} variant="outline" size="sm" className="bg-transparent">
                     Salir
                   </Button>
-                  {userInfoCapsule}
+                  {userInfoCapsuleDesktop}
                 </div>
               </div>
             )}
           </div>
+          {!isSuperAdmin ? userInfoCapsuleMobile : null}
         </div>
       </header>
 

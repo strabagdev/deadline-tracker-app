@@ -342,10 +342,11 @@ export default function AppDashboard() {
     <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
             <CardTitle className="shrink-0">Dashboard</CardTitle>
-            <div className="min-w-0 flex-1 overflow-x-auto pl-8 md:pl-16">
-              <div className="flex w-max items-center gap-2 pr-2">
+
+            <div className="min-w-0 lg:flex-1">
+              <div className="flex flex-wrap items-center gap-2 pr-2 lg:w-max lg:flex-nowrap lg:pb-0">
                 {statusFilterMeta.map((s) => (
                   <Button
                     key={s.key}
@@ -366,25 +367,32 @@ export default function AppDashboard() {
                   size="sm"
                   variant={viewMode === "cards" ? "secondary" : "outline"}
                   onClick={() => setViewMode("cards")}
+                  className="min-h-10 min-w-10 lg:min-h-9"
+                  title="Vista tarjetas"
+                  aria-label="Vista tarjetas"
                 >
                   <IconGrid />
-                  Tarjetas
+                  <span className="hidden sm:inline">Tarjetas</span>
                 </Button>
                 <Button
                   size="sm"
                   variant={viewMode === "list" ? "secondary" : "outline"}
                   onClick={() => setViewMode("list")}
+                  className="min-h-10 min-w-10 lg:min-h-9"
+                  title="Vista lista"
+                  aria-label="Vista lista"
                 >
                   <IconList />
-                  Lista
+                  <span className="hidden sm:inline">Lista</span>
                 </Button>
               </div>
             </div>
+
             <Button
               size="sm"
               variant="outline"
               onClick={() => setDashboardPanelCollapsed((v) => !v)}
-              className="min-w-[110px] shrink-0 justify-between"
+              className="min-h-10 min-w-[116px] shrink-0 justify-between lg:min-h-9"
             >
               <span>{dashboardPanelCollapsed ? "Buscar" : "Ocultar"}</span>
               <span className="text-xs">{dashboardPanelCollapsed ? "▼" : "▲"}</span>
@@ -394,20 +402,20 @@ export default function AppDashboard() {
         <CardContent className="py-3">
           {!dashboardPanelCollapsed ? (
             <div className="mt-3 rounded-xl border bg-slate-50/80 px-3 py-2">
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:flex-nowrap">
+              <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_180px_150px_auto]">
                 <Input
                   id="dashboard_search"
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                   placeholder="Buscar por nombre, tipo o vencimiento..."
-                  className="min-w-[240px] flex-1"
+                  className="h-10"
                 />
                 <select
                   id="dashboard_type"
                   aria-label="Filtrar por tipo"
                   value={filterEntityType}
                   onChange={(e) => setFilterEntityType(e.target.value)}
-                  className="h-10 min-w-[180px] rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                  className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
                 >
                   <option value="all">Todos los tipos</option>
                   {entityTypeOptions.map((o) => (
@@ -421,7 +429,7 @@ export default function AppDashboard() {
                   aria-label="Filas por página"
                   value={String(pageSize)}
                   onChange={(e) => setPageSize(Number(e.target.value))}
-                  className="h-10 min-w-[150px] rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                  className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
                 >
                   <option value="25">25 / página</option>
                   <option value="50">50 / página</option>
@@ -429,7 +437,7 @@ export default function AppDashboard() {
                 </select>
                 <Button
                   variant="outline"
-                  className="h-10 min-w-[140px]"
+                  className="h-10"
                   onClick={() => {
                     setQ("");
                     setFilterEntityType("all");
@@ -610,7 +618,7 @@ export default function AppDashboard() {
                   disabled={safePage <= 1}
                   variant="outline"
                   size="sm"
-                  className="h-8 min-w-8 px-2"
+                  className="h-10 min-w-10 px-2"
                   title="Página anterior"
                   aria-label="Página anterior"
                 >
@@ -622,7 +630,7 @@ export default function AppDashboard() {
                   disabled={safePage >= totalPages}
                   variant="outline"
                   size="sm"
-                  className="h-8 min-w-8 px-2"
+                  className="h-10 min-w-10 px-2"
                   title="Página siguiente"
                   aria-label="Página siguiente"
                 >
