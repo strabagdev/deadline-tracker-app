@@ -8,6 +8,7 @@ import {
   normalizeDeadlinesMode,
   numOrNaN,
 } from "@/lib/api/deadlinesComputations";
+import { parseDeadlineCreateIds, parseDeadlineCreatePayload } from "@/lib/api/deadlinesInput";
 
 type MeasureBy = "date" | "usage";
 type DataClient = ReturnType<typeof createDataServerClient>;
@@ -257,11 +258,9 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
 
-    const entityId = String(body?.entity_id ?? "").trim();
-    const deadlineTypeId = String(body?.deadline_type_id ?? "").trim();
-
-    if (!entityId) return NextResponse.json({ error: "entity_id required" }, { status: 400 });
-    if (!deadlineTypeId) return NextResponse.json({ error: "deadline_type_id required" }, { status: 400 });
+    const ids = parseDeadlineCreateIds(body);
+    if (!ids.ok) return NextResponse.json(ids.body, { status: ids.status });
+    const { entityId, deadlineTypeId } = ids;
 
     const entity = await getEntity(db, orgId, entityId);
     if (!entity) return NextResponse.json({ error: "entity not found" }, { status: 404 });
@@ -270,17 +269,13 @@ export async function POST(req: Request) {
     if (!dt) return NextResponse.json({ error: "deadline type not found" }, { status: 404 });
     if (!dt.is_active) return NextResponse.json({ error: "deadline type is inactive" }, { status: 400 });
 
-    const lastDoneDate = body?.last_done_date ? String(body.last_done_date) : null;
-
     // Backward compat for legacy columns (some schemas still have deadlines.title/measure_by NOT NULL)
     const legacyTitle = dt.name;
     const legacyMeasureBy = dt.measure_by as MeasureBy;
+    const parsed = parseDeadlineCreatePayload(body, { measureBy: dt.measure_by, tracksUsage: entity.tracks_usage });
+    if (!parsed.ok) return NextResponse.json(parsed.body, { status: parsed.status });
 
-    if (dt.measure_by === "date") {
-      const nextDueDate = body?.next_due_date ? String(body.next_due_date) : null;
-      if (!nextDueDate) {
-        return NextResponse.json({ error: "next_due_date required for type measure_by=date" }, { status: 400 });
-      }
+    if (parsed.measureBy === "date") {
 
       const { data, error } = await db
         .from("deadlines")
@@ -292,41 +287,14 @@ export async function POST(req: Request) {
           title: legacyTitle,
           measure_by: legacyMeasureBy,
           // fields
-          last_done_date: lastDoneDate,
-          next_due_date: nextDueDate,
+          last_done_date: parsed.lastDoneDate,
+          next_due_date: parsed.nextDueDate,
         })
         .select("id")
         .single();
 
       if (error) throw error;
       return NextResponse.json({ id: data?.id }, { status: 201 });
-    }
-
-    // usage
-    if (!entity.tracks_usage) {
-      return NextResponse.json(
-        { error: "entity does not track usage; cannot create a usage-based deadline", code: "TRACKS_USAGE_FALSE" },
-        { status: 400 }
-      );
-    }
-
-    const mode = normalizeDeadlinesMode(body?.usage_daily_average_mode);
-    const lastDoneUsage = numOrNaN(body?.last_done_usage);
-    const frequency = numOrNaN(body?.frequency);
-    const frequencyUnit = body?.frequency_unit ? String(body.frequency_unit) : "";
-    const usageDailyAverage = numOrNaN(body?.usage_daily_average);
-
-    if (!Number.isFinite(lastDoneUsage)) return NextResponse.json({ error: "last_done_usage required" }, { status: 400 });
-    if (!Number.isFinite(frequency)) return NextResponse.json({ error: "frequency required" }, { status: 400 });
-    if (!frequencyUnit) return NextResponse.json({ error: "frequency_unit required" }, { status: 400 });
-
-    if (mode === "manual") {
-      if (!Number.isFinite(usageDailyAverage) || usageDailyAverage <= 0) {
-        return NextResponse.json(
-          { error: "usage_daily_average required for usage_daily_average_mode=manual" },
-          { status: 400 }
-        );
-      }
     }
 
     const { data, error } = await db
@@ -339,13 +307,13 @@ export async function POST(req: Request) {
         title: legacyTitle,
         measure_by: legacyMeasureBy,
         // fields
-        last_done_date: lastDoneDate,
-        last_done_usage: lastDoneUsage,
-        frequency,
-        frequency_unit: frequencyUnit,
-        usage_daily_average_mode: mode,
+        last_done_date: parsed.lastDoneDate,
+        last_done_usage: parsed.lastDoneUsage,
+        frequency: parsed.frequency,
+        frequency_unit: parsed.frequencyUnit,
+        usage_daily_average_mode: parsed.mode,
         // Hybrid: for auto we keep NULL unless a fallback is provided
-        usage_daily_average: Number.isFinite(usageDailyAverage) && usageDailyAverage > 0 ? usageDailyAverage : null,
+        usage_daily_average: parsed.usageDailyAverage,
       })
       .select("id")
       .single();
