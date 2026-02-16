@@ -8,7 +8,7 @@ export type PlatformAdminOrgsRepo = {
   getOrganizationById: (organizationId: string) => Promise<OrgRow | null>;
   getProfileByEmail: (ownerEmail: string) => Promise<ProfileRow | null>;
   resolveAuthUserIdByEmail: (ownerEmail: string) => Promise<string | null>;
-  upsertProfile: (userId: string, email: string) => Promise<void>;
+  upsertProfile?: (userId: string, email: string) => Promise<void>;
   upsertOwnerMembership: (organizationId: string, userId: string) => Promise<void>;
   getOwnerMember: (organizationId: string, userId: string) => Promise<OwnerMemberRow | null>;
   listOwners: (organizationId: string) => Promise<Array<{ user_id: string }>>;
@@ -28,32 +28,32 @@ export async function handlePlatformAssignOwner(rawBody: unknown, repo: Platform
   const org = await repo.getOrganizationById(organizationId);
   if (!org?.id) return { status: 404, body: { error: "organization not found", code: "ORGANIZATION_NOT_FOUND" } };
 
-  const profile = await repo.getProfileByEmail(ownerEmail);
-  let ownerUserId = profile?.user_id ?? null;
-  let ownerResolvedEmail = profile?.email ?? ownerEmail;
-
-  if (!ownerUserId) {
-    const authUserId = await repo.resolveAuthUserIdByEmail(ownerEmail);
-    if (!authUserId) {
-      return {
-        status: 400,
-        body: { error: "Owner email does not exist in Auth. Invite/login first.", code: "OWNER_NOT_FOUND_IN_AUTH" },
-      };
-    }
-
-    await repo.upsertProfile(authUserId, ownerEmail);
-    ownerUserId = authUserId;
-    ownerResolvedEmail = ownerEmail;
+  const authUserId = await repo.resolveAuthUserIdByEmail(ownerEmail);
+  if (!authUserId) {
+    return {
+      status: 400,
+      body: { error: "Owner email does not exist in Auth. Invite/login first.", code: "OWNER_NOT_FOUND_IN_AUTH" },
+    };
   }
 
-  await repo.upsertOwnerMembership(organizationId, ownerUserId);
+  // El profile puede no existir todavía. Si falla su creación por esquema/políticas,
+  // no bloqueamos la asignación del owner porque membership usa user_id.
+  if (repo.upsertProfile) {
+    try {
+      await repo.upsertProfile(authUserId, ownerEmail);
+    } catch {
+      // noop
+    }
+  }
+
+  await repo.upsertOwnerMembership(organizationId, authUserId);
 
   return {
     status: 200,
     body: {
       ok: true,
       organization: { id: org.id, name: org.name },
-      owner: { user_id: ownerUserId, email: ownerResolvedEmail },
+      owner: { user_id: authUserId, email: ownerEmail },
     },
   };
 }

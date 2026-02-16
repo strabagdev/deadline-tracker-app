@@ -28,6 +28,14 @@ type ProfileRow = {
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message;
+  }
   return "error";
 }
 
@@ -75,9 +83,10 @@ function makePlatformAdminOrgsRepo(db: ReturnType<typeof createDataServerClient>
         .from("profiles")
         .select("user_id,email")
         .ilike("email", ownerEmail)
-        .maybeSingle();
+        .limit(1);
       if (error) throw error;
-      return (data ?? null) as { user_id: string; email: string | null } | null;
+      const row = Array.isArray(data) ? data[0] : null;
+      return (row ?? null) as { user_id: string; email: string | null } | null;
     },
     resolveAuthUserIdByEmail: (ownerEmail) => resolveAuthUserIdByEmail(ownerEmail),
     upsertProfile: async (userId, email) => {
