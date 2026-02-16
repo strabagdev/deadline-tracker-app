@@ -9,6 +9,45 @@ import { getOrgAccess } from "@/lib/server/orgAccess";
  * - Uses query param ?id= to avoid dynamic route type validation issues.
  */
 
+type EntityRow = {
+  id: string;
+  name: string;
+  entity_type_id: string;
+  tracks_usage: boolean;
+  created_at: string;
+};
+
+type EntityTypeRow = {
+  id: string;
+  name: string;
+};
+
+type EntityFieldRow = {
+  id: string;
+  name: string;
+  key: string;
+  field_type: string;
+  show_in_card: boolean;
+  options: unknown;
+  created_at: string;
+};
+
+type EntityFieldValueRow = {
+  entity_field_id: string;
+  value_text: string;
+  updated_at: string | null;
+};
+
+type FieldValueInput = {
+  entity_field_id: string;
+  value_text: string;
+};
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return "error";
+}
+
 export async function GET(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
@@ -32,10 +71,10 @@ export async function GET(req: Request) {
 
       if (error) throw error;
 
-      const entityRows = data ?? [];
-      const typeIds = Array.from(new Set(entityRows.map((e: any) => e.entity_type_id)));
+      const entityRows = (data ?? []) as EntityRow[];
+      const typeIds = Array.from(new Set(entityRows.map((e) => e.entity_type_id)));
 
-      let typeMap = new Map<string, string>();
+      const typeMap = new Map<string, string>();
       if (typeIds.length) {
         const { data: types, error: tErr } = await db
           .from("entity_types")
@@ -44,10 +83,10 @@ export async function GET(req: Request) {
           .in("id", typeIds);
 
         if (tErr) throw tErr;
-        (types ?? []).forEach((t: any) => typeMap.set(t.id, t.name));
+        ((types ?? []) as EntityTypeRow[]).forEach((t) => typeMap.set(t.id, t.name));
       }
 
-      const enriched = entityRows.map((e: any) => ({
+      const enriched = entityRows.map((e) => ({
         ...e,
         entity_type_name: typeMap.get(e.entity_type_id) ?? "",
       }));
@@ -92,10 +131,10 @@ export async function GET(req: Request) {
 
     if (vErr) throw vErr;
 
-    const valMap = new Map<string, any>();
-    (values ?? []).forEach((v: any) => valMap.set(v.entity_field_id, v));
+    const valMap = new Map<string, EntityFieldValueRow>();
+    ((values ?? []) as EntityFieldValueRow[]).forEach((v) => valMap.set(v.entity_field_id, v));
 
-    const mergedFields = (fields ?? []).map((f: any) => ({
+    const mergedFields = ((fields ?? []) as EntityFieldRow[]).map((f) => ({
       ...f,
       value_text: valMap.get(f.id)?.value_text ?? "",
       value_updated_at: valMap.get(f.id)?.updated_at ?? null,
@@ -108,8 +147,8 @@ export async function GET(req: Request) {
         fields: mergedFields,
       },
     });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -145,7 +184,7 @@ export async function POST(req: Request) {
 
     if (insErr) throw insErr;
 
-    const rows = (fieldValues as any[])
+    const rows = (fieldValues as FieldValueInput[])
       .map((fv) => ({
         entity_field_id: String(fv?.entity_field_id ?? "").trim(),
         value_text: fv?.value_text == null ? "" : String(fv.value_text),
@@ -164,8 +203,8 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ entity }, { status: 201 });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -200,7 +239,7 @@ export async function PUT(req: Request) {
     if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
 
     // Update entity base fields
-    const patch: any = {};
+    const patch: Record<string, unknown> = {};
     if (name !== null) patch.name = name;
     if (tracksUsage !== null) patch.tracks_usage = tracksUsage;
 
@@ -216,7 +255,7 @@ export async function PUT(req: Request) {
 
     // Update field values (upsert non-empty, delete empty)
     if (fieldValues) {
-      const normalized = (fieldValues as any[]).map((fv) => ({
+      const normalized = (fieldValues as FieldValueInput[]).map((fv) => ({
         entity_field_id: String(fv?.entity_field_id ?? "").trim(),
         value_text: fv?.value_text == null ? "" : String(fv.value_text),
       }));
@@ -255,8 +294,8 @@ export async function PUT(req: Request) {
     }
 
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -283,7 +322,7 @@ export async function DELETE(req: Request) {
     if (error) throw error;
 
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }

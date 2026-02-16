@@ -3,13 +3,20 @@ import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { getOrgAccess } from "@/lib/server/orgAccess";
 
-function numOrNaN(v: any) {
+type DataClient = ReturnType<typeof createDataServerClient>;
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return "error";
+}
+
+function numOrNaN(v: unknown) {
   if (v == null) return NaN;
   const n = Number(v);
   return Number.isFinite(n) ? n : NaN;
 }
 
-async function requireEntityInOrg(db: any, orgId: string, entityId: string) {
+async function requireEntityInOrg(db: DataClient, orgId: string, entityId: string) {
   const { data, error } = await db
     .from("entities")
     .select("id")
@@ -20,7 +27,7 @@ async function requireEntityInOrg(db: any, orgId: string, entityId: string) {
   return !!data?.id;
 }
 
-async function getUsageLogById(db: any, orgId: string, id: string) {
+async function getUsageLogById(db: DataClient, orgId: string, id: string) {
   const { data, error } = await db
     .from("usage_logs")
     .select("id, organization_id, entity_id")
@@ -63,8 +70,8 @@ export async function GET(req: Request) {
 
     if (error) throw error;
     return NextResponse.json({ usage_logs: data ?? [] });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -107,8 +114,8 @@ export async function POST(req: Request) {
 
     if (error) throw error;
     return NextResponse.json({ id: data?.id }, { status: 201 });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -141,7 +148,7 @@ export async function DELETE(req: Request) {
     if (error) throw error;
 
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
