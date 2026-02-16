@@ -21,7 +21,10 @@ export async function GET(req: Request) {
     const db = createDataServerClient();
     const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
     }
 
     const { data, error } = await db
@@ -45,7 +48,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ organization_id: access.organizationId, role: access.role, settings });
   } catch (e: unknown) {
-    return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(e), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
 
@@ -57,7 +60,8 @@ export async function PUT(req: Request) {
     if ("error" in access) {
       const status = access.error === "no active organization" ? 400 : 403;
       const error = access.error === "forbidden" ? "admin/owner only" : access.error;
-      return NextResponse.json({ error }, { status });
+      const code = access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN";
+      return NextResponse.json({ error, code }, { status });
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -67,7 +71,7 @@ export async function PUT(req: Request) {
     const red = Math.trunc(Number(body.red_days));
 
     const v = validateThresholds(yellow, orange, red);
-    if (v) return NextResponse.json({ error: v }, { status: 400 });
+    if (v) return NextResponse.json({ error: v, code: "BAD_REQUEST" }, { status: 400 });
 
     const { error: upErr } = await db.from("organization_settings").upsert(
       {
@@ -94,6 +98,6 @@ export async function PUT(req: Request) {
 
     return NextResponse.json({ organization_id: access.organizationId, role: access.role, settings: data });
   } catch (e: unknown) {
-    return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(e), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

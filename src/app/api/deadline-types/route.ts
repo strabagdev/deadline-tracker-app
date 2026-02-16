@@ -14,7 +14,10 @@ export async function GET(req: Request) {
     const db = createDataServerClient();
     const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
     }
 
     const url = new URL(req.url);
@@ -33,7 +36,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ deadline_types: data ?? [] });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
 
@@ -45,7 +48,8 @@ export async function POST(req: Request) {
     if ("error" in access) {
       const status = access.error === "no active organization" ? 400 : 403;
       const error = access.error === "forbidden" ? "admin required" : access.error;
-      return NextResponse.json({ error }, { status });
+      const code = access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN";
+      return NextResponse.json({ error, code }, { status });
     }
 
     const body = await req.json().catch(() => ({}));
@@ -54,9 +58,9 @@ export async function POST(req: Request) {
     const measureBy = String(body?.measure_by ?? "").trim(); // date|usage
     const requiresDocument = Boolean(body?.requires_document ?? false);
 
-    if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
+    if (!name) return NextResponse.json({ error: "name required", code: "BAD_REQUEST" }, { status: 400 });
     if (measureBy !== "date" && measureBy !== "usage") {
-      return NextResponse.json({ error: "measure_by must be 'date' or 'usage'" }, { status: 400 });
+      return NextResponse.json({ error: "measure_by must be 'date' or 'usage'", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     const { data, error } = await db
@@ -75,7 +79,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ id: data?.id }, { status: 201 });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
 
@@ -87,26 +91,27 @@ export async function PUT(req: Request) {
     if ("error" in access) {
       const status = access.error === "no active organization" ? 400 : 403;
       const error = access.error === "forbidden" ? "admin required" : access.error;
-      return NextResponse.json({ error }, { status });
+      const code = access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN";
+      return NextResponse.json({ error, code }, { status });
     }
 
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+    if (!id) return NextResponse.json({ error: "id required", code: "BAD_REQUEST" }, { status: 400 });
 
     const body = await req.json().catch(() => ({}));
     const patch: Record<string, unknown> = {};
 
     if (body?.name != null) {
       const name = String(body.name).trim();
-      if (!name) return NextResponse.json({ error: "name cannot be empty" }, { status: 400 });
+      if (!name) return NextResponse.json({ error: "name cannot be empty", code: "BAD_REQUEST" }, { status: 400 });
       patch.name = name;
     }
 
     if (body?.measure_by != null) {
       const measureBy = String(body.measure_by).trim();
       if (measureBy !== "date" && measureBy !== "usage") {
-        return NextResponse.json({ error: "measure_by must be 'date' or 'usage'" }, { status: 400 });
+        return NextResponse.json({ error: "measure_by must be 'date' or 'usage'", code: "BAD_REQUEST" }, { status: 400 });
       }
       patch.measure_by = measureBy;
     }
@@ -115,7 +120,7 @@ export async function PUT(req: Request) {
     if (body?.is_active != null) patch.is_active = Boolean(body.is_active);
 
     if (Object.keys(patch).length === 0) {
-      return NextResponse.json({ error: "no fields to update" }, { status: 400 });
+      return NextResponse.json({ error: "no fields to update", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     const { error } = await db
@@ -128,7 +133,7 @@ export async function PUT(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
 
@@ -140,12 +145,13 @@ export async function DELETE(req: Request) {
     if ("error" in access) {
       const status = access.error === "no active organization" ? 400 : 403;
       const error = access.error === "forbidden" ? "admin required" : access.error;
-      return NextResponse.json({ error }, { status });
+      const code = access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN";
+      return NextResponse.json({ error, code }, { status });
     }
 
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+    if (!id) return NextResponse.json({ error: "id required", code: "BAD_REQUEST" }, { status: 400 });
 
     // soft delete (deactivate)
     const { error } = await db
@@ -158,6 +164,6 @@ export async function DELETE(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

@@ -23,12 +23,15 @@ export async function GET(req: Request) {
     const db = createDataServerClient();
     const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
     }
 
     const url = new URL(req.url);
     const entityTypeId = url.searchParams.get("entity_type_id");
-    if (!entityTypeId) return NextResponse.json({ error: "entity_type_id required" }, { status: 400 });
+    if (!entityTypeId) return NextResponse.json({ error: "entity_type_id required", code: "BAD_REQUEST" }, { status: 400 });
 
     const { data, error } = await db
       .from("entity_fields")
@@ -40,7 +43,7 @@ export async function GET(req: Request) {
     if (error) throw error;
     return NextResponse.json({ entity_fields: data ?? [] });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
 
@@ -52,7 +55,8 @@ export async function POST(req: Request) {
     if ("error" in access) {
       const status = access.error === "no active organization" ? 400 : 403;
       const error = access.error === "forbidden" ? "admin required" : access.error;
-      return NextResponse.json({ error }, { status });
+      const code = access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN";
+      return NextResponse.json({ error, code }, { status });
     }
 
     const body = await req.json().catch(() => ({}));
@@ -64,13 +68,13 @@ export async function POST(req: Request) {
     const rawKey = body?.key ? String(body.key) : name;
     const key = toSlugKey(rawKey);
 
-    if (!entityTypeId) return NextResponse.json({ error: "entity_type_id required" }, { status: 400 });
-    if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
-    if (!key) return NextResponse.json({ error: "key required" }, { status: 400 });
+    if (!entityTypeId) return NextResponse.json({ error: "entity_type_id required", code: "BAD_REQUEST" }, { status: 400 });
+    if (!name) return NextResponse.json({ error: "name required", code: "BAD_REQUEST" }, { status: 400 });
+    if (!key) return NextResponse.json({ error: "key required", code: "BAD_REQUEST" }, { status: 400 });
 
     const allowed = new Set(["text", "number", "date", "boolean", "select"]);
     if (!allowed.has(fieldType)) {
-      return NextResponse.json({ error: "invalid field_type" }, { status: 400 });
+      return NextResponse.json({ error: "invalid field_type", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     const options = body?.options ?? null;
@@ -92,7 +96,7 @@ export async function POST(req: Request) {
     if (error) throw error;
     return NextResponse.json({ entity_field: data }, { status: 201 });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
 
@@ -104,12 +108,13 @@ export async function PUT(req: Request) {
     if ("error" in access) {
       const status = access.error === "no active organization" ? 400 : 403;
       const error = access.error === "forbidden" ? "admin required" : access.error;
-      return NextResponse.json({ error }, { status });
+      const code = access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN";
+      return NextResponse.json({ error, code }, { status });
     }
 
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+    if (!id) return NextResponse.json({ error: "id required", code: "BAD_REQUEST" }, { status: 400 });
 
     const { data: existing, error: existingErr } = await db
       .from("entity_fields")
@@ -119,20 +124,20 @@ export async function PUT(req: Request) {
       .maybeSingle();
 
     if (existingErr) throw existingErr;
-    if (!existing) return NextResponse.json({ error: "field not found" }, { status: 404 });
+    if (!existing) return NextResponse.json({ error: "field not found", code: "ENTITY_FIELD_NOT_FOUND" }, { status: 404 });
 
     const body = await req.json().catch(() => ({}));
     const patch: Record<string, unknown> = {};
 
     if (body?.name !== undefined) {
       const name = String(body.name).trim();
-      if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
+      if (!name) return NextResponse.json({ error: "name required", code: "BAD_REQUEST" }, { status: 400 });
       patch.name = name;
     }
 
     if (body?.key !== undefined) {
       const key = toSlugKey(String(body.key));
-      if (!key) return NextResponse.json({ error: "key required" }, { status: 400 });
+      if (!key) return NextResponse.json({ error: "key required", code: "BAD_REQUEST" }, { status: 400 });
       patch.key = key;
     }
 
@@ -140,7 +145,7 @@ export async function PUT(req: Request) {
       const fieldType = String(body.field_type).trim();
       const allowed = new Set(["text", "number", "date", "boolean", "select"]);
       if (!allowed.has(fieldType)) {
-        return NextResponse.json({ error: "invalid field_type" }, { status: 400 });
+        return NextResponse.json({ error: "invalid field_type", code: "BAD_REQUEST" }, { status: 400 });
       }
       patch.field_type = fieldType;
     }
@@ -154,7 +159,7 @@ export async function PUT(req: Request) {
     }
 
     if (Object.keys(patch).length === 0) {
-      return NextResponse.json({ error: "no changes provided" }, { status: 400 });
+      return NextResponse.json({ error: "no changes provided", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     const { data, error } = await db
@@ -168,6 +173,6 @@ export async function PUT(req: Request) {
     if (error) throw error;
     return NextResponse.json({ entity_field: data });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
