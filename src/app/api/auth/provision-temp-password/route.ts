@@ -60,6 +60,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ created: true, temporary_password: tempPassword });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

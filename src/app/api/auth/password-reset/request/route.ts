@@ -42,13 +42,16 @@ export async function POST(req: Request) {
     const email = String(body.email ?? "").trim().toLowerCase();
     const redirectTo = String(body.redirectTo ?? "").trim();
 
-    if (!email) return NextResponse.json({ error: "email required" }, { status: 400 });
-    if (!redirectTo) return NextResponse.json({ error: "redirectTo required" }, { status: 400 });
+    if (!email) return NextResponse.json({ error: "email required", code: "BAD_REQUEST" }, { status: 400 });
+    if (!redirectTo) return NextResponse.json({ error: "redirectTo required", code: "BAD_REQUEST" }, { status: 400 });
 
     const exists = await authUserExistsByEmail(email);
     if (!exists) {
       return NextResponse.json(
-        { error: "Ese email no existe en Auth. Debe iniciar sesión al menos una vez o ser creado previamente." },
+        {
+          error: "Ese email no existe en Auth. Debe iniciar sesión al menos una vez o ser creado previamente.",
+          code: "AUTH_USER_NOT_FOUND",
+        },
         { status: 400 }
       );
     }
@@ -65,11 +68,11 @@ export async function POST(req: Request) {
 
     const { error } = await publicClient.auth.resetPasswordForEmail(email, { redirectTo });
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: error.message, code: "BAD_REQUEST" }, { status: 400 });
     }
 
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
