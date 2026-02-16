@@ -1,0 +1,37 @@
+name: Smoke E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Base URL objetivo (ej: https://tu-app.com)"
+        required: true
+        type: string
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SMOKE_BASE_URL: ${{ inputs.base_url }}
+      NEXT_PUBLIC_SUPABASE_AUTH_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_AUTH_URL }}
+      NEXT_PUBLIC_SUPABASE_AUTH_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_AUTH_ANON_KEY }}
+      SMOKE_SUPERADMIN_EMAIL: ${{ secrets.SMOKE_SUPERADMIN_EMAIL }}
+      SMOKE_SUPERADMIN_PASSWORD: ${{ secrets.SMOKE_SUPERADMIN_PASSWORD }}
+      SMOKE_OWNER_EMAIL: ${{ secrets.SMOKE_OWNER_EMAIL }}
+      SMOKE_OWNER_PASSWORD: ${{ secrets.SMOKE_OWNER_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Run smoke E2E
+        run: npm run smoke:e2e

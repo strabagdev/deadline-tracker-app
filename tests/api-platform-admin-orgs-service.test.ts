@@ -9,7 +9,6 @@ import {
 function repo(overrides?: Partial<PlatformAdminOrgsRepo>): PlatformAdminOrgsRepo {
   return {
     getOrganizationById: async () => ({ id: "o1", name: "Org Uno" }),
-    getProfileByEmail: async () => ({ user_id: "u1", email: "owner@acme.com" }),
     resolveAuthUserIdByEmail: async () => "u1",
     upsertProfile: async () => undefined,
     upsertOwnerMembership: async () => undefined,
@@ -38,7 +37,7 @@ test("assign owner responde 404 si org no existe", async () => {
 test("assign owner responde 400 si owner no existe en Auth", async () => {
   const res = await handlePlatformAssignOwner(
     { organizationId: "o1", ownerEmail: "owner@acme.com" },
-    repo({ getProfileByEmail: async () => null, resolveAuthUserIdByEmail: async () => null })
+    repo({ resolveAuthUserIdByEmail: async () => null })
   );
   assert.equal(res.status, 400);
   assert.equal(res.body.code, "OWNER_NOT_FOUND_IN_AUTH");

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { isSuperAdmin } from "@/lib/server/superAdmin";
-import { createClient } from "@supabase/supabase-js";
+import { findAuthUserIdByEmail } from "@/lib/server/authAdmin";
 import {
   handlePlatformAssignOwner,
   handlePlatformRemoveOwner,
@@ -39,34 +39,6 @@ function getErrorMessage(error: unknown): string {
   return "error";
 }
 
-async function resolveAuthUserIdByEmail(email: string) {
-  const authUrl = process.env.NEXT_PUBLIC_SUPABASE_AUTH_URL;
-  const authServiceRole = process.env.SUPABASE_AUTH_SERVICE_ROLE_KEY;
-  if (!authUrl || !authServiceRole) return null;
-
-  const authAdmin = createClient(authUrl, authServiceRole, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
-  let page = 1;
-  const perPage = 200;
-  const target = email.trim().toLowerCase();
-
-  while (page <= 50) {
-    const { data, error } = await authAdmin.auth.admin.listUsers({ page, perPage });
-    if (error) throw error;
-    const users = data?.users ?? [];
-
-    const found = users.find((u) => (u.email || "").trim().toLowerCase() === target);
-    if (found?.id) return found.id;
-
-    if (users.length < perPage) break;
-    page += 1;
-  }
-
-  return null;
-}
-
 function makePlatformAdminOrgsRepo(db: ReturnType<typeof createDataServerClient>): PlatformAdminOrgsRepo {
   return {
     getOrganizationById: async (organizationId) => {
@@ -78,17 +50,7 @@ function makePlatformAdminOrgsRepo(db: ReturnType<typeof createDataServerClient>
       if (error) throw error;
       return (data ?? null) as { id: string; name: string } | null;
     },
-    getProfileByEmail: async (ownerEmail) => {
-      const { data, error } = await db
-        .from("profiles")
-        .select("user_id,email")
-        .ilike("email", ownerEmail)
-        .limit(1);
-      if (error) throw error;
-      const row = Array.isArray(data) ? data[0] : null;
-      return (row ?? null) as { user_id: string; email: string | null } | null;
-    },
-    resolveAuthUserIdByEmail: (ownerEmail) => resolveAuthUserIdByEmail(ownerEmail),
+    resolveAuthUserIdByEmail: (ownerEmail) => findAuthUserIdByEmail(ownerEmail),
     upsertProfile: async (userId, email) => {
       const { error } = await db.from("profiles").upsert(
         { user_id: userId, email },

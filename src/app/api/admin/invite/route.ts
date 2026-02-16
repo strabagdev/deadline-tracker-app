@@ -3,6 +3,7 @@ import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { getAdminOrgAccess, getErrorMessage } from "@/lib/server/adminOrgAccess";
 import { createClient } from "@supabase/supabase-js";
+import { findAuthUserIdByEmail } from "@/lib/server/authAdmin";
 
 type MemberListRow = {
   user_id: string;
@@ -96,14 +97,7 @@ export async function POST(req: Request) {
     if (inviteErr) {
       // Si ya existe en Auth, reusamos profile para asignar membership en la org.
       if (inviteErr.message.toLowerCase().includes("already")) {
-        const { data: existingProfile, error: existingErr } = await db
-          .from("profiles")
-          .select("user_id")
-          .eq("email", email)
-          .maybeSingle();
-
-        if (existingErr) throw existingErr;
-        invitedUserId = existingProfile?.user_id ?? null;
+        invitedUserId = await findAuthUserIdByEmail(email);
       } else {
         return NextResponse.json({ error: inviteErr.message, code: "BAD_REQUEST" }, { status: 400 });
       }

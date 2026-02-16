@@ -5,7 +5,7 @@ export type AdminRole = "owner" | "admin";
 
 export type AdminOrgAccessResult =
   | { organizationId: string; role: AdminRole }
-  | { error: "no active organization" | "forbidden" };
+  | { error: "no active organization" | "forbidden" | "super admin global only" };
 
 type DataServerClient = ReturnType<typeof createDataServerClient>;
 

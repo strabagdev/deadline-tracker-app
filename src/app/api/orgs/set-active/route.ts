@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
+import { isSuperAdmin } from "@/lib/server/superAdmin";
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unauthorized";
@@ -9,6 +10,12 @@ function getErrorMessage(error: unknown): string {
 export async function POST(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
+    const db = createDataServerClient();
+    const globalOnly = await isSuperAdmin(db, user.id);
+    if (globalOnly) {
+      return NextResponse.json({ error: "super admin global only", code: "FORBIDDEN" }, { status: 403 });
+    }
+
     const body = await req.json().catch(() => ({}));
     const organizationId = body.organizationId as string | undefined;
 
@@ -18,8 +25,6 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-
-    const db = createDataServerClient();
 
     // Verifica membership
     const { data: member, error: memErr } = await db

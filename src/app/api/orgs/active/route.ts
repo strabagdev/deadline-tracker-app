@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
+import { isSuperAdmin } from "@/lib/server/superAdmin";
 
 export async function GET(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
+    const globalOnly = await isSuperAdmin(db, user.id);
+    if (globalOnly) {
+      return NextResponse.json({ error: "super admin global only", code: "FORBIDDEN" }, { status: 403 });
+    }
 
     // 1) leer org activa
     const { data: settings, error: setErr } = await db

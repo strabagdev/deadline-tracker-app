@@ -1,8 +1,9 @@
 import { createDataServerClient } from "@/lib/supabase/dataServer";
+import { isSuperAdmin } from "@/lib/server/superAdmin";
 
 type DataClient = ReturnType<typeof createDataServerClient>;
 
-export type OrgAccessError = "no active organization" | "forbidden";
+export type OrgAccessError = "no active organization" | "forbidden" | "super admin global only";
 
 export type OrgAccessResult =
   | {
@@ -41,6 +42,9 @@ export async function getMemberRole(db: DataClient, organizationId: string, user
 }
 
 export async function getOrgAccess(db: DataClient, userId: string): Promise<OrgAccessResult> {
+  const isGlobalOnly = await isSuperAdmin(db, userId);
+  if (isGlobalOnly) return { error: "super admin global only" };
+
   const organizationId = await getActiveOrgId(db, userId);
   if (!organizationId) return { error: "no active organization" };
 

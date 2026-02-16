@@ -40,6 +40,19 @@ Si quieres apuntar a otra URL:
 SMOKE_BASE_URL=http://localhost:3000 npm run smoke:e2e
 ```
 
+## CI manual (GitHub Actions)
+
+Existe workflow `Smoke E2E` (`.github/workflows/smoke-e2e.yml`) para correr esta prueba contra un entorno remoto.
+
+Secrets requeridos en GitHub:
+
+- `NEXT_PUBLIC_SUPABASE_AUTH_URL`
+- `NEXT_PUBLIC_SUPABASE_AUTH_ANON_KEY`
+- `SMOKE_SUPERADMIN_EMAIL`
+- `SMOKE_SUPERADMIN_PASSWORD`
+- `SMOKE_OWNER_EMAIL`
+- `SMOKE_OWNER_PASSWORD`
+
 ## Resultado esperado
 
 - Mensaje final `Smoke E2E OK`

@@ -1,12 +1,10 @@
 import { parseAssignOwnerPayload, parseRemoveOwnerPayload } from "./platformAdminInput";
 
 type OrgRow = { id: string; name: string };
-type ProfileRow = { user_id: string; email: string | null };
 type OwnerMemberRow = { organization_id: string; user_id: string; role: string };
 
 export type PlatformAdminOrgsRepo = {
   getOrganizationById: (organizationId: string) => Promise<OrgRow | null>;
-  getProfileByEmail: (ownerEmail: string) => Promise<ProfileRow | null>;
   resolveAuthUserIdByEmail: (ownerEmail: string) => Promise<string | null>;
   upsertProfile?: (userId: string, email: string) => Promise<void>;
   upsertOwnerMembership: (organizationId: string, userId: string) => Promise<void>;

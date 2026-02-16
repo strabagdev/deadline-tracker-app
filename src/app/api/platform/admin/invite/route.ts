@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { isSuperAdmin } from "@/lib/server/superAdmin";
+import { createAuthAdminClient, findAuthUserIdByEmail } from "@/lib/server/authAdmin";
 import { parsePlatformInvitePayload } from "@/lib/api/platformAdminInput";
 
 function getErrorMessage(error: unknown): string {
@@ -33,15 +33,7 @@ export async function POST(req: Request) {
     if (orgErr) throw orgErr;
     if (!org?.id) return NextResponse.json({ error: "organization not found", code: "ORGANIZATION_NOT_FOUND" }, { status: 404 });
 
-    const authUrl = process.env.NEXT_PUBLIC_SUPABASE_AUTH_URL;
-    const authServiceRole = process.env.SUPABASE_AUTH_SERVICE_ROLE_KEY;
-    if (!authUrl || !authServiceRole) {
-      throw new Error("Missing auth env vars");
-    }
-
-    const authAdmin = createClient(authUrl, authServiceRole, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    const authAdmin = createAuthAdminClient();
 
     const redirectTo = new URL("/auth/callback", req.url).toString();
     const { data: inviteData, error: inviteErr } = await authAdmin.auth.admin.inviteUserByEmail(email, {
@@ -52,32 +44,15 @@ export async function POST(req: Request) {
     let invitedUserId = inviteData.user?.id ?? null;
     if (inviteErr) {
       if (inviteErr.message.toLowerCase().includes("already")) {
-        // Usuario ya existe en auth, buscamos profile o lo creamos si está ausente.
-        const { data: existingProfile, error: existingErr } = await db
-          .from("profiles")
-          .select("user_id")
-          .ilike("email", email)
-          .maybeSingle();
-        if (existingErr) throw existingErr;
-        invitedUserId = existingProfile?.user_id ?? null;
+        // Usuario ya existe en Auth, resolvemos user_id directo desde Auth.
+        invitedUserId = await findAuthUserIdByEmail(email);
       } else {
         return NextResponse.json({ error: inviteErr.message, code: "BAD_REQUEST" }, { status: 400 });
       }
     }
 
     if (!invitedUserId) {
-      // Fallback: intentar resolver en Auth y sincronizar profile.
-      let page = 1;
-      const perPage = 200;
-      while (page <= 50 && !invitedUserId) {
-        const { data, error } = await authAdmin.auth.admin.listUsers({ page, perPage });
-        if (error) throw error;
-        const users = data?.users ?? [];
-        const found = users.find((u) => (u.email || "").trim().toLowerCase() === email);
-        if (found?.id) invitedUserId = found.id;
-        if (users.length < perPage) break;
-        page += 1;
-      }
+      invitedUserId = await findAuthUserIdByEmail(email);
     }
 
     if (!invitedUserId) {
