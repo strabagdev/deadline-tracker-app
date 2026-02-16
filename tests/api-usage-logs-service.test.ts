@@ -22,6 +22,7 @@ test("usage logs GET devuelve 400 sin entity_id", async () => {
   const res = await handleUsageLogsGet("o1", "http://localhost/api/usage-logs?limit=10", createRepo());
   assert.equal(res.status, 400);
   assert.equal(res.body.error, "entity_id required");
+  assert.equal(res.body.code, "BAD_REQUEST");
 });
 
 test("usage logs GET devuelve 404 si la entidad no pertenece a la org", async () => {
@@ -31,6 +32,7 @@ test("usage logs GET devuelve 404 si la entidad no pertenece a la org", async ()
     createRepo({ requireEntityInOrg: async () => false })
   );
   assert.equal(res.status, 404);
+  assert.equal(res.body.code, "ENTITY_NOT_FOUND");
 });
 
 test("usage logs POST devuelve 201 al crear", async () => {

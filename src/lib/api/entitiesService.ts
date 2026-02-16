@@ -34,7 +34,7 @@ type ServiceResponse = {
 
 export async function handleEntitiesPost(orgId: string, rawBody: unknown, repo: EntitiesRepo): Promise<ServiceResponse> {
   const parsed = parseEntityCreateBody(rawBody);
-  if (!parsed.ok) return { status: 400, body: { error: parsed.error } };
+  if (!parsed.ok) return { status: 400, body: { error: parsed.error, code: "BAD_REQUEST" } };
 
   const { name, entityTypeId, tracksUsage, fieldValues } = parsed;
   const entity = await repo.createEntity(orgId, { name, entityTypeId, tracksUsage });
@@ -59,10 +59,10 @@ export async function handleEntitiesPut(
   rawBody: unknown,
   repo: EntitiesRepo
 ): Promise<ServiceResponse> {
-  if (!entityId) return { status: 400, body: { error: "id required" } };
+  if (!entityId) return { status: 400, body: { error: "id required", code: "BAD_REQUEST" } };
 
   const existing = await repo.getEntityById(orgId, entityId);
-  if (!existing) return { status: 404, body: { error: "not found" } };
+  if (!existing) return { status: 404, body: { error: "not found", code: "ENTITY_NOT_FOUND" } };
 
   const parsed = parseEntityUpdateBody(rawBody);
   const patch: Record<string, unknown> = {};
@@ -96,7 +96,7 @@ export async function handleEntitiesPut(
 }
 
 export async function handleEntitiesDelete(orgId: string, entityId: string, repo: EntitiesRepo): Promise<ServiceResponse> {
-  if (!entityId) return { status: 400, body: { error: "id required" } };
+  if (!entityId) return { status: 400, body: { error: "id required", code: "BAD_REQUEST" } };
   await repo.deleteEntity(orgId, entityId);
   return { status: 200, body: { ok: true } };
 }

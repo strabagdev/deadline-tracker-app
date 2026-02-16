@@ -7,8 +7,8 @@ export function parseDeadlineCreateIds(body: unknown) {
   const entityId = String(payload.entity_id ?? "").trim();
   const deadlineTypeId = String(payload.deadline_type_id ?? "").trim();
 
-  if (!entityId) return { ok: false as const, status: 400, body: { error: "entity_id required" } };
-  if (!deadlineTypeId) return { ok: false as const, status: 400, body: { error: "deadline_type_id required" } };
+  if (!entityId) return { ok: false as const, status: 400, body: { error: "entity_id required", code: "BAD_REQUEST" } };
+  if (!deadlineTypeId) return { ok: false as const, status: 400, body: { error: "deadline_type_id required", code: "BAD_REQUEST" } };
 
   return { ok: true as const, entityId, deadlineTypeId };
 }
@@ -26,7 +26,7 @@ export function parseDeadlineCreatePayload(
       return {
         ok: false as const,
         status: 400,
-        body: { error: "next_due_date required for type measure_by=date" },
+        body: { error: "next_due_date required for type measure_by=date", code: "BAD_REQUEST" },
       };
     }
     return { ok: true as const, measureBy: "date" as const, lastDoneDate, nextDueDate };
@@ -49,15 +49,17 @@ export function parseDeadlineCreatePayload(
   const frequencyUnit = payload.frequency_unit ? String(payload.frequency_unit) : "";
   const usageDailyAverage = numOrNaN(payload.usage_daily_average);
 
-  if (!Number.isFinite(lastDoneUsage)) return { ok: false as const, status: 400, body: { error: "last_done_usage required" } };
-  if (!Number.isFinite(frequency)) return { ok: false as const, status: 400, body: { error: "frequency required" } };
-  if (!frequencyUnit) return { ok: false as const, status: 400, body: { error: "frequency_unit required" } };
+  if (!Number.isFinite(lastDoneUsage))
+    return { ok: false as const, status: 400, body: { error: "last_done_usage required", code: "BAD_REQUEST" } };
+  if (!Number.isFinite(frequency))
+    return { ok: false as const, status: 400, body: { error: "frequency required", code: "BAD_REQUEST" } };
+  if (!frequencyUnit) return { ok: false as const, status: 400, body: { error: "frequency_unit required", code: "BAD_REQUEST" } };
 
   if (mode === "manual" && (!Number.isFinite(usageDailyAverage) || usageDailyAverage <= 0)) {
     return {
       ok: false as const,
       status: 400,
-      body: { error: "usage_daily_average required for usage_daily_average_mode=manual" },
+      body: { error: "usage_daily_average required for usage_daily_average_mode=manual", code: "BAD_REQUEST" },
     };
   }
 

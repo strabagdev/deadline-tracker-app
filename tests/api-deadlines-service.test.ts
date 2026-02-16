@@ -15,6 +15,7 @@ function repo(overrides?: Partial<DeadlinesRepo>): DeadlinesRepo {
 test("deadlines POST valida ids requeridos", async () => {
   const res = await handleDeadlinesPost("o1", {}, repo());
   assert.equal(res.status, 400);
+  assert.equal(res.body.code, "BAD_REQUEST");
 });
 
 test("deadlines POST devuelve 404 si entidad no existe", async () => {
@@ -24,6 +25,7 @@ test("deadlines POST devuelve 404 si entidad no existe", async () => {
     repo({ getEntity: async () => null })
   );
   assert.equal(res.status, 404);
+  assert.equal(res.body.code, "ENTITY_NOT_FOUND");
 });
 
 test("deadlines POST devuelve 400 si tipo inactivo", async () => {
@@ -33,6 +35,7 @@ test("deadlines POST devuelve 400 si tipo inactivo", async () => {
     repo({ getDeadlineType: async () => ({ id: "dt1", name: "X", measure_by: "date", is_active: false }) })
   );
   assert.equal(res.status, 400);
+  assert.equal(res.body.code, "DEADLINE_TYPE_INACTIVE");
 });
 
 test("deadlines POST crea por fecha", async () => {

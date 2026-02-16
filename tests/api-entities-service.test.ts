@@ -24,6 +24,7 @@ function repo(overrides?: Partial<EntitiesRepo>): EntitiesRepo {
 test("entities POST devuelve 400 con payload invalido", async () => {
   const res = await handleEntitiesPost("o1", {}, repo());
   assert.equal(res.status, 400);
+  assert.equal(res.body.code, "BAD_REQUEST");
 });
 
 test("entities POST crea entidad y devuelve 201", async () => {
@@ -39,11 +40,13 @@ test("entities POST crea entidad y devuelve 201", async () => {
 test("entities PUT devuelve 400 sin id", async () => {
   const res = await handleEntitiesPut("o1", "", {}, repo());
   assert.equal(res.status, 400);
+  assert.equal(res.body.code, "BAD_REQUEST");
 });
 
 test("entities PUT devuelve 404 cuando no existe", async () => {
   const res = await handleEntitiesPut("o1", "e1", {}, repo({ getEntityById: async () => null }));
   assert.equal(res.status, 404);
+  assert.equal(res.body.code, "ENTITY_NOT_FOUND");
 });
 
 test("entities PUT actualiza y devuelve ok", async () => {

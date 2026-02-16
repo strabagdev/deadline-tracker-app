@@ -56,11 +56,11 @@ export async function handleDeadlinesPost(orgId: string, rawBody: unknown, repo:
 
   const { entityId, deadlineTypeId } = ids;
   const entity = await repo.getEntity(orgId, entityId);
-  if (!entity) return { status: 404, body: { error: "entity not found" } };
+  if (!entity) return { status: 404, body: { error: "entity not found", code: "ENTITY_NOT_FOUND" } };
 
   const dt = await repo.getDeadlineType(orgId, deadlineTypeId);
-  if (!dt) return { status: 404, body: { error: "deadline type not found" } };
-  if (!dt.is_active) return { status: 400, body: { error: "deadline type is inactive" } };
+  if (!dt) return { status: 404, body: { error: "deadline type not found", code: "DEADLINE_TYPE_NOT_FOUND" } };
+  if (!dt.is_active) return { status: 400, body: { error: "deadline type is inactive", code: "DEADLINE_TYPE_INACTIVE" } };
 
   const parsed = parseDeadlineCreatePayload(rawBody, { measureBy: dt.measure_by, tracksUsage: entity.tracks_usage });
   if (!parsed.ok) return { status: parsed.status, body: parsed.body };
