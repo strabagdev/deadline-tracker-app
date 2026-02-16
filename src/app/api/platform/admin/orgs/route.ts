@@ -4,9 +4,10 @@ import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { isSuperAdmin } from "@/lib/server/superAdmin";
 import { createClient } from "@supabase/supabase-js";
 import {
-  parseAssignOwnerPayload,
-  parseRemoveOwnerPayload,
-} from "@/lib/api/platformAdminInput";
+  handlePlatformAssignOwner,
+  handlePlatformRemoveOwner,
+  type PlatformAdminOrgsRepo,
+} from "@/lib/api/platformAdminOrgsService";
 
 type OrgRow = {
   id: string;
@@ -56,6 +57,75 @@ async function resolveAuthUserIdByEmail(email: string) {
   }
 
   return null;
+}
+
+function makePlatformAdminOrgsRepo(db: ReturnType<typeof createDataServerClient>): PlatformAdminOrgsRepo {
+  return {
+    getOrganizationById: async (organizationId) => {
+      const { data, error } = await db
+        .from("organizations")
+        .select("id,name")
+        .eq("id", organizationId)
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as { id: string; name: string } | null;
+    },
+    getProfileByEmail: async (ownerEmail) => {
+      const { data, error } = await db
+        .from("profiles")
+        .select("user_id,email")
+        .ilike("email", ownerEmail)
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as { user_id: string; email: string | null } | null;
+    },
+    resolveAuthUserIdByEmail: (ownerEmail) => resolveAuthUserIdByEmail(ownerEmail),
+    upsertProfile: async (userId, email) => {
+      const { error } = await db.from("profiles").upsert(
+        { user_id: userId, email },
+        { onConflict: "user_id" }
+      );
+      if (error) throw error;
+    },
+    upsertOwnerMembership: async (organizationId, userId) => {
+      const { error } = await db.from("organization_members").upsert(
+        {
+          organization_id: organizationId,
+          user_id: userId,
+          role: "owner",
+        },
+        { onConflict: "organization_id,user_id" }
+      );
+      if (error) throw error;
+    },
+    getOwnerMember: async (organizationId, userId) => {
+      const { data, error } = await db
+        .from("organization_members")
+        .select("organization_id,user_id,role")
+        .eq("organization_id", organizationId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as { organization_id: string; user_id: string; role: string } | null;
+    },
+    listOwners: async (organizationId) => {
+      const { data, error } = await db
+        .from("organization_members")
+        .select("user_id")
+        .eq("organization_id", organizationId)
+        .eq("role", "owner");
+      if (error) throw error;
+      return (data ?? []) as Array<{ user_id: string }>;
+    },
+    deleteOwnerMembership: async (organizationId, userId) => {
+      const { error } = await db
+        .from("organization_members")
+        .delete()
+        .eq("organization_id", organizationId)
+        .eq("user_id", userId);
+      if (error) throw error;
+    },
+  };
 }
 
 export async function GET(req: Request) {
@@ -139,63 +209,8 @@ export async function PUT(req: Request) {
     if (!allowed) return NextResponse.json({ error: "super admin only", code: "FORBIDDEN" }, { status: 403 });
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const parsed = parseAssignOwnerPayload(body);
-    if (!parsed.ok) return NextResponse.json(parsed.body, { status: parsed.status });
-    const { organizationId, ownerEmail } = parsed;
-
-    const { data: org, error: orgErr } = await db
-      .from("organizations")
-      .select("id,name")
-      .eq("id", organizationId)
-      .maybeSingle();
-    if (orgErr) throw orgErr;
-    if (!org?.id) return NextResponse.json({ error: "organization not found", code: "ORGANIZATION_NOT_FOUND" }, { status: 404 });
-
-    const { data: profile, error: profErr } = await db
-      .from("profiles")
-      .select("user_id,email")
-      .ilike("email", ownerEmail)
-      .maybeSingle();
-    if (profErr) throw profErr;
-
-    let ownerUserId = profile?.user_id ?? null;
-    let ownerResolvedEmail = profile?.email ?? ownerEmail;
-
-    // Fallback: si existe en Auth pero aún no en profiles (DB de datos), lo sincronizamos.
-    if (!ownerUserId) {
-      const authUserId = await resolveAuthUserIdByEmail(ownerEmail);
-      if (!authUserId) {
-        return NextResponse.json(
-          { error: "Owner email does not exist in Auth. Invite/login first.", code: "OWNER_NOT_FOUND_IN_AUTH" },
-          { status: 400 }
-        );
-      }
-
-      const { error: upProfileErr } = await db.from("profiles").upsert(
-        { user_id: authUserId, email: ownerEmail },
-        { onConflict: "user_id" }
-      );
-      if (upProfileErr) throw upProfileErr;
-
-      ownerUserId = authUserId;
-      ownerResolvedEmail = ownerEmail;
-    }
-
-    const { error: upErr } = await db.from("organization_members").upsert(
-      {
-        organization_id: organizationId,
-        user_id: ownerUserId,
-        role: "owner",
-      },
-      { onConflict: "organization_id,user_id" }
-    );
-    if (upErr) throw upErr;
-
-    return NextResponse.json({
-      ok: true,
-      organization: { id: org.id, name: org.name },
-      owner: { user_id: ownerUserId, email: ownerResolvedEmail },
-    });
+    const response = await handlePlatformAssignOwner(body, makePlatformAdminOrgsRepo(db));
+    return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
@@ -210,42 +225,8 @@ export async function DELETE(req: Request) {
     if (!allowed) return NextResponse.json({ error: "super admin only", code: "FORBIDDEN" }, { status: 403 });
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const parsed = parseRemoveOwnerPayload(body);
-    if (!parsed.ok) return NextResponse.json(parsed.body, { status: parsed.status });
-    const { organizationId, ownerUserId } = parsed;
-
-    const { data: target, error: targetErr } = await db
-      .from("organization_members")
-      .select("organization_id,user_id,role")
-      .eq("organization_id", organizationId)
-      .eq("user_id", ownerUserId)
-      .maybeSingle();
-    if (targetErr) throw targetErr;
-    if (!target?.user_id) return NextResponse.json({ error: "owner not found in organization", code: "OWNER_NOT_FOUND" }, { status: 404 });
-    if (target.role !== "owner") return NextResponse.json({ error: "target user is not owner", code: "BAD_REQUEST" }, { status: 400 });
-
-    const { data: owners, error: ownersErr } = await db
-      .from("organization_members")
-      .select("user_id")
-      .eq("organization_id", organizationId)
-      .eq("role", "owner");
-    if (ownersErr) throw ownersErr;
-
-    if ((owners ?? []).length <= 1) {
-      return NextResponse.json(
-        { error: "Cannot remove the last owner. Assign another owner first.", code: "LAST_OWNER" },
-        { status: 400 }
-      );
-    }
-
-    const { error: delErr } = await db
-      .from("organization_members")
-      .delete()
-      .eq("organization_id", organizationId)
-      .eq("user_id", ownerUserId);
-    if (delErr) throw delErr;
-
-    return NextResponse.json({ ok: true });
+    const response = await handlePlatformRemoveOwner(body, makePlatformAdminOrgsRepo(db));
+    return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
