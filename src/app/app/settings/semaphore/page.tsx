@@ -5,15 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 import { Loader } from "@/components/ui/loader";
-
-/**
- * Semáforo (umbral en días) aplicado a:
- * - Vencimientos por FECHA: days_remaining
- * - Vencimientos por USO: estimated_days (derivado de usage)
- *
- * NOTA: Este formulario edita UN SOLO set de umbrales persistido en
- * yellow_days, orange_days y red_days.
- */
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 
 type SettingsPayload = {
   organization_id?: string;
@@ -111,6 +106,7 @@ export default function SemaphoreSettingsPage() {
       orange_days: Number(s.orange_days ?? 30),
       red_days: Number(s.red_days ?? 15),
     });
+
     setLoading(false);
   }
 
@@ -149,7 +145,7 @@ export default function SemaphoreSettingsPage() {
       return;
     }
 
-    setOkMsg("Guardado ✅ (aplica para FECHA y USO)");
+    setOkMsg("Guardado. Aplica para vencimientos por fecha y por uso.");
     setSaving(false);
   }
 
@@ -157,140 +153,104 @@ export default function SemaphoreSettingsPage() {
 
   const helpText = useMemo(
     () =>
-      "Estados: 🟢 verde, 🟡 amarillo, 🟠 naranja, 🔴 rojo. " +
-      "Vencido cuando días ≤ 0. Estos umbrales se aplican a FECHA (días restantes) y USO (días estimados).",
+      "Estados: verde, amarillo, naranja y rojo. " +
+      "Se aplican a FECHA (días restantes) y USO (días estimados).",
     []
   );
 
   return (
-    <main style={{ padding: 16, maxWidth: 900, margin: "0 auto" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <h2 style={{ margin: 0 }}>Semáforo</h2>
-          <p style={{ marginTop: 6, opacity: 0.75 }}>{helpText}</p>
-        </div>
-
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Link href="/app" style={{ textDecoration: "none" }}>
-            <button style={{ padding: "10px 12px" }}>Dashboard</button>
-          </Link>
-          <button onClick={load} style={{ padding: "10px 12px" }} disabled={loading || saving}>
-            Actualizar
-          </button>
-        </div>
-      </div>
-
-      {errorMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{errorMsg}</p>}
-      {okMsg && <p style={{ color: "green" }}>{okMsg}</p>}
-
-      <section
-        style={{
-          marginTop: 12,
-          border: "1px solid #eee",
-          borderRadius: 16,
-          padding: 12,
-          background: "white",
-        }}
-      >
-        {loading ? (
-          <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
-            <Loader label="Cargando configuración..." />
-          </div>
-        ) : (
-          <>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>
-              Organización activa: <b>{orgId || "—"}</b> · Rol: <b>{role || "—"}</b>
+    <main className="mx-auto max-w-[1100px] space-y-4 px-4 py-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle>Semáforo</CardTitle>
+              <p className="mt-1 text-sm text-slate-500">{helpText}</p>
             </div>
+            <div className="flex items-center gap-2">
+              <Link href="/app">
+                <Button variant="outline" size="sm">Dashboard</Button>
+              </Link>
+              <Button onClick={load} variant="outline" size="sm" disabled={loading || saving}>
+                Actualizar
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
 
-            {!canEdit ? <p style={{ marginTop: 10, opacity: 0.8 }}>Solo owner/admin puede editar.</p> : null}
+      {errorMsg ? <p className="whitespace-pre-wrap text-sm text-rose-600">{errorMsg}</p> : null}
+      {okMsg ? <p className="text-sm text-emerald-700">{okMsg}</p> : null}
 
-            <form onSubmit={save} style={{ marginTop: 12, display: "grid", gap: 16, maxWidth: 620 }}>
-              <div style={{ border: "1px solid #f0f0f0", borderRadius: 12, padding: 12 }}>
-                <div style={{ fontWeight: 900 }}>Umbrales (aplican a FECHA y USO)</div>
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">Org activa: {orgId || "—"}</Badge>
+            <Badge variant="outline">Rol: {role || "—"}</Badge>
+            {!canEdit ? <Badge variant="outline" className="border-amber-300 bg-amber-100 text-amber-800">Solo owner/admin puede editar</Badge> : null}
+          </div>
+        </CardHeader>
+        <CardContent className="pt-1">
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <Loader label="Cargando configuración..." />
+            </div>
+          ) : (
+            <form onSubmit={save} className="space-y-4">
+              <div className="rounded-2xl border bg-slate-50 p-3">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="border-emerald-300 bg-emerald-100 text-emerald-800">🟢 Al día</Badge>
+                  <Badge variant="outline" className="border-amber-300 bg-amber-100 text-amber-800">🟡 ≤ Yellow</Badge>
+                  <Badge variant="outline" className="border-orange-300 bg-orange-100 text-orange-800">🟠 ≤ Orange</Badge>
+                  <Badge variant="outline" className="border-rose-300 bg-rose-100 text-rose-800">🔴 ≤ Red</Badge>
+                  <Badge variant="outline">Vencido: días ≤ 0</Badge>
+                </div>
 
-                <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr 1fr", marginTop: 10 }}>
-                  <label style={{ fontSize: 12, opacity: 0.8 }}>
-                    🟡 Yellow ≤ (días)
-                    <input
+                <div className="grid gap-3 md:grid-cols-3">
+                  <label className="grid gap-1.5 text-xs text-slate-600">
+                    Umbral Yellow (días)
+                    <Input
                       disabled={!canEdit || saving}
                       value={String(t.yellow_days)}
                       onChange={(e) => setT((p) => ({ ...p, yellow_days: Number(e.target.value) }))}
                       inputMode="numeric"
-                      style={{
-                        width: "100%",
-                        padding: 10,
-                        borderRadius: 10,
-                        border: "1px solid #e5e5e5",
-                        marginTop: 6,
-                      }}
                     />
                   </label>
-
-                  <label style={{ fontSize: 12, opacity: 0.8 }}>
-                    🟠 Orange ≤ (días)
-                    <input
+                  <label className="grid gap-1.5 text-xs text-slate-600">
+                    Umbral Orange (días)
+                    <Input
                       disabled={!canEdit || saving}
                       value={String(t.orange_days)}
                       onChange={(e) => setT((p) => ({ ...p, orange_days: Number(e.target.value) }))}
                       inputMode="numeric"
-                      style={{
-                        width: "100%",
-                        padding: 10,
-                        borderRadius: 10,
-                        border: "1px solid #e5e5e5",
-                        marginTop: 6,
-                      }}
                     />
                   </label>
-
-                  <label style={{ fontSize: 12, opacity: 0.8 }}>
-                    🔴 Red ≤ (días)
-                    <input
+                  <label className="grid gap-1.5 text-xs text-slate-600">
+                    Umbral Red (días)
+                    <Input
                       disabled={!canEdit || saving}
                       value={String(t.red_days)}
                       onChange={(e) => setT((p) => ({ ...p, red_days: Number(e.target.value) }))}
                       inputMode="numeric"
-                      style={{
-                        width: "100%",
-                        padding: 10,
-                        borderRadius: 10,
-                        border: "1px solid #e5e5e5",
-                        marginTop: 6,
-                      }}
                     />
                   </label>
                 </div>
 
-                <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-                  Vencido cuando días ≤ <b>0</b> (no editable).
-                </div>
+                <p className="mt-3 text-xs text-slate-500">Regla obligatoria: yellow ≥ orange ≥ red.</p>
               </div>
 
-              <div style={{ display: "flex", gap: 10 }}>
-                <button type="submit" disabled={!canEdit || saving} style={{ padding: "10px 14px", fontWeight: 800 }}>
-                  {saving ? "Guardando…" : "Guardar"}
-                </button>
-                <button
-                  type="button"
-                  onClick={load}
-                  disabled={loading || saving}
-                  style={{ padding: "10px 14px", opacity: 0.85 }}
-                >
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="submit" disabled={!canEdit || saving}>
+                  {saving ? "Guardando..." : "Guardar cambios"}
+                </Button>
+                <Button type="button" variant="outline" onClick={load} disabled={loading || saving}>
                   Revertir
-                </button>
+                </Button>
               </div>
             </form>
-          </>
-        )}
-      </section>
+          )}
+        </CardContent>
+      </Card>
     </main>
   );
 }

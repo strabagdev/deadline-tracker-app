@@ -6,6 +6,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 import { pickNearestDeadline } from "@/lib/deadlines/calculateDeadlineStatus";
 import { Loader } from "@/components/ui/loader";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 type DeadlineType = {
   id: string;
@@ -43,8 +48,23 @@ type EntityRow = {
 };
 
 type LatestUsageByEntity = Record<string, { value: number; logged_at: string }>;
-
 type Status = "red" | "orange" | "yellow" | "green" | "none";
+type SortMode = "critical" | "name" | "type" | "created";
+
+type SemaphoreSettings = {
+  yellow_days: number;
+  orange_days: number;
+  red_days: number;
+};
+
+const statusFilterMeta: Array<{ key: Status | "all"; title: string }> = [
+  { key: "all", title: "Todos" },
+  { key: "red", title: "Vencido" },
+  { key: "orange", title: "Urgente" },
+  { key: "yellow", title: "Por vencer" },
+  { key: "green", title: "Al día" },
+  { key: "none", title: "Sin info" },
+];
 
 function fmtDate(d: Date | null) {
   if (!d) return "—";
@@ -59,88 +79,107 @@ function statusPriority(s: Status) {
   return 4;
 }
 
-function statusChipStyle(s: Status | "all", active: boolean): React.CSSProperties {
-  const base: React.CSSProperties = {
-    border: "1px solid #d1d5db",
-    borderRadius: 999,
-    padding: "8px 12px",
-    fontSize: 12,
-    cursor: "pointer",
-    background: "white",
-    userSelect: "none",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 6,
-  };
+function IconStatus({ status }: { status: Status | "all" }) {
+  if (status === "all") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+        <path d="M4 5h16" />
+        <path d="M7 12h10" />
+        <path d="M10 19h4" />
+      </svg>
+    );
+  }
 
-  const map: Record<string, React.CSSProperties> = {
-    red: { background: "#ffe4e6", borderColor: "#fda4af", color: "#9f1239" },
-    orange: { background: "#ffedd5", borderColor: "#fdba74", color: "#9a3412" },
-    yellow: { background: "#fef3c7", borderColor: "#fcd34d", color: "#92400e" },
-    green: { background: "#dcfce7", borderColor: "#86efac", color: "#166534" },
-    none: { background: "#f1f5f9", borderColor: "#cbd5e1", color: "#334155" },
-    all: { background: "#dbeafe", borderColor: "#93c5fd", color: "#1d4ed8" },
-  };
+  const colorClass =
+    status === "red"
+      ? "text-rose-600"
+      : status === "orange"
+        ? "text-orange-600"
+        : status === "yellow"
+          ? "text-amber-500"
+          : status === "green"
+            ? "text-emerald-600"
+            : "text-slate-400";
 
-  const act: React.CSSProperties = active
-    ? { boxShadow: "0 0 0 2px rgba(15,23,42,0.28)", opacity: 1, borderWidth: 2, fontWeight: 700 }
-    : { opacity: 0.72 };
-  return { ...base, ...(map[s] ?? {}), ...act };
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={cn("h-3.5 w-3.5", colorClass)} aria-hidden>
+      <circle cx="12" cy="12" r="8" />
+    </svg>
+  );
 }
 
-function rowStatusChipStyle(s: Status): React.CSSProperties {
-  const base: React.CSSProperties = {
-    border: "1px solid #e5e5e5",
-    borderRadius: 999,
-    padding: "5px 10px",
-    fontSize: 11,
-    cursor: "pointer",
-    background: "white",
-    userSelect: "none",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 4,
-    lineHeight: 1.1,
-  };
+function statusChipClasses(s: Status | "all", active: boolean) {
+  const tone =
+    s === "red"
+      ? "!border-rose-300 !bg-rose-100 !text-rose-800 hover:!bg-rose-200"
+      : s === "orange"
+        ? "!border-orange-300 !bg-orange-100 !text-orange-800 hover:!bg-orange-200"
+        : s === "yellow"
+          ? "!border-amber-300 !bg-amber-100 !text-amber-800 hover:!bg-amber-200"
+          : s === "green"
+            ? "!border-emerald-300 !bg-emerald-100 !text-emerald-800 hover:!bg-emerald-200"
+            : s === "none"
+              ? "!border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200"
+              : "!border-blue-300 !bg-blue-100 !text-blue-800 hover:!bg-blue-200";
 
-  const map: Record<string, React.CSSProperties> = {
-    red: { background: "#ffe4e6", borderColor: "#fda4af", color: "#9f1239" },
-    orange: { background: "#ffedd5", borderColor: "#fdba74", color: "#9a3412" },
-    yellow: { background: "#fef3c7", borderColor: "#fcd34d", color: "#92400e" },
-    green: { background: "#dcfce7", borderColor: "#86efac", color: "#166534" },
-    none: { background: "#f1f5f9", borderColor: "#cbd5e1", color: "#334155" },
-  };
-
-  return { ...base, ...(map[s] ?? {}) };
+  return cn(
+    "min-w-[54px] justify-center border font-semibold",
+    tone,
+    active ? "!border-slate-500 opacity-100" : "opacity-80"
+  );
 }
 
-function toEntitiesStatus(s: "red" | "orange" | "yellow" | "green" | "none"): Status {
-  return s;
+function statusBadgeClasses(status: Status) {
+  return status === "red"
+    ? "border-rose-300 bg-rose-100 text-rose-800"
+    : status === "orange"
+      ? "border-orange-300 bg-orange-100 text-orange-800"
+      : status === "yellow"
+        ? "border-amber-300 bg-amber-100 text-amber-800"
+        : status === "green"
+          ? "border-emerald-300 bg-emerald-100 text-emerald-800"
+          : "border-slate-300 bg-slate-100 text-slate-700";
 }
-
-
-type SortMode = "critical" | "name" | "type" | "created";
 
 export default function EntitiesPage() {
   const router = useRouter();
-
   const searchParams = useSearchParams();
-  const autoOpenCreate = searchParams.get("new") === "1";
 
+  const autoOpenCreate = searchParams.get("new") === "1";
   const [showCreate, setShowCreate] = useState<boolean>(autoOpenCreate);
 
   const [createName, setCreateName] = useState<string>("");
   const [createEntityTypeId, setCreateEntityTypeId] = useState<string>("");
-  // If true, this entity will record usage logs (hours/km/etc.) and can have usage-based deadlines
   const [createTracksUsage, setCreateTracksUsage] = useState<boolean>(false);
-
   const [entityTypes, setEntityTypes] = useState<EntityType[]>([]);
   const [typesLoading, setTypesLoading] = useState<boolean>(false);
   const [creating, setCreating] = useState<boolean>(false);
 
-  // Load entity types for the inline create form (single source of truth: /api/entity-types)
+  const [entities, setEntities] = useState<EntityRow[]>([]);
+  const [usage, setUsage] = useState<LatestUsageByEntity>({});
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string>("");
+
+  const [q, setQ] = useState("");
+  const [filterStatus, setFilterStatus] = useState<Status | "all">("all");
+  const [filterEntityType, setFilterEntityType] = useState<string>("all");
+  const [sortMode, setSortMode] = useState<SortMode>("critical");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+
+  const [semaphore, setSemaphore] = useState<SemaphoreSettings>({
+    yellow_days: 60,
+    orange_days: 30,
+    red_days: 15,
+  });
+
   useEffect(() => {
     void loadEntityTypes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -163,11 +202,48 @@ export default function EntitiesPage() {
       const list = (json.entity_types ?? json.data ?? json ?? []) as EntityType[];
       const safe = Array.isArray(list) ? list : [];
       setEntityTypes(safe);
-      // default selection
       if (!createEntityTypeId && safe[0]?.id) setCreateEntityTypeId(safe[0].id);
     }
 
     setTypesLoading(false);
+  }
+
+  async function load() {
+    setLoading(true);
+    setErrorMsg("");
+
+    const { data } = await supabaseAuth.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    const res = await fetch("/api/dashboard", { headers: { Authorization: `Bearer ${token}` } });
+    const json = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      setErrorMsg(json.error || "No se pudo cargar entidades");
+      setEntities([]);
+      setUsage({});
+      setLoading(false);
+      return;
+    }
+
+    setEntities(json.entities ?? []);
+    setUsage(json.latest_usage_by_entity ?? {});
+
+    const sres = await fetch("/api/settings/semaphore", { headers: { Authorization: `Bearer ${token}` } });
+    const sjson = await sres.json().catch(() => ({}));
+    if (sres.ok && sjson?.settings) {
+      setSemaphore({
+        yellow_days: Number(sjson.settings.yellow_days ?? 60),
+        orange_days: Number(sjson.settings.orange_days ?? 30),
+        red_days: Number(sjson.settings.red_days ?? 15),
+      });
+    }
+
+    setLoading(false);
   }
 
   async function createEntityInline(e: React.FormEvent) {
@@ -213,7 +289,6 @@ export default function EntitiesPage() {
       return;
     }
 
-    // clear + refresh
     setCreateName("");
     setCreateTracksUsage(false);
     setShowCreate(false);
@@ -228,49 +303,6 @@ export default function EntitiesPage() {
     setCreating(false);
   }
 
-
-  const [entities, setEntities] = useState<EntityRow[]>([]);
-  const [usage, setUsage] = useState<LatestUsageByEntity>({});
-  const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState<string>("");
-
-  const [q, setQ] = useState("");
-  const [filterStatus, setFilterStatus] = useState<Status | "all">("all");
-  const [filterEntityType, setFilterEntityType] = useState<string>("all");
-  const [sortMode, setSortMode] = useState<SortMode>("critical");
-
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function load() {
-    setLoading(true);
-    setErrorMsg("");
-
-    const { data } = await supabaseAuth.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) {
-      router.replace("/login");
-      return;
-    }
-
-    const res = await fetch("/api/dashboard", { headers: { Authorization: `Bearer ${token}` } });
-    const json = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      setErrorMsg(json.error || "No se pudo cargar entidades");
-      setEntities([]);
-      setUsage({});
-      setLoading(false);
-      return;
-    }
-
-    setEntities(json.entities ?? []);
-    setUsage(json.latest_usage_by_entity ?? {});
-    setLoading(false);
-  }
-
   const entityTypeOptions = useMemo(() => {
     const map = new Map<string, string>();
     for (const e of entities) {
@@ -280,27 +312,52 @@ export default function EntitiesPage() {
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   }, [entities]);
 
+  const computedAll = useMemo(() => {
+    return entities.map((e) => {
+      const latest = usage[e.id]?.value ?? null;
+      const latestAt = usage[e.id]?.logged_at ?? null;
+      const nearest = pickNearestDeadline(e.deadlines, latest, {
+        yellowDays: Number(semaphore.yellow_days ?? 60),
+        orangeDays: Number(semaphore.orange_days ?? 30),
+        redDays: Number(semaphore.red_days ?? 15),
+      });
+      const status: Status = (nearest?.status as Status) ?? "none";
+      return { entity: e, nearest, status, latestUsage: latest, latestUsageAt: latestAt };
+    });
+  }, [entities, usage, semaphore]);
+
+  const countsAll = useMemo(() => {
+    let red = 0;
+    let orange = 0;
+    let yellow = 0;
+    let green = 0;
+    let none = 0;
+
+    for (const r of computedAll) {
+      if (r.status === "red") red++;
+      else if (r.status === "orange") orange++;
+      else if (r.status === "yellow") yellow++;
+      else if (r.status === "green") green++;
+      else none++;
+    }
+
+    return { red, orange, yellow, green, none, total: computedAll.length };
+  }, [computedAll]);
+
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
 
-    const out = entities
-      .map((e) => {
-        const latest = usage[e.id]?.value ?? null;
-        const latestAt = usage[e.id]?.logged_at ?? null;
-        const nearest = pickNearestDeadline(e.deadlines, latest, {
-          yellowDays: 14,
-          orangeDays: 7,
-          redDays: 0,
-        });
-        const status: Status = nearest ? toEntitiesStatus(nearest.status) : "none";
-        return { entity: e, nearest, status, latestUsage: latest, latestUsageAt: latestAt };
-      })
-      .filter((r) => {
-        if (filterEntityType !== "all" && r.entity.entity_type_id !== filterEntityType) return false;
-        if (filterStatus !== "all" && r.status !== filterStatus) return false;
-        if (needle && !r.entity.name.toLowerCase().includes(needle)) return false;
-        return true;
-      });
+    const out = computedAll.filter((r) => {
+      if (filterEntityType !== "all" && r.entity.entity_type_id !== filterEntityType) return false;
+      if (filterStatus !== "all" && r.status !== filterStatus) return false;
+      if (needle) {
+        const name = r.entity.name.toLowerCase();
+        const typeName = (r.entity.entity_types?.name ?? "").toLowerCase();
+        const nearestName = (r.nearest?.typeName ?? "").toLowerCase();
+        if (!name.includes(needle) && !typeName.includes(needle) && !nearestName.includes(needle)) return false;
+      }
+      return true;
+    });
 
     out.sort((a, b) => {
       if (sortMode === "critical") {
@@ -321,99 +378,92 @@ export default function EntitiesPage() {
     });
 
     return out;
-  }, [entities, usage, q, filterStatus, filterEntityType, sortMode]);
+  }, [computedAll, filterEntityType, filterStatus, q, sortMode]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterEntityType, filterStatus, q, sortMode, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const pagedRows = rows.slice(pageStart, pageStart + pageSize);
+  const hasActiveFilters = q.trim().length > 0 || filterEntityType !== "all" || filterStatus !== "all" || sortMode !== "critical";
+
+  function countByStatus(s: Status | "all") {
+    if (s === "all") return countsAll.total;
+    if (s === "red") return countsAll.red;
+    if (s === "orange") return countsAll.orange;
+    if (s === "yellow") return countsAll.yellow;
+    if (s === "green") return countsAll.green;
+    return countsAll.none;
+  }
 
   return (
-    <main style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Entidades</h2>
-          <p style={{ marginTop: 6, opacity: 0.75 }}>Lista para gestión: buscar, filtrar y abrir ficha.</p>
-        </div>
-
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-
-          <Link href="/app" style={{ textDecoration: "none" }}>
-            <button style={{ padding: "12px 14px" }}>Volver al dashboard</button>
-          </Link>
-
-          <button onClick={load} style={{ padding: "12px 14px" }} disabled={loading}>
-            Refrescar
-          </button>
-        </div>
-      </div>
-
-      
-      {errorMsg && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{errorMsg}</p>}
-
-      {/* Create entity (single place) */}
-      <section
-        style={{
-          marginTop: 12,
-          border: "1px solid #eee",
-          borderRadius: 16,
-          padding: 12,
-          background: "white",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <div>
-            <div style={{ fontWeight: 900 }}>Crear entidad</div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-              Este es el único lugar para crear entidades (evita duplicidad).
+    <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle>Entidades</CardTitle>
+              <p className="mt-1 text-sm text-slate-500">Gestión compacta para alta densidad de registros.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link href="/app">
+                <Button variant="outline" size="sm">Dashboard</Button>
+              </Link>
+              <Button onClick={load} variant="outline" size="sm" disabled={loading}>
+                Refrescar
+              </Button>
             </div>
           </div>
+        </CardHeader>
+      </Card>
 
-          <button
-            onClick={() => setShowCreate((v) => !v)}
-            style={{ padding: "12px 14px" }}
-            disabled={typesLoading}
-          >
-            {showCreate ? "Cerrar" : "+ Nueva entidad"}
-          </button>
-        </div>
+      {errorMsg ? <p className="whitespace-pre-wrap text-sm text-rose-600">{errorMsg}</p> : null}
 
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">Crear entidad</CardTitle>
+              <p className="mt-1 text-xs text-slate-500">Flujo único para evitar redundancias.</p>
+            </div>
+            <Button onClick={() => setShowCreate((v) => !v)} variant="outline" size="sm" disabled={typesLoading}>
+              {showCreate ? "Cerrar" : "+ Nueva entidad"}
+            </Button>
+          </div>
+        </CardHeader>
         {showCreate ? (
-          <div style={{ marginTop: 12 }}>
+          <CardContent className="pt-0">
             {typesLoading ? (
               <Loader label="Cargando tipos..." />
             ) : entityTypes.length === 0 ? (
-              <div style={{ opacity: 0.85 }}>
+              <div className="space-y-2 text-sm text-slate-600">
                 <p>No hay tipos de entidad. Debes crear al menos uno antes de crear entidades.</p>
-                <Link href="/app/entity-types" style={{ textDecoration: "none" }}>
-                  <button style={{ padding: "12px 14px" }}>Ir a Tipos de entidad</button>
+                <Link href="/app/entity-types">
+                  <Button variant="outline" size="sm">Ir a Tipos de entidad</Button>
                 </Link>
               </div>
             ) : (
-              <form onSubmit={createEntityInline} style={{ display: "grid", gap: 10, maxWidth: 640 }}>
-                <div>
-                  <label style={{ fontSize: 12, opacity: 0.7 }}>Nombre</label>
-                  <input
+              <form onSubmit={createEntityInline} className="grid gap-3 md:max-w-[760px]">
+                <div className="grid gap-1.5">
+                  <label htmlFor="entity_name" className="text-xs text-slate-600">Nombre</label>
+                  <Input
+                    id="entity_name"
                     value={createName}
                     onChange={(e) => setCreateName(e.target.value)}
                     placeholder="Ej: Retroexcavadora 320D / Daniel Silva"
-                    style={{
-                      width: "100%",
-                      padding: 10,
-                      borderRadius: 10,
-                      border: "1px solid #e5e5e5",
-                      marginTop: 6,
-                    }}
                   />
                 </div>
 
-                <div>
-                  <label style={{ fontSize: 12, opacity: 0.7 }}>Tipo de entidad</label>
+                <div className="grid gap-1.5">
+                  <label htmlFor="entity_type" className="text-xs text-slate-600">Tipo de entidad</label>
                   <select
+                    id="entity_type"
                     value={createEntityTypeId}
                     onChange={(e) => setCreateEntityTypeId(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: 10,
-                      borderRadius: 10,
-                      border: "1px solid #e5e5e5",
-                      marginTop: 6,
-                    }}
+                    className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
                   >
                     {entityTypes.map((t) => (
                       <option key={t.id} value={t.id}>
@@ -423,189 +473,206 @@ export default function EntitiesPage() {
                   </select>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", border: "1px solid #eee", borderRadius: 12 }}>
+                <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700">
                   <input
                     id="create_tracks_usage"
                     type="checkbox"
                     checked={createTracksUsage}
                     onChange={(e) => setCreateTracksUsage(e.target.checked)}
-                    style={{ width: 16, height: 16 }}
+                    className="h-4 w-4"
                   />
-                  <label htmlFor="create_tracks_usage" style={{ fontSize: 13 }}>
-                    Registra uso (usage logs) — habilita vencimientos por uso (horas/km)
-                  </label>
-                </div>
+                  Registra uso (usage logs) para vencimientos por uso (horas/km).
+                </label>
 
-                <button type="submit" disabled={creating} style={{ padding: "12px 14px", width: "fit-content" }}>
-                  {creating ? "Creando…" : "Crear"}
-                </button>
+                <Button type="submit" size="sm" disabled={creating} className="w-fit">
+                  {creating ? "Creando..." : "Crear entidad"}
+                </Button>
               </form>
             )}
-          </div>
+          </CardContent>
         ) : null}
-      </section>
+      </Card>
 
-
-      <section style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 16, padding: 12, background: "white" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, alignItems: "end" }}>
-          <div>
-            <label style={{ fontSize: 12, opacity: 0.7 }}>Buscar</label>
-            <input
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base">Búsqueda y filtros</CardTitle>
+            <div className="text-xs text-slate-500">{rows.length} resultado(s)</div>
+          </div>
+          <div className="flex w-full flex-wrap items-center gap-2 pt-2">
+            {statusFilterMeta.map((s) => (
+              <Button
+                key={s.key}
+                size="sm"
+                variant="outline"
+                onClick={() => setFilterStatus(s.key)}
+                className={statusChipClasses(s.key, filterStatus === s.key)}
+                title={s.title}
+              >
+                <IconStatus status={s.key} />
+                <span>{s.title}</span>
+                <span>{countByStatus(s.key)}</span>
+              </Button>
+            ))}
+          </div>
+        </CardHeader>
+        <CardContent className="pt-2">
+          <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_190px_170px_140px_auto]">
+            <Input
+              id="entities_search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Nombre de entidad…"
-              style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #e5e5e5", marginTop: 6 }}
+              placeholder="Buscar por entidad, tipo o vencimiento..."
             />
+            <select
+              id="entities_type_filter"
+              aria-label="Filtrar por tipo"
+              value={filterEntityType}
+              onChange={(e) => setFilterEntityType(e.target.value)}
+              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+            >
+              <option value="all">Todos los tipos</option>
+              {entityTypeOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+            <select
+              id="entities_sort_mode"
+              aria-label="Ordenar"
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as SortMode)}
+              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+            >
+              <option value="critical">Más crítico</option>
+              <option value="name">Nombre</option>
+              <option value="type">Tipo</option>
+              <option value="created">Creación</option>
+            </select>
+            <select
+              id="entities_page_size"
+              aria-label="Filas por página"
+              value={String(pageSize)}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+            >
+              <option value="25">25 / pág</option>
+              <option value="50">50 / pág</option>
+              <option value="100">100 / pág</option>
+            </select>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setQ("");
+                setFilterEntityType("all");
+                setFilterStatus("all");
+                setSortMode("critical");
+              }}
+              disabled={!hasActiveFilters}
+            >
+              Limpiar
+            </Button>
           </div>
+        </CardContent>
+      </Card>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-            <div>
-              <label style={{ fontSize: 12, opacity: 0.7 }}>Tipo</label>
-              <select
-                value={filterEntityType}
-                onChange={(e) => setFilterEntityType(e.target.value)}
-                style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #e5e5e5", marginTop: 6 }}
-              >
-                <option value="all">Todos</option>
-                {entityTypeOptions.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={{ fontSize: 12, opacity: 0.7 }}>Orden</label>
-              <select
-                value={sortMode}
-                onChange={(e) => setSortMode(e.target.value as SortMode)}
-                style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #e5e5e5", marginTop: 6 }}
-              >
-                <option value="critical">Más crítico</option>
-                <option value="name">Nombre</option>
-                <option value="type">Tipo</option>
-                <option value="created">Creación (reciente)</option>
-              </select>
-            </div>
-          </div>
-
-          <button
-            onClick={() => {
-              setQ("");
-              setFilterEntityType("all");
-              setFilterStatus("all");
-              setSortMode("critical");
-            }}
-            style={{ padding: "12px 14px", width: "100%" }}
-          >
-            Limpiar
-          </button>
-        </div>
-
-        <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 12, opacity: 0.7, marginRight: 6 }}>Estado:</span>
-          <span onClick={() => setFilterStatus("all")} style={statusChipStyle("all", filterStatus === "all")}>
-            📌 Todos
-          </span>
-          <span onClick={() => setFilterStatus("red")} style={statusChipStyle("red", filterStatus === "red")}>
-            🔴 Vencido
-          </span>
-          <span onClick={() => setFilterStatus("orange")} style={statusChipStyle("orange", filterStatus === "orange")}>
-            🟠 Urgente
-          </span>
-          <span onClick={() => setFilterStatus("yellow")} style={statusChipStyle("yellow", filterStatus === "yellow")}>
-            🟡 Por vencer
-          </span>
-          <span onClick={() => setFilterStatus("green")} style={statusChipStyle("green", filterStatus === "green")}>
-            🟢 Vigente
-          </span>
-          <span onClick={() => setFilterStatus("none")} style={statusChipStyle("none", filterStatus === "none")}>
-            ⚪ Sin info
-          </span>
-
-          <span style={{ marginLeft: "auto", fontSize: 12, opacity: 0.75 }}>{rows.length} resultado(s)</span>
-        </div>
-      </section>
-
-      <section style={{ marginTop: 14 }}>
+      <section className="space-y-3">
         {loading ? (
-          <div style={{ display: "flex", justifyContent: "center", padding: "16px 0" }}>
+          <div className="flex justify-center py-6">
             <Loader label="Cargando entidades..." />
           </div>
         ) : rows.length === 0 ? (
-          <p style={{ opacity: 0.8 }}>No hay entidades para mostrar con estos filtros.</p>
+          <Card>
+            <CardContent className="pt-6">
+              <p className="text-sm text-slate-600">No hay entidades para mostrar con estos filtros.</p>
+            </CardContent>
+          </Card>
         ) : (
-          <div style={{ border: "1px solid #eee", borderRadius: 16, overflowX: "auto", background: "white" }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1.2fr 0.8fr 1.6fr 0.8fr",
-                gap: 0,
-                minWidth: 760,
-                padding: "7px 10px",
-                borderBottom: "1px solid #eee",
-                fontSize: 11,
-                opacity: 0.75,
-              }}
-            >
-              <div>Entidad</div>
-              <div>Estado</div>
-              <div>Más próximo</div>
-              <div style={{ textAlign: "right" }}>Uso</div>
+          <>
+            <div className="overflow-x-auto rounded-2xl border bg-white">
+              <div className="grid min-w-[780px] grid-cols-[1.4fr_0.85fr_1.6fr_0.7fr] border-b bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500">
+                <div>Entidad</div>
+                <div>Estado</div>
+                <div>Más próximo</div>
+                <div className="text-right">Uso</div>
+              </div>
+              {pagedRows.map((r) => {
+                const e = r.entity;
+                const nearest = r.nearest;
+                const measureLabel = nearest?.measureBy === "usage" ? "por uso" : nearest?.measureBy === "date" ? "por fecha" : "sin dato";
+                return (
+                  <div
+                    key={e.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => router.push(`/app/entities/${e.id}`)}
+                    onKeyDown={(ev) => {
+                      if (ev.key === "Enter" || ev.key === " ") {
+                        ev.preventDefault();
+                        router.push(`/app/entities/${e.id}`);
+                      }
+                    }}
+                    className="grid min-w-[780px] cursor-pointer grid-cols-[1.4fr_0.85fr_1.6fr_0.7fr] items-center border-b px-3 py-2 text-[13px] transition-colors hover:bg-slate-50"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold text-slate-900">{e.name}</div>
+                      <div className="truncate text-[11px] text-slate-500">{e.entity_types?.name ?? "Sin tipo"}</div>
+                    </div>
+                    <div>
+                      <Badge variant="outline" className={cn("font-semibold", statusBadgeClasses(r.status))}>
+                        {nearest?.label ?? "Sin info"}
+                      </Badge>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-medium text-slate-900">
+                        {nearest?.typeName ?? "—"}
+                        {nearest?.due ? ` · ${fmtDate(nearest.due)}` : ""}
+                      </div>
+                      <div className="truncate text-[11px] text-slate-500">{measureLabel}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[13px] font-medium text-slate-800">{r.latestUsage != null ? r.latestUsage : "—"}</div>
+                      <div className="text-[11px] text-slate-500">
+                        {r.latestUsageAt ? new Date(r.latestUsageAt).toLocaleDateString() : ""}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
-            {rows.map((r) => {
-              const e = r.entity;
-              const nearest = r.nearest;
-              const measure = nearest?.measureBy === "usage" ? "uso" : nearest?.measureBy === "date" ? "fecha" : "—";
-
-              return (
-                <div
-                  key={e.id}
-                  onClick={() => router.push(`/app/entities/${e.id}`)}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1.2fr 0.8fr 1.6fr 0.8fr",
-                    gap: 0,
-                    minWidth: 760,
-                    padding: "10px 10px",
-                    borderBottom: "1px solid #f0f0f0",
-                    cursor: "pointer",
-                    fontSize: 13,
-                  }}
-                  title="Abrir ficha"
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2">
+              <div className="text-xs text-slate-500">
+                Mostrando {rows.length === 0 ? 0 : pageStart + 1}-{Math.min(pageStart + pageSize, rows.length)} de {rows.length}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                  variant="outline"
+                  size="sm"
+                  className="h-8 min-w-8 px-2"
+                  title="Página anterior"
+                  aria-label="Página anterior"
                 >
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</div>
-                    <div style={{ fontSize: 11, opacity: 0.62, marginTop: 2 }}>{e.entity_types?.name ?? "Sin tipo"}</div>
-                  </div>
-
-                  <div style={{ display: "flex", alignItems: "center" }}>
-                    <span style={rowStatusChipStyle(r.status)}>
-                      {r.status === "red" ? "🔴" : r.status === "orange" ? "🟠" : r.status === "yellow" ? "🟡" : r.status === "green" ? "🟢" : "⚪"}{" "}
-                      {nearest?.label ?? "Sin info"}
-                    </span>
-                  </div>
-
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {nearest?.typeName ?? "—"}{" "}
-                      {nearest?.due ? <span style={{ fontWeight: 500, opacity: 0.75 }}>· {fmtDate(nearest.due)}</span> : null}
-                    </div>
-                    <div style={{ fontSize: 11, opacity: 0.62, marginTop: 2 }}>{measure}</div>
-                  </div>
-
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontWeight: 500, color: "#334155" }}>{r.latestUsage != null ? r.latestUsage : "—"}</div>
-                    <div style={{ fontSize: 11, opacity: 0.62, marginTop: 2 }}>
-                      {r.latestUsageAt ? new Date(r.latestUsageAt).toLocaleDateString() : ""}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  ◀
+                </Button>
+                <div className="px-1 text-xs text-slate-600">Página {safePage} de {totalPages}</div>
+                <Button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                  variant="outline"
+                  size="sm"
+                  className="h-8 min-w-8 px-2"
+                  title="Página siguiente"
+                  aria-label="Página siguiente"
+                >
+                  ▶
+                </Button>
+              </div>
+            </div>
+          </>
         )}
       </section>
     </main>

@@ -2,19 +2,27 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 import { Loader } from "@/components/ui/loader";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 
 export default function ProfilePage() {
   const router = useRouter();
+
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+
   const [orgLoading, setOrgLoading] = useState(true);
   const [orgRole, setOrgRole] = useState<string | null>(null);
   const [orgName, setOrgName] = useState("");
+  const [sessionEmail, setSessionEmail] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoBusy, setLogoBusy] = useState(false);
@@ -27,10 +35,9 @@ export default function ProfilePage() {
     (async () => {
       const { data } = await supabaseAuth.auth.getSession();
       const token = data.session?.access_token;
+      if (!cancelled) setSessionEmail(data.session?.user?.email ?? "");
       if (!token) {
-        if (!cancelled) {
-          setOrgLoading(false);
-        }
+        if (!cancelled) setOrgLoading(false);
         return;
       }
 
@@ -150,100 +157,112 @@ export default function ProfilePage() {
     setLogoMsg("Logo eliminado.");
   }
 
+  const isOwner = orgRole === "owner";
+
   return (
-    <main style={{ maxWidth: 680, margin: "0 auto", padding: 16 }}>
-      <h2>Perfil de usuario</h2>
-      <p style={{ opacity: 0.8 }}>Cambia tu contraseña de acceso.</p>
-
-      <form onSubmit={updatePassword} style={{ display: "grid", gap: 10, marginTop: 12 }}>
-        <div>
-          <label>Nueva contraseña</label>
-          <input
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            type="password"
-            style={{ width: "100%", padding: 10, marginTop: 6 }}
-            disabled={busy}
-          />
-        </div>
-
-        <div>
-          <label>Confirmar contraseña</label>
-          <input
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            type="password"
-            style={{ width: "100%", padding: 10, marginTop: 6 }}
-            disabled={busy}
-          />
-        </div>
-
-        {error && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{error}</p>}
-        {msg && <p style={{ color: "green", whiteSpace: "pre-wrap" }}>{msg}</p>}
-
-        <div style={{ display: "flex", gap: 10 }}>
-          <button type="submit" disabled={busy} style={{ padding: 10 }}>
-            {busy ? "Guardando..." : "Actualizar contraseña"}
-          </button>
-          <button type="button" onClick={() => router.replace("/app")} style={{ padding: 10 }}>
-            Volver
-          </button>
-        </div>
-      </form>
-
-      <section style={{ marginTop: 24, borderTop: "1px solid #eee", paddingTop: 18 }}>
-        <h3 style={{ margin: 0 }}>Marca de organización</h3>
-        <p style={{ marginTop: 8, opacity: 0.8 }}>
-          {orgLoading ? (
-            <Loader label="Cargando organización..." size="sm" />
-          ) : orgName ? (
-            `Organización activa: ${orgName}`
-          ) : (
-            "No hay organización activa."
-          )}
-        </p>
-
-        {!orgLoading && orgRole !== "owner" ? (
-          <p style={{ fontSize: 13, opacity: 0.75 }}>
-            Solo el owner de la organización puede subir o eliminar el logo.
-          </p>
-        ) : null}
-
-        {!orgLoading && orgRole === "owner" ? (
-          <form onSubmit={uploadLogo} style={{ display: "grid", gap: 10 }}>
-            {logoUrl ? (
-              <img
-                src={logoUrl}
-                alt="Logo actual de la organización"
-                width={72}
-                height={72}
-                style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 10, border: "1px solid #ddd" }}
-              />
-            ) : (
-              <div style={{ fontSize: 13, opacity: 0.7 }}>No hay logo configurado.</div>
-            )}
-
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/svg+xml"
-              onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
-              disabled={logoBusy}
-            />
-
-            {logoError && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{logoError}</p>}
-            {logoMsg && <p style={{ color: "green", whiteSpace: "pre-wrap" }}>{logoMsg}</p>}
-
-            <div style={{ display: "flex", gap: 10 }}>
-              <button type="submit" disabled={logoBusy || !logoFile} style={{ padding: 10 }}>
-                {logoBusy ? "Subiendo..." : "Guardar logo"}
-              </button>
-              <button type="button" onClick={removeLogo} disabled={logoBusy || !logoUrl} style={{ padding: 10 }}>
-                {logoBusy ? "Procesando..." : "Eliminar logo"}
-              </button>
+    <main className="mx-auto max-w-[1100px] space-y-4 px-4 py-4">
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle>Perfil de usuario</CardTitle>
+              <p className="mt-1 text-sm text-slate-500">Configuración de acceso y marca de organización.</p>
             </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => router.replace("/app")}>
+              Volver
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <Badge variant="outline">Email: {sessionEmail || "—"}</Badge>
+            <Badge variant="outline">Organización: {orgName || "—"}</Badge>
+            <Badge variant="outline">Rol: {orgRole || "—"}</Badge>
+          </div>
+        </CardHeader>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Seguridad</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <form onSubmit={updatePassword} className="grid gap-3 md:max-w-[640px]">
+            <label className="grid gap-1.5 text-xs text-slate-600">
+              Nueva contraseña
+              <Input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type="password"
+                disabled={busy}
+              />
+            </label>
+
+            <label className="grid gap-1.5 text-xs text-slate-600">
+              Confirmar contraseña
+              <Input
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                type="password"
+                disabled={busy}
+              />
+            </label>
+
+            {error ? <p className="whitespace-pre-wrap text-sm text-rose-600">{error}</p> : null}
+            {msg ? <p className="whitespace-pre-wrap text-sm text-emerald-700">{msg}</p> : null}
+
+            <Button type="submit" disabled={busy} className="w-fit">
+              {busy ? "Guardando..." : "Actualizar contraseña"}
+            </Button>
           </form>
-        ) : null}
-      </section>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Marca de organización</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {orgLoading ? (
+            <div className="py-4">
+              <Loader label="Cargando organización..." size="sm" />
+            </div>
+          ) : !isOwner ? (
+            <p className="text-sm text-slate-600">Solo el owner puede subir o eliminar el logo de la organización.</p>
+          ) : (
+            <form onSubmit={uploadLogo} className="grid gap-3 md:max-w-[640px]">
+              {logoUrl ? (
+                <Image
+                  src={logoUrl}
+                  alt="Logo actual de la organización"
+                  width={88}
+                  height={88}
+                  className="h-[88px] w-[88px] rounded-xl object-cover"
+                />
+              ) : (
+                <div className="text-sm text-slate-500">No hay logo configurado.</div>
+              )}
+
+              <Input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
+                disabled={logoBusy}
+              />
+
+              {logoError ? <p className="whitespace-pre-wrap text-sm text-rose-600">{logoError}</p> : null}
+              {logoMsg ? <p className="whitespace-pre-wrap text-sm text-emerald-700">{logoMsg}</p> : null}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="submit" disabled={logoBusy || !logoFile}>
+                  {logoBusy ? "Subiendo..." : "Guardar logo"}
+                </Button>
+                <Button type="button" variant="outline" onClick={removeLogo} disabled={logoBusy || !logoUrl}>
+                  {logoBusy ? "Procesando..." : "Eliminar logo"}
+                </Button>
+              </div>
+            </form>
+          )}
+        </CardContent>
+      </Card>
     </main>
   );
 }
