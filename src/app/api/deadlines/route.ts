@@ -5,15 +5,58 @@ import { getOrgAccess } from "@/lib/server/orgAccess";
 
 type MeasureBy = "date" | "usage";
 type UsageDailyAverageMode = "manual" | "auto";
+type DataClient = ReturnType<typeof createDataServerClient>;
+
+type DeadlineTypeRow = {
+  id: string;
+  name: string;
+  measure_by: MeasureBy;
+  requires_document: boolean;
+  is_active: boolean;
+};
+
+type EntityRow = {
+  id: string;
+  organization_id: string;
+  tracks_usage: boolean;
+};
+
+type DeadlineRow = {
+  id: string;
+  entity_id: string;
+  deadline_type_id: string;
+  last_done_date: string | null;
+  next_due_date: string | null;
+  last_done_usage: number | null;
+  frequency: number | null;
+  frequency_unit: string | null;
+  usage_daily_average: number | null;
+  usage_daily_average_mode: string | null;
+  created_at: string;
+  deadline_types?: DeadlineTypeRow | null;
+  measure_by?: MeasureBy | null;
+};
+
+type ExistingDeadlineRow = {
+  id: string;
+  entity_id: string;
+  deadline_type_id: string;
+  usage_daily_average_mode: string | null;
+  deadline_types?: DeadlineTypeRow | null;
+};
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-function normalizeMode(val: any): UsageDailyAverageMode {
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "error";
+}
+
+function normalizeMode(val: unknown): UsageDailyAverageMode {
   const s = String(val ?? "").trim().toLowerCase();
   return s === "auto" ? "auto" : "manual";
 }
 
-function numOrNaN(v: any) {
+function numOrNaN(v: unknown) {
   if (v == null) return NaN;
   const n = Number(v);
   return Number.isFinite(n) ? n : NaN;
@@ -34,7 +77,7 @@ function semaphoreFromDays(days: number): "ok" | "warn" | "urgent" | "critical" 
   return "ok";
 }
 
-async function getDeadlineType(db: any, orgId: string, deadlineTypeId: string) {
+async function getDeadlineType(db: DataClient, orgId: string, deadlineTypeId: string): Promise<DeadlineTypeRow | null> {
   const { data, error } = await db
     .from("deadline_types")
     .select("id, name, measure_by, requires_document, is_active")
@@ -45,7 +88,7 @@ async function getDeadlineType(db: any, orgId: string, deadlineTypeId: string) {
   return data || null;
 }
 
-async function getEntity(db: any, orgId: string, entityId: string) {
+async function getEntity(db: DataClient, orgId: string, entityId: string): Promise<EntityRow | null> {
   const { data, error } = await db
     .from("entities")
     .select("id, organization_id, tracks_usage")
@@ -56,7 +99,7 @@ async function getEntity(db: any, orgId: string, entityId: string) {
   return data || null;
 }
 
-async function getLatestUsage(db: any, orgId: string, entityId: string): Promise<{ value: number; logged_at: string } | null> {
+async function getLatestUsage(db: DataClient, orgId: string, entityId: string): Promise<{ value: number; logged_at: string } | null> {
   const { data, error } = await db
     .from("usage_logs")
     .select("value, logged_at")
@@ -77,7 +120,7 @@ async function getLatestUsage(db: any, orgId: string, entityId: string): Promise
  * - Looks at up to the last 30 days (or fewer if logs are sparse)
  * - Requires >=2 logs with at least 1 day between min/max logged_at
  */
-async function computeAutoDailyAverage(db: any, orgId: string, entityId: string): Promise<number | null> {
+async function computeAutoDailyAverage(db: DataClient, orgId: string, entityId: string): Promise<number | null> {
   const since = new Date(Date.now() - 30 * MS_PER_DAY).toISOString();
 
   const { data, error } = await db
@@ -170,7 +213,7 @@ function computeDateStatus(nextDueDate: string | null) {
   };
 }
 
-async function attachComputed(db: any, orgId: string, entityId: string, deadline: any) {
+async function attachComputed(db: DataClient, orgId: string, entityId: string, deadline: DeadlineRow) {
   const measureBy = (deadline?.deadline_types?.measure_by ?? deadline?.measure_by) as MeasureBy | undefined;
   if (!measureBy) return { ...deadline, computed: { status: "incomplete", reason: "missing_measure_by" } };
 
@@ -270,11 +313,11 @@ export async function GET(req: Request) {
 
     if (error) throw error;
 
-    const computed = await Promise.all((data ?? []).map((d: any) => attachComputed(db, orgId, entityId, d)));
+    const computed = await Promise.all(((data ?? []) as DeadlineRow[]).map((d) => attachComputed(db, orgId, entityId, d)));
 
     return NextResponse.json({ entity: { id: entity.id, tracks_usage: entity.tracks_usage }, deadlines: computed });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
   }
 }
 
@@ -385,8 +428,8 @@ export async function POST(req: Request) {
 
     if (error) throw error;
     return NextResponse.json({ id: data?.id }, { status: 201 });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
   }
 }
 
@@ -419,17 +462,18 @@ export async function PUT(req: Request) {
       .eq("id", id)
       .maybeSingle();
     if (exErr) throw exErr;
-    if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+    const existingRow = existing as ExistingDeadlineRow | null;
+    if (!existingRow) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-    const entity = await getEntity(db, orgId, existing.entity_id);
+    const entity = await getEntity(db, orgId, existingRow.entity_id);
     if (!entity) return NextResponse.json({ error: "entity not found" }, { status: 404 });
 
-    const dt = await getDeadlineType(db, orgId, existing.deadline_type_id);
+    const dt = await getDeadlineType(db, orgId, existingRow.deadline_type_id);
     if (!dt) return NextResponse.json({ error: "deadline type not found" }, { status: 404 });
 
     const measureBy = dt.measure_by as MeasureBy;
 
-    const patch: any = {
+    const patch: Record<string, string | number | null> = {
       // legacy columns
       title: dt.name,
       measure_by: measureBy,
@@ -469,7 +513,10 @@ export async function PUT(req: Request) {
       );
     }
 
-    const mode = body?.usage_daily_average_mode !== undefined ? normalizeMode(body?.usage_daily_average_mode) : normalizeMode(existing.usage_daily_average_mode);
+    const mode =
+      body?.usage_daily_average_mode !== undefined
+        ? normalizeMode(body?.usage_daily_average_mode)
+        : normalizeMode(existingRow.usage_daily_average_mode);
 
     const lastDoneUsage = body?.last_done_usage !== undefined ? numOrNaN(body?.last_done_usage) : NaN;
     const frequency = body?.frequency !== undefined ? numOrNaN(body?.frequency) : NaN;
@@ -505,8 +552,8 @@ export async function PUT(req: Request) {
     if (error) throw error;
 
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
   }
 }
 
@@ -528,7 +575,7 @@ export async function DELETE(req: Request) {
     if (error) throw error;
 
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
   }
 }

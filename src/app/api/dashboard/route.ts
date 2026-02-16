@@ -5,10 +5,64 @@ import { getOrgAccess } from "@/lib/server/orgAccess";
 
 type MeasureBy = "date" | "usage";
 type UsageDailyAverageMode = "manual" | "auto";
+type DataClient = ReturnType<typeof createDataServerClient>;
+
+type UsageLogPoint = { value: unknown; logged_at: unknown };
+type LatestUsage = { value: number; logged_at: string };
+
+type DashboardDeadlineRow = {
+  id: string;
+  entity_id: string;
+  deadline_type_id: string;
+  last_done_date: string | null;
+  next_due_date: string | null;
+  last_done_usage: number | null;
+  frequency: number | null;
+  frequency_unit: string | null;
+  usage_daily_average: number | null;
+  usage_daily_average_mode: string | null;
+  created_at: string;
+  deadline_types?: {
+    id: string;
+    name: string;
+    measure_by: MeasureBy;
+    requires_document: boolean;
+    is_active: boolean;
+  } | null;
+  measure_by?: MeasureBy | null;
+};
+
+type DashboardEntityRow = {
+  id: string;
+  name: string;
+  created_at: string;
+  entity_type_id: string | null;
+  tracks_usage: boolean;
+  entity_types?: { id: string; name: string } | null;
+  deadlines?: DashboardDeadlineRow[] | null;
+};
+
+type ComputedDashboardDeadline = DashboardDeadlineRow & {
+  computed?: ReturnType<typeof computeDateComputed> | ReturnType<typeof computeUsageComputed> | { status: "incomplete"; reason: string };
+  __tmp_usage?: { mode: UsageDailyAverageMode; manualAvg: number | null };
+  __tmp_latest?: LatestUsage | null;
+  __tmp_autoAvgPromise?: Promise<number | null>;
+};
+
+type ComputedDashboardEntity = Omit<DashboardEntityRow, "deadlines"> & {
+  deadlines: ComputedDashboardDeadline[];
+  current_usage?: number | null;
+  current_usage_logged_at?: string | null;
+  auto_usage_daily_average?: number | null;
+};
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-function normalizeMode(val: any): UsageDailyAverageMode {
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "error";
+}
+
+function normalizeMode(val: unknown): UsageDailyAverageMode {
   const s = String(val ?? "").trim().toLowerCase();
   return s === "auto" ? "auto" : "manual";
 }
@@ -28,7 +82,7 @@ function semaphoreFromDays(days: number): "ok" | "warn" | "urgent" | "critical" 
   return "ok";
 }
 
-async function getLatestUsageByEntity(db: any, orgId: string, entityIds: string[]) {
+async function getLatestUsageByEntity(db: DataClient, orgId: string, entityIds: string[]) {
   const entries = await Promise.all(
     entityIds.map(async (entityId) => {
       const { data, error } = await db
@@ -47,14 +101,14 @@ async function getLatestUsageByEntity(db: any, orgId: string, entityIds: string[
     })
   );
 
-  const out: Record<string, { value: number; logged_at: string }> = {};
+  const out: Record<string, LatestUsage> = {};
   for (const entry of entries) {
     if (entry) out[entry[0]] = entry[1];
   }
   return out;
 }
 
-async function computeAutoDailyAverageFromList(logs: Array<{ value: any; logged_at: any }>): Promise<number | null> {
+async function computeAutoDailyAverageFromList(logs: UsageLogPoint[]): Promise<number | null> {
   if (!logs || logs.length < 2) return null;
 
   const first = logs[0];
@@ -222,11 +276,12 @@ export async function GET(req: Request) {
 
     if (entErr) throw entErr;
 
-    const entityIds = (entities ?? []).map((e: any) => e.id);
+    const entityRows = (entities ?? []) as DashboardEntityRow[];
+    const entityIds = entityRows.map((e) => e.id);
 
     // Fetch recent logs for auto daily average (mode=auto).
-    const logsByEntity: Record<string, Array<{ value: any; logged_at: any }>> = {};
-    const latestUsageByEntity: Record<string, { value: number; logged_at: string }> = {};
+    const logsByEntity: Record<string, UsageLogPoint[]> = {};
+    const latestUsageByEntity: Record<string, LatestUsage> = {};
 
     if (entityIds.length > 0) {
       Object.assign(latestUsageByEntity, await getLatestUsageByEntity(db, orgId, entityIds));
@@ -244,7 +299,7 @@ export async function GET(req: Request) {
 
       if (logErr) throw logErr;
 
-      for (const row of logs ?? []) {
+      for (const row of (logs ?? []) as Array<{ entity_id: string; value: unknown; logged_at: unknown }>) {
         const id = row.entity_id as string;
         if (!logsByEntity[id]) logsByEntity[id] = [];
         logsByEntity[id].push({ value: row.value, logged_at: row.logged_at });
@@ -252,14 +307,14 @@ export async function GET(req: Request) {
     }
 
     // Compute per-deadline fields
-    const computedEntities = (entities ?? []).map((entity: any) => {
+    const computedEntities = entityRows.map((entity): ComputedDashboardEntity => {
       const logs = logsByEntity[entity.id] ?? [];
       const latest = latestUsageByEntity[entity.id] ?? null;
 
       // compute auto avg once per entity (reused for all usage deadlines)
       const autoAvgPromise = computeAutoDailyAverageFromList(logs);
 
-      const deadlines = (entity.deadlines ?? []).map((d: any) => {
+      const deadlines = (entity.deadlines ?? []).map((d): ComputedDashboardDeadline => {
         const measureBy = (d?.deadline_types?.measure_by ?? d?.measure_by) as MeasureBy | undefined;
         if (!measureBy) return { ...d, computed: { status: "incomplete", reason: "missing_measure_by" } };
 
@@ -294,10 +349,10 @@ export async function GET(req: Request) {
 
     // Second pass to await auto avg and finalize computed usage deadlines (avoids awaiting inside map)
     for (const entity of computedEntities) {
-      const latest = (latestUsageByEntity[entity.id] ?? null) as any;
+      const latest = latestUsageByEntity[entity.id] ?? null;
       const autoAvg = await computeAutoDailyAverageFromList(logsByEntity[entity.id] ?? []);
 
-      entity.deadlines = (entity.deadlines ?? []).map((d: any) => {
+      entity.deadlines = (entity.deadlines ?? []).map((d) => {
         if (!d?.__tmp_usage) return d;
 
         const mode = d.__tmp_usage.mode as UsageDailyAverageMode;
@@ -332,7 +387,7 @@ export async function GET(req: Request) {
       entities: computedEntities,
       latest_usage_by_entity: latestUsageByEntity,
     });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
   }
 }
