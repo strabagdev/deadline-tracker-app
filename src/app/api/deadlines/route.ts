@@ -8,7 +8,7 @@ import {
   normalizeDeadlinesMode,
   numOrNaN,
 } from "@/lib/api/deadlinesComputations";
-import { parseDeadlineCreateIds, parseDeadlineCreatePayload } from "@/lib/api/deadlinesInput";
+import { handleDeadlinesPost, type DeadlinesRepo } from "@/lib/api/deadlinesService";
 
 type MeasureBy = "date" | "usage";
 type DataClient = ReturnType<typeof createDataServerClient>;
@@ -193,6 +193,59 @@ async function attachComputed(db: DataClient, orgId: string, entityId: string, d
   };
 }
 
+function makeDeadlinesRepo(db: DataClient): DeadlinesRepo {
+  return {
+    getEntity: async (orgId, entityId) => {
+      const entity = await getEntity(db, orgId, entityId);
+      if (!entity) return null;
+      return { id: entity.id, tracks_usage: entity.tracks_usage };
+    },
+    getDeadlineType: async (orgId, deadlineTypeId) => {
+      const dt = await getDeadlineType(db, orgId, deadlineTypeId);
+      if (!dt) return null;
+      return { id: dt.id, name: dt.name, measure_by: dt.measure_by, is_active: dt.is_active };
+    },
+    createDateDeadline: async (orgId, input) => {
+      const { data, error } = await db
+        .from("deadlines")
+        .insert({
+          organization_id: orgId,
+          entity_id: input.entityId,
+          deadline_type_id: input.deadlineTypeId,
+          title: input.legacyTitle,
+          measure_by: input.legacyMeasureBy,
+          last_done_date: input.lastDoneDate,
+          next_due_date: input.nextDueDate,
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+      return { id: String(data?.id ?? "") };
+    },
+    createUsageDeadline: async (orgId, input) => {
+      const { data, error } = await db
+        .from("deadlines")
+        .insert({
+          organization_id: orgId,
+          entity_id: input.entityId,
+          deadline_type_id: input.deadlineTypeId,
+          title: input.legacyTitle,
+          measure_by: input.legacyMeasureBy,
+          last_done_date: input.lastDoneDate,
+          last_done_usage: input.lastDoneUsage,
+          frequency: input.frequency,
+          frequency_unit: input.frequencyUnit,
+          usage_daily_average_mode: input.mode,
+          usage_daily_average: input.usageDailyAverage,
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+      return { id: String(data?.id ?? "") };
+    },
+  };
+}
+
 /**
  * GET /api/deadlines?entity_id=...
  * Returns deadlines for a single entity, including computed status to avoid duplicating logic in frontend.
@@ -254,72 +307,9 @@ export async function POST(req: Request) {
     if ("error" in access) {
       return NextResponse.json({ error: access.error }, { status: access.error === "no active organization" ? 400 : 403 });
     }
-    const orgId = access.organizationId;
-
     const body = await req.json().catch(() => ({}));
-
-    const ids = parseDeadlineCreateIds(body);
-    if (!ids.ok) return NextResponse.json(ids.body, { status: ids.status });
-    const { entityId, deadlineTypeId } = ids;
-
-    const entity = await getEntity(db, orgId, entityId);
-    if (!entity) return NextResponse.json({ error: "entity not found" }, { status: 404 });
-
-    const dt = await getDeadlineType(db, orgId, deadlineTypeId);
-    if (!dt) return NextResponse.json({ error: "deadline type not found" }, { status: 404 });
-    if (!dt.is_active) return NextResponse.json({ error: "deadline type is inactive" }, { status: 400 });
-
-    // Backward compat for legacy columns (some schemas still have deadlines.title/measure_by NOT NULL)
-    const legacyTitle = dt.name;
-    const legacyMeasureBy = dt.measure_by as MeasureBy;
-    const parsed = parseDeadlineCreatePayload(body, { measureBy: dt.measure_by, tracksUsage: entity.tracks_usage });
-    if (!parsed.ok) return NextResponse.json(parsed.body, { status: parsed.status });
-
-    if (parsed.measureBy === "date") {
-
-      const { data, error } = await db
-        .from("deadlines")
-        .insert({
-          organization_id: orgId,
-          entity_id: entityId,
-          deadline_type_id: deadlineTypeId,
-          // legacy
-          title: legacyTitle,
-          measure_by: legacyMeasureBy,
-          // fields
-          last_done_date: parsed.lastDoneDate,
-          next_due_date: parsed.nextDueDate,
-        })
-        .select("id")
-        .single();
-
-      if (error) throw error;
-      return NextResponse.json({ id: data?.id }, { status: 201 });
-    }
-
-    const { data, error } = await db
-      .from("deadlines")
-      .insert({
-        organization_id: orgId,
-        entity_id: entityId,
-        deadline_type_id: deadlineTypeId,
-        // legacy
-        title: legacyTitle,
-        measure_by: legacyMeasureBy,
-        // fields
-        last_done_date: parsed.lastDoneDate,
-        last_done_usage: parsed.lastDoneUsage,
-        frequency: parsed.frequency,
-        frequency_unit: parsed.frequencyUnit,
-        usage_daily_average_mode: parsed.mode,
-        // Hybrid: for auto we keep NULL unless a fallback is provided
-        usage_daily_average: parsed.usageDailyAverage,
-      })
-      .select("id")
-      .single();
-
-    if (error) throw error;
-    return NextResponse.json({ id: data?.id }, { status: 201 });
+    const response = await handleDeadlinesPost(access.organizationId, body, makeDeadlinesRepo(db));
+    return NextResponse.json(response.body, { status: response.status });
   } catch (e: unknown) {
     return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
   }

@@ -1,0 +1,64 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { handleDeadlinesPost, type DeadlinesRepo } from "../src/lib/api/deadlinesService";
+
+function repo(overrides?: Partial<DeadlinesRepo>): DeadlinesRepo {
+  return {
+    getEntity: async () => ({ id: "e1", tracks_usage: true }),
+    getDeadlineType: async () => ({ id: "dt1", name: "Mantención", measure_by: "usage", is_active: true }),
+    createDateDeadline: async () => ({ id: "d1" }),
+    createUsageDeadline: async () => ({ id: "d1" }),
+    ...overrides,
+  };
+}
+
+test("deadlines POST valida ids requeridos", async () => {
+  const res = await handleDeadlinesPost("o1", {}, repo());
+  assert.equal(res.status, 400);
+});
+
+test("deadlines POST devuelve 404 si entidad no existe", async () => {
+  const res = await handleDeadlinesPost(
+    "o1",
+    { entity_id: "e1", deadline_type_id: "dt1" },
+    repo({ getEntity: async () => null })
+  );
+  assert.equal(res.status, 404);
+});
+
+test("deadlines POST devuelve 400 si tipo inactivo", async () => {
+  const res = await handleDeadlinesPost(
+    "o1",
+    { entity_id: "e1", deadline_type_id: "dt1" },
+    repo({ getDeadlineType: async () => ({ id: "dt1", name: "X", measure_by: "date", is_active: false }) })
+  );
+  assert.equal(res.status, 400);
+});
+
+test("deadlines POST crea por fecha", async () => {
+  const res = await handleDeadlinesPost(
+    "o1",
+    { entity_id: "e1", deadline_type_id: "dt1", next_due_date: "2026-12-01" },
+    repo({ getDeadlineType: async () => ({ id: "dt1", name: "ITV", measure_by: "date", is_active: true }) })
+  );
+  assert.equal(res.status, 201);
+  assert.equal(res.body.id, "d1");
+});
+
+test("deadlines POST crea por uso", async () => {
+  const res = await handleDeadlinesPost(
+    "o1",
+    {
+      entity_id: "e1",
+      deadline_type_id: "dt1",
+      last_done_usage: 100,
+      frequency: 50,
+      frequency_unit: "km",
+      usage_daily_average_mode: "manual",
+      usage_daily_average: 10,
+    },
+    repo({ getDeadlineType: async () => ({ id: "dt1", name: "Horas", measure_by: "usage", is_active: true }) })
+  );
+  assert.equal(res.status, 201);
+  assert.equal(res.body.id, "d1");
+});
