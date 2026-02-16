@@ -2,7 +2,14 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 
-async function getActiveOrgId(db: any, userId: string) {
+type DataServerClient = ReturnType<typeof createDataServerClient>;
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return "error";
+}
+
+async function getActiveOrgId(db: DataServerClient, userId: string) {
   const { data, error } = await db
     .from("user_settings")
     .select("active_organization_id")
@@ -13,7 +20,7 @@ async function getActiveOrgId(db: any, userId: string) {
   return (data?.active_organization_id as string) || null;
 }
 
-async function requireMember(db: any, organizationId: string, userId: string) {
+async function requireMember(db: DataServerClient, organizationId: string, userId: string) {
   const { data, error } = await db
     .from("organization_members")
     .select("role")
@@ -23,6 +30,10 @@ async function requireMember(db: any, organizationId: string, userId: string) {
 
   if (error) throw error;
   return data?.role ?? null;
+}
+
+function isAdminRole(role: string | null) {
+  return role === "owner" || role === "admin";
 }
 
 function toSlugKey(input: string) {
@@ -58,8 +69,8 @@ export async function GET(req: Request) {
 
     if (error) throw error;
     return NextResponse.json({ entity_fields: data ?? [] });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -72,7 +83,7 @@ export async function POST(req: Request) {
     if (!orgId) return NextResponse.json({ error: "no active organization" }, { status: 400 });
 
     const role = await requireMember(db, orgId, user.id);
-    if (!role) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    if (!isAdminRole(role)) return NextResponse.json({ error: "admin required" }, { status: 403 });
 
     const body = await req.json().catch(() => ({}));
     const entityTypeId = String(body?.entity_type_id ?? "").trim();
@@ -110,8 +121,8 @@ export async function POST(req: Request) {
 
     if (error) throw error;
     return NextResponse.json({ entity_field: data }, { status: 201 });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -124,7 +135,7 @@ export async function PUT(req: Request) {
     if (!orgId) return NextResponse.json({ error: "no active organization" }, { status: 400 });
 
     const role = await requireMember(db, orgId, user.id);
-    if (!role) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    if (!isAdminRole(role)) return NextResponse.json({ error: "admin required" }, { status: 403 });
 
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
@@ -186,7 +197,7 @@ export async function PUT(req: Request) {
 
     if (error) throw error;
     return NextResponse.json({ entity_field: data });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "error" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
