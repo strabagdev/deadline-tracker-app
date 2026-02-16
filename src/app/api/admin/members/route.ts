@@ -21,7 +21,7 @@ export async function GET(req: Request) {
 
     const ctx = await getAdminOrgAccess(db, requester.id);
     if ("error" in ctx) {
-      return NextResponse.json({ error: ctx.error }, { status: 403 });
+      return NextResponse.json({ error: ctx.error, code: "FORBIDDEN" }, { status: 403 });
     }
 
     const { organizationId } = ctx;
@@ -58,6 +58,6 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ organization_id: organizationId, members: enriched });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

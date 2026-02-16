@@ -27,7 +27,7 @@ export async function GET(req: Request) {
 
     const ctx = await getAdminOrgAccess(db, requester.id);
     if ("error" in ctx) {
-      return NextResponse.json({ error: ctx.error }, { status: 403 });
+      return NextResponse.json({ error: ctx.error, code: "FORBIDDEN" }, { status: 403 });
     }
 
     const { organizationId } = ctx;
@@ -49,7 +49,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ organization_id: organizationId, members });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
 
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
 
     const ctx = await getAdminOrgAccess(db, requester.id);
     if ("error" in ctx) {
-      return NextResponse.json({ error: ctx.error }, { status: 403 });
+      return NextResponse.json({ error: ctx.error, code: "FORBIDDEN" }, { status: 403 });
     }
 
     const { organizationId } = ctx;
@@ -73,11 +73,11 @@ export async function POST(req: Request) {
     const role = String(body.role || "member");
 
     if (!email) {
-      return NextResponse.json({ error: "email required" }, { status: 400 });
+      return NextResponse.json({ error: "email required", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     if (!["member", "admin", "viewer"].includes(role)) {
-      return NextResponse.json({ error: "invalid role" }, { status: 400 });
+      return NextResponse.json({ error: "invalid role", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     const supabaseAuthAdmin = createClient(
@@ -105,13 +105,13 @@ export async function POST(req: Request) {
         if (existingErr) throw existingErr;
         invitedUserId = existingProfile?.user_id ?? null;
       } else {
-        return NextResponse.json({ error: inviteErr.message }, { status: 400 });
+        return NextResponse.json({ error: inviteErr.message, code: "BAD_REQUEST" }, { status: 400 });
       }
     }
 
     if (!invitedUserId) {
       return NextResponse.json(
-        { error: "No se pudo resolver el usuario invitado. Pídele iniciar sesión una vez e intenta de nuevo." },
+        { error: "No se pudo resolver el usuario invitado. Pídele iniciar sesión una vez e intenta de nuevo.", code: "INVITED_USER_NOT_RESOLVED" },
         { status: 400 }
       );
     }
@@ -140,6 +140,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

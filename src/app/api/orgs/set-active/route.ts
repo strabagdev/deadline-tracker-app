@@ -14,7 +14,7 @@ export async function POST(req: Request) {
 
     if (!organizationId) {
       return NextResponse.json(
-        { error: "organizationId required" },
+        { error: "organizationId required", code: "BAD_REQUEST" },
         { status: 400 }
       );
     }
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
 
     if (memErr) throw memErr;
     if (!member) {
-      return NextResponse.json({ error: "not a member" }, { status: 403 });
+      return NextResponse.json({ error: "not a member", code: "FORBIDDEN" }, { status: 403 });
     }
 
     // Guarda org activa
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {
     return NextResponse.json(
-      { error: getErrorMessage(e) },
+      { error: getErrorMessage(e), code: "UNAUTHORIZED" },
       { status: 401 }
     );
   }

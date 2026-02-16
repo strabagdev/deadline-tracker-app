@@ -9,19 +9,19 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const userId = (body.userId as string | undefined)?.trim();
 
-    if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
+    if (!userId) return NextResponse.json({ error: "userId required", code: "BAD_REQUEST" }, { status: 400 });
 
     const db = createDataServerClient();
 
     const ctx = await getAdminOrgAccess(db, requester.id);
     if ("error" in ctx) {
-      return NextResponse.json({ error: ctx.error }, { status: 403 });
+      return NextResponse.json({ error: ctx.error, code: "FORBIDDEN" }, { status: 403 });
     }
 
     const { organizationId } = ctx;
 
     if (userId === requester.id) {
-      return NextResponse.json({ error: "No puedes quitarte tu propio acceso." }, { status: 400 });
+      return NextResponse.json({ error: "No puedes quitarte tu propio acceso.", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     const { data: target, error: tErr } = await db
@@ -32,10 +32,10 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (tErr) throw tErr;
-    if (!target) return NextResponse.json({ error: "Usuario no es miembro de esta org." }, { status: 404 });
+    if (!target) return NextResponse.json({ error: "Usuario no es miembro de esta org.", code: "MEMBER_NOT_FOUND" }, { status: 404 });
 
     if (target.role === "owner") {
-      return NextResponse.json({ error: "No se puede remover al owner." }, { status: 400 });
+      return NextResponse.json({ error: "No se puede remover al owner.", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     const { error: delErr } = await db
@@ -48,6 +48,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

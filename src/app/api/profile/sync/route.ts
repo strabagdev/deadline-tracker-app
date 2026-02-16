@@ -12,7 +12,7 @@ export async function POST(req: Request) {
 
     const email = (user.email || "").trim().toLowerCase();
     if (!email) {
-      return NextResponse.json({ error: "No email on auth user" }, { status: 400 });
+      return NextResponse.json({ error: "No email on auth user", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     const db = createDataServerClient();
@@ -26,6 +26,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, user_id: user.id, email });
   } catch (e: unknown) {
-    return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(e), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
