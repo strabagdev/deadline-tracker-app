@@ -91,8 +91,7 @@ export default function EntityDeadlinesManager({
   const [editingDeadlineId, setEditingDeadlineId] = useState<string>("");
   const [editDraft, setEditDraft] = useState<DeadlineEditDraft | null>(null);
   const [showUsagePanel, setShowUsagePanel] = useState(false);
-  const [sectionExpanded, setSectionExpanded] = useState(false);
-  const [loadedTypes, setLoadedTypes] = useState(false);
+  const [sectionExpanded, setSectionExpanded] = useState(true);
   const [loadedDetails, setLoadedDetails] = useState(false);
 
   // form
@@ -111,8 +110,7 @@ export default function EntityDeadlinesManager({
   const anyBusy = createBusy || editBusy;
 
   useEffect(() => {
-    setSectionExpanded(false);
-    setLoadedTypes(false);
+    setSectionExpanded(true);
     setLoadedDetails(false);
     setTypes([]);
     setDeadlines([]);
@@ -122,13 +120,14 @@ export default function EntityDeadlinesManager({
     setGeneralMsg("");
     setCreateMsg("");
     setEditMsg("");
+    void bootstrap(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entityId]);
 
   async function bootstrap(loadDetails = true) {
     setLoading(true);
     setGeneralMsg("");
     await loadTypes();
-    setLoadedTypes(true);
     if (loadDetails) {
       await Promise.all([loadDeadlines(), tracksUsage ? loadUsageLogs() : Promise.resolve()]);
       setLoadedDetails(true);
@@ -476,19 +475,6 @@ export default function EntityDeadlinesManager({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="m-0 text-base font-semibold">Vencimientos</h3>
         <div className="flex items-center gap-2">
-          <Button
-            onClick={() => {
-              const next = !sectionExpanded;
-              setSectionExpanded(next);
-              if (next && !loadedTypes) {
-                void bootstrap(false);
-              }
-            }}
-            variant="outline"
-            size="sm"
-          >
-            {sectionExpanded ? "Ocultar" : "Mostrar"}
-          </Button>
           {types.length > 0 ? (
             <>
               <Button
@@ -520,7 +506,7 @@ export default function EntityDeadlinesManager({
           ) : null}
           <Button
             onClick={() => void bootstrap(Boolean(deadlineTypeId))}
-            disabled={anyBusy || usageLogsBusy || !sectionExpanded}
+            disabled={anyBusy || usageLogsBusy}
             variant="outline"
             size="sm"
           >

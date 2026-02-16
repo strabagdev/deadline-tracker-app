@@ -167,6 +167,7 @@ export default function AppDashboard() {
   const [pageSize, setPageSize] = useState(50);
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [dashboardPanelCollapsed, setDashboardPanelCollapsed] = useState(true);
+  const [secondaryMenuOpen, setSecondaryMenuOpen] = useState(false);
 
   const [semaphore, setSemaphore] = useState<SemaphoreSettings>({
     yellow_days: 60,
@@ -413,39 +414,72 @@ export default function AppDashboard() {
                 </Button>
               </div>
               {secondaryFilterOptions.length > 0 ? (
-                <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-1">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setFilterSecondary("all")}
-                    className={cn(
-                      "min-w-[54px] shrink-0 justify-center border font-semibold",
-                      filterSecondary === "all"
-                        ? "!border-indigo-500 !bg-indigo-100 !text-indigo-800"
-                        : "!border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200"
-                    )}
-                    title="Todos los valores"
-                  >
-                    <span>Todos</span>
-                  </Button>
-                  {secondaryFilterOptions.map((opt) => (
+                <div className="relative mt-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
-                      key={opt.value}
                       size="sm"
                       variant="outline"
-                      onClick={() => setFilterSecondary(opt.value)}
-                      className={cn(
-                        "min-w-[54px] shrink-0 justify-center border font-semibold",
-                        filterSecondary === opt.value
-                          ? "!border-indigo-500 !bg-indigo-100 !text-indigo-800"
-                          : "!border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200"
-                      )}
-                      title={opt.value}
+                      onClick={() => setSecondaryMenuOpen((v) => !v)}
+                      className="min-h-9"
                     >
-                      <span className="max-w-[180px] truncate">{opt.value}</span>
-                      <span className="font-semibold">{opt.count}</span>
+                      <span>Filtro secundario</span>
+                      <span className="text-xs">{secondaryMenuOpen ? "▲" : "▼"}</span>
                     </Button>
-                  ))}
+                    {filterSecondary !== "all" ? (
+                      <Badge variant="outline" className="max-w-[280px] truncate border-indigo-300 bg-indigo-50 text-indigo-800">
+                        {filterSecondary}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
+                        Todos
+                      </Badge>
+                    )}
+                  </div>
+
+                  {secondaryMenuOpen ? (
+                    <div className="mt-2 max-h-44 overflow-auto rounded-xl border bg-white p-2 shadow-sm">
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setFilterSecondary("all");
+                            setSecondaryMenuOpen(false);
+                          }}
+                          className={cn(
+                            "min-w-[54px] shrink-0 justify-center border font-semibold",
+                            filterSecondary === "all"
+                              ? "!border-indigo-500 !bg-indigo-100 !text-indigo-800"
+                              : "!border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200"
+                          )}
+                          title="Todos los valores"
+                        >
+                          <span>Todos</span>
+                        </Button>
+                        {secondaryFilterOptions.map((opt) => (
+                          <Button
+                            key={opt.value}
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setFilterSecondary(opt.value);
+                              setSecondaryMenuOpen(false);
+                            }}
+                            className={cn(
+                              "min-w-[54px] shrink-0 justify-center border font-semibold",
+                              filterSecondary === opt.value
+                                ? "!border-indigo-500 !bg-indigo-100 !text-indigo-800"
+                                : "!border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200"
+                            )}
+                            title={opt.value}
+                          >
+                            <span className="max-w-[180px] truncate">{opt.value}</span>
+                            <span className="font-semibold">{opt.count}</span>
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>
