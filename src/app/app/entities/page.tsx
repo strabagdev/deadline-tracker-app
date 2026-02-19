@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { toCsv } from "@/lib/csv/simpleCsv";
+import { csvToSpreadsheetXml } from "@/lib/csv/spreadsheetXml";
 
 type DeadlineType = {
   id: string;
@@ -156,6 +158,13 @@ export default function EntitiesPage() {
   const [entityTypes, setEntityTypes] = useState<EntityType[]>([]);
   const [typesLoading, setTypesLoading] = useState<boolean>(false);
   const [creating, setCreating] = useState<boolean>(false);
+  const [importOpen, setImportOpen] = useState<boolean>(false);
+  const [importing, setImporting] = useState<boolean>(false);
+  const [importApply, setImportApply] = useState<boolean>(false);
+  const [importCsvText, setImportCsvText] = useState<string>("");
+  const [importResult, setImportResult] = useState<string>("");
+  const [bulkFormat, setBulkFormat] = useState<"csv" | "excel">("csv");
+  const [bulkEntityTypeId, setBulkEntityTypeId] = useState<string>("all");
 
   const [entities, setEntities] = useState<EntityRow[]>([]);
   const [usage, setUsage] = useState<LatestUsageByEntity>({});
@@ -312,6 +321,141 @@ export default function EntitiesPage() {
     setCreating(false);
   }
 
+  async function downloadCsv(path: string, fileName: string) {
+    setErrorMsg("");
+    const { data } = await supabaseAuth.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+    const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      setErrorMsg(json.error || "No se pudo descargar CSV");
+      return;
+    }
+    const text = await res.text();
+    const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function parseSpreadsheetXmlToCsv(xmlText: string): string {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlText, "application/xml");
+
+    const rows = Array.from(doc.getElementsByTagNameNS("*", "Row"));
+    if (rows.length === 0) return "";
+
+    const out: string[][] = [];
+    let maxCols = 0;
+
+    for (const row of rows) {
+      const cells = Array.from(row.getElementsByTagNameNS("*", "Cell"));
+      const values: string[] = [];
+      let cursor = 0;
+
+      for (const cell of cells) {
+        const idxRaw = cell.getAttribute("ss:Index") ?? cell.getAttribute("Index");
+        if (idxRaw) {
+          const idx = Number(idxRaw);
+          if (Number.isFinite(idx) && idx > 0) {
+            while (cursor < idx - 1) {
+              values.push("");
+              cursor++;
+            }
+          }
+        }
+
+        const data = cell.getElementsByTagNameNS("*", "Data")[0];
+        values.push(String(data?.textContent ?? ""));
+        cursor++;
+      }
+      maxCols = Math.max(maxCols, values.length);
+      out.push(values);
+    }
+
+    for (const row of out) {
+      while (row.length < maxCols) row.push("");
+    }
+    return toCsv(out);
+  }
+
+  async function downloadExcelFromCsvEndpoint(path: string, fileName: string, sheetName: string) {
+    setErrorMsg("");
+    const { data } = await supabaseAuth.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+    const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      setErrorMsg(json.error || "No se pudo descargar archivo Excel");
+      return;
+    }
+    const csvText = await res.text();
+    const xml = csvToSpreadsheetXml(csvText, sheetName);
+    const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function runImport() {
+    setImporting(true);
+    setImportResult("");
+    setErrorMsg("");
+
+    const { data } = await supabaseAuth.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    const res = await fetch("/api/entities/bulk/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        csv: importCsvText,
+        apply: importApply,
+        entity_type_id: bulkEntityTypeId !== "all" ? bulkEntityTypeId : null,
+      }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const errs = Array.isArray(json?.errors)
+        ? json.errors.slice(0, 8).map((e: { line: number; message: string }) => `L${e.line}: ${e.message}`).join("\n")
+        : "";
+      setImportResult(`${json.error || "Importación inválida"}${errs ? `\n${errs}` : ""}`);
+      setImporting(false);
+      return;
+    }
+
+    const summary = json?.summary ?? {};
+    if (json?.mode === "validate") {
+      setImportResult(
+        `Validación OK.\nFilas: ${summary.total_rows ?? 0}\nCrear: ${summary.to_create ?? 0}\nActualizar: ${summary.to_update ?? 0}`
+      );
+    } else {
+      setImportResult(
+        `Carga aplicada.\nFilas: ${summary.total_rows ?? 0}\nCreadas: ${summary.created ?? 0}\nActualizadas: ${summary.updated ?? 0}\nErrores: ${summary.errors ?? 0}`
+      );
+      await load();
+    }
+    setImporting(false);
+  }
+
   const entityTypeOptions = useMemo(() => {
     const map = new Map<string, string>();
     for (const e of entities) {
@@ -426,6 +570,20 @@ export default function EntitiesPage() {
               >
                 + Entidad
               </Button>
+              <Button
+                onClick={() => {
+                  setImportOpen(true);
+                  setImportResult("");
+                  setImportCsvText("");
+                  setImportApply(false);
+                  setBulkFormat("csv");
+                  setBulkEntityTypeId("all");
+                }}
+                variant="outline"
+                size="sm"
+              >
+                Carga masiva
+              </Button>
               <Link href="/app">
                 <Button variant="outline" size="sm">Dashboard</Button>
               </Link>
@@ -513,6 +671,145 @@ export default function EntitiesPage() {
                 </p>
               </form>
             )}
+          </div>
+        </div>
+      ) : null}
+
+      {importOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
+          <div className="max-h-[88vh] w-full max-w-[860px] overflow-y-auto rounded-2xl border bg-white p-4 shadow-xl">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">Carga masiva de entidades</h3>
+                <p className="mt-0.5 text-xs text-slate-500">Descarga, edita y vuelve a cargar con validación previa.</p>
+              </div>
+              <Button onClick={() => setImportOpen(false)} variant="outline" size="sm" disabled={importing}>
+                Cerrar
+              </Button>
+            </div>
+
+            <div className="grid gap-2">
+              <div className="rounded-xl border bg-slate-50 p-3">
+                <div className="mb-2 text-xs font-semibold text-slate-700">Formato</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant={bulkFormat === "csv" ? "secondary" : "outline"}
+                    onClick={() => setBulkFormat("csv")}
+                    disabled={importing}
+                  >
+                    CSV
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={bulkFormat === "excel" ? "secondary" : "outline"}
+                    onClick={() => setBulkFormat("excel")}
+                    disabled={importing}
+                  >
+                    Excel
+                  </Button>
+                </div>
+                <div className="mt-3 grid gap-1">
+                  <label className="text-xs font-semibold text-slate-700">Tipo de entidad (opcional)</label>
+                  <select
+                    value={bulkEntityTypeId}
+                    onChange={(e) => setBulkEntityTypeId(e.target.value)}
+                    className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                    disabled={importing || typesLoading}
+                  >
+                    <option value="all">Todos los tipos</option>
+                    {entityTypes.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="rounded-xl border p-3">
+                <div className="mb-2 text-xs font-semibold text-slate-700">Descarga</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const q = bulkEntityTypeId !== "all" ? `?entity_type_id=${encodeURIComponent(bulkEntityTypeId)}` : "";
+                      if (bulkFormat === "excel") {
+                        void downloadExcelFromCsvEndpoint(
+                          `/api/entities/bulk/template${q}`,
+                          "entities_template.xls",
+                          "Plantilla_Entidades"
+                        );
+                      } else {
+                        void downloadCsv(`/api/entities/bulk/template${q}`, "entities_template.csv");
+                      }
+                    }}
+                    disabled={importing}
+                  >
+                    Descargar plantilla
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const q = bulkEntityTypeId !== "all" ? `?entity_type_id=${encodeURIComponent(bulkEntityTypeId)}` : "";
+                      if (bulkFormat === "excel") {
+                        void downloadExcelFromCsvEndpoint(`/api/entities/bulk/export${q}`, "entities_export.xls", "Entidades");
+                      } else {
+                        void downloadCsv(`/api/entities/bulk/export${q}`, "entities_export.csv");
+                      }
+                    }}
+                    disabled={importing}
+                  >
+                    Exportar entidades
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border p-3">
+                <div className="mb-2 text-xs font-semibold text-slate-700">Carga</div>
+              <label className="text-xs font-medium text-slate-600">Selecciona archivo</label>
+              <input
+                type="file"
+                accept=".csv,text/csv,.xls,.xml,application/vnd.ms-excel"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const text = await file.text();
+                  const lowerName = file.name.toLowerCase();
+                  if (lowerName.endsWith(".xls") || text.includes("<Workbook")) {
+                    setImportCsvText(parseSpreadsheetXmlToCsv(text));
+                  } else {
+                    setImportCsvText(text);
+                  }
+                }}
+                className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                disabled={importing}
+              />
+              <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={importApply}
+                  onChange={(e) => setImportApply(e.target.checked)}
+                  disabled={importing}
+                />
+                Aplicar cambios (si no, solo valida)
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  onClick={runImport}
+                  disabled={importing || !importCsvText.trim()}
+                  className={importApply ? "bg-emerald-600 text-white hover:bg-emerald-700" : ""}
+                >
+                  {importing ? "Procesando..." : importApply ? "Validar y aplicar" : "Validar CSV"}
+                </Button>
+              </div>
+              {importResult ? (
+                <pre className="whitespace-pre-wrap rounded-xl border bg-slate-50 p-3 text-xs text-slate-700">{importResult}</pre>
+              ) : null}
+              </div>
+            </div>
           </div>
         </div>
       ) : null}
