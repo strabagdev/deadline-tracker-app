@@ -41,10 +41,11 @@ function riskFromDays(
   thresholds: { yellowDays: number; orangeDays: number; redDays: number }
 ): { level: RiskLevel; score: number } {
   if (daysRemaining == null || Number.isNaN(daysRemaining)) return { level: "none", score: 0 };
-  if (daysRemaining <= thresholds.redDays) return { level: "red", score: 100 };
-  if (daysRemaining <= thresholds.orangeDays) return { level: "orange", score: 80 };
-  if (daysRemaining <= thresholds.yellowDays) return { level: "yellow", score: 60 };
-  return { level: "green", score: 25 };
+  const score = Math.max(0, Math.ceil(daysRemaining));
+  if (daysRemaining <= thresholds.redDays) return { level: "red", score };
+  if (daysRemaining <= thresholds.orangeDays) return { level: "orange", score };
+  if (daysRemaining <= thresholds.yellowDays) return { level: "yellow", score };
+  return { level: "green", score };
 }
 
 export async function POST(req: Request) {

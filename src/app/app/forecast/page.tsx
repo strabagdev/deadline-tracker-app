@@ -71,6 +71,32 @@ export default function ForecastPage() {
   const [rows, setRows] = useState<ForecastEntity[]>([]);
   const [computedAt, setComputedAt] = useState<string>("");
 
+  async function loadForecasts() {
+    setLoading(true);
+    setErrorMsg("");
+    const { data } = await supabaseAuth.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const res = await fetch("/api/forecasts", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setErrorMsg(json.error || "No se pudo cargar forecast");
+      setLoading(false);
+      return;
+    }
+
+    setSummary(json.summary ?? summary);
+    setRows(Array.isArray(json.entities) ? json.entities : []);
+    setComputedAt(String(json.computed_at ?? ""));
+    setLoading(false);
+  }
+
   async function recompute() {
     setBusy(true);
     setErrorMsg("");
@@ -89,19 +115,15 @@ export default function ForecastPage() {
     if (!res.ok) {
       setErrorMsg(json.error || "No se pudo recomputar forecast");
       setBusy(false);
-      setLoading(false);
       return;
     }
 
-    setSummary(json.summary ?? summary);
-    setRows(Array.isArray(json.entities) ? json.entities : []);
-    setComputedAt(String(json.computed_at ?? ""));
+    await loadForecasts();
     setBusy(false);
-    setLoading(false);
   }
 
   useEffect(() => {
-    void recompute();
+    void loadForecasts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -173,15 +195,16 @@ export default function ForecastPage() {
                 <p className="text-sm text-slate-500">No hay datos de forecast para mostrar.</p>
               ) : (
                 <div className="overflow-x-auto rounded-xl border">
-                  <div className="grid min-w-[760px] grid-cols-[1.4fr_1.1fr_0.9fr_0.9fr_0.8fr] border-b bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+                  <div className="grid min-w-[860px] grid-cols-[1.35fr_1.05fr_0.9fr_0.85fr_0.7fr_0.65fr] border-b bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
                     <div>Entidad</div>
                     <div>Próximo vencimiento</div>
                     <div>Fecha estimada</div>
                     <div>Días restantes</div>
+                    <div>Puntaje</div>
                     <div>Estado</div>
                   </div>
                   {orderedRows.map((r) => (
-                    <div key={`${r.entity_id}-${r.deadline_id}`} className="grid min-w-[760px] grid-cols-[1.4fr_1.1fr_0.9fr_0.9fr_0.8fr] items-center border-b px-3 py-2 text-sm">
+                    <div key={`${r.entity_id}-${r.deadline_id}`} className="grid min-w-[860px] grid-cols-[1.35fr_1.05fr_0.9fr_0.85fr_0.7fr_0.65fr] items-center border-b px-3 py-2 text-sm">
                       <div className="min-w-0">
                         <Link href={`/app/entities/${r.entity_id}`} className="truncate font-semibold text-slate-900 hover:underline">
                           {r.entity_name}
@@ -190,6 +213,7 @@ export default function ForecastPage() {
                       <div className="truncate text-slate-700">{r.deadline_name}</div>
                       <div className="text-slate-700">{r.forecast_due_date ? fmtDate(r.forecast_due_date) : "Sin fecha estimada"}</div>
                       <div className="text-slate-700">{r.days_remaining ?? "Sin info"}</div>
+                      <div className="text-slate-700">{Math.round(Number(r.risk_score ?? 0))}</div>
                       <div>
                         <Badge variant="outline" className={riskBadgeClass(r.risk_level)}>
                           {statusLabel(r.risk_level)}
