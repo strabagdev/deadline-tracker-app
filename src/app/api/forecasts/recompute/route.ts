@@ -41,7 +41,13 @@ function riskFromDays(
   thresholds: { yellowDays: number; orangeDays: number; redDays: number }
 ): { level: RiskLevel; score: number } {
   if (daysRemaining == null || Number.isNaN(daysRemaining)) return { level: "none", score: 0 };
-  const score = Math.max(0, Math.ceil(daysRemaining));
+
+  // Score continuo 0..100 usando el umbral amarillo como horizonte del semáforo.
+  // <= 0 días => 100 (máximo riesgo), >= yellowDays => 0.
+  const horizon = Math.max(1, Number(thresholds.yellowDays ?? 60));
+  const normalized = ((horizon - daysRemaining) / horizon) * 100;
+  const score = Math.max(0, Math.min(100, Math.round(normalized)));
+
   if (daysRemaining <= thresholds.redDays) return { level: "red", score };
   if (daysRemaining <= thresholds.orangeDays) return { level: "orange", score };
   if (daysRemaining <= thresholds.yellowDays) return { level: "yellow", score };

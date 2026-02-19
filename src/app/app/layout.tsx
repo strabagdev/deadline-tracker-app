@@ -293,6 +293,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <nav className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto p-1 lg:flex-1 lg:overflow-visible">
                   <NavLink href="/app" label="Dashboard" />
                   <NavLink href="/app/forecast" label="Forecast" />
+                  <NavLink href="/app/alerts" label="Alertas" />
                   <NavLink href="/app/entities" label="Entidades" />
                   <NavLink href="/app/usage" label="Registro uso" />
                   <NavLink href="/app/entity-types" label="Tipos entidad" />
