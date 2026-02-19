@@ -69,18 +69,87 @@ function IconLogout({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
-function NavLink({ href, label }: { href: string; label: string }) {
+function IconHome({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.5V21h14V9.5" />
+    </svg>
+  );
+}
+
+function IconForecast({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M3 3v18h18" />
+      <path d="m7 15 4-4 3 3 5-6" />
+    </svg>
+  );
+}
+
+function IconAlert({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    </svg>
+  );
+}
+
+function IconEntities({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <rect x="3" y="4" width="18" height="6" rx="1.5" />
+      <rect x="3" y="14" width="18" height="6" rx="1.5" />
+    </svg>
+  );
+}
+
+function IconUsage({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M4 12h16" />
+      <path d="m14 6 6 6-6 6" />
+      <circle cx="7" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function IconTag({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M20.59 13.41 11 3H4v7l9.59 9.59a2 2 0 0 0 2.82 0l4.18-4.18a2 2 0 0 0 0-2.82z" />
+      <circle cx="7.5" cy="7.5" r="1.5" />
+    </svg>
+  );
+}
+
+function IconUsers({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <circle cx="9" cy="7" r="3" />
+      <circle cx="17" cy="9" r="2" />
+      <path d="M3 20a6 6 0 0 1 12 0" />
+      <path d="M15 20a4 4 0 0 1 6 0" />
+    </svg>
+  );
+}
+
+function NavLink({ href, label, icon }: { href: string; label: string; icon: React.ReactNode }) {
   const pathname = usePathname();
   const active = pathname === href || (href !== "/app" && pathname.startsWith(href + "/"));
   return (
     <Link
       href={href}
+      title={label}
+      aria-label={label}
       className={cn(
-        "rounded-xl border bg-transparent px-3 py-2 text-sm text-slate-700 transition-colors",
+        "inline-flex h-10 w-10 items-center justify-center rounded-xl border bg-transparent text-sm text-slate-700 transition-colors",
         active ? "border-slate-300 text-slate-900" : "border-transparent hover:border-slate-300"
       )}
     >
-      {label}
+      {icon}
     </Link>
   );
 }
@@ -93,7 +162,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [platformLogoUrl, setPlatformLogoUrl] = React.useState("");
   const [activeOrgName, setActiveOrgName] = React.useState("");
   const [activeOrgLogoUrl, setActiveOrgLogoUrl] = React.useState("");
-  const isDashboardHome = pathname === "/app";
   const isSuperAdminArea = pathname.startsWith("/app/super-admin");
   const isSuperAdminLockedOutRoute = isSuperAdmin && !isSuperAdminArea;
 
@@ -150,10 +218,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     router.replace("/login");
   }
 
-  function refreshDashboard() {
-    if (typeof window !== "undefined") {
+  function refreshApp() {
+    if (pathname === "/app" && typeof window !== "undefined") {
       window.dispatchEvent(new Event("dashboard-refresh"));
+      return;
     }
+    router.refresh();
   }
 
   const userInfoCapsuleDesktop = !isSuperAdmin ? (
@@ -203,7 +273,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-10 border-b bg-white/95 backdrop-blur">
-        <div className={cn("mx-auto grid gap-2 px-4 py-2", isDashboardHome ? "max-w-[1400px]" : "max-w-[1100px]")}>
+        <div className={cn("mx-auto grid gap-2 px-4 py-2", isSuperAdmin ? "max-w-[1100px]" : "max-w-[1400px]")}>
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-2 whitespace-nowrap">
               {platformLogoUrl ? (
@@ -232,82 +302,71 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   Salir
                 </Button>
               </div>
-            ) : isDashboardHome ? (
-              <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:w-auto lg:flex-nowrap">
-                <Link href="/app/entities?new=1" className="block">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-11 w-full bg-transparent sm:h-10 sm:w-10"
-                    title="Nueva entidad"
-                    aria-label="Nueva entidad"
-                  >
-                    <IconPlus />
-                  </Button>
-                </Link>
-                <Link href="/app/settings/semaphore" className="block">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-11 w-full bg-transparent sm:h-10 sm:w-10"
-                    title="Semáforo"
-                    aria-label="Semáforo"
-                  >
-                    <IconTraffic />
-                  </Button>
-                </Link>
-                <Button
-                  onClick={refreshDashboard}
-                  variant="outline"
-                  size="icon"
-                  className="h-11 w-full bg-transparent sm:h-10 sm:w-10"
-                  title="Refrescar"
-                  aria-label="Refrescar"
-                >
-                  <IconRefresh />
-                </Button>
-                <Link href="/app/entities" className="block">
-                  <Button variant="outline" size="icon" className="h-11 w-full bg-transparent sm:h-10 sm:w-10" title="Menú" aria-label="Menú">
-                    <IconMenu />
-                  </Button>
-                </Link>
-                <Link href="/app/profile" className="block">
-                  <Button variant="outline" size="icon" className="h-11 w-full bg-transparent sm:h-10 sm:w-10" title="Perfil" aria-label="Perfil">
-                    <IconUser />
-                  </Button>
-                </Link>
-                <Button
-                  onClick={logout}
-                  variant="outline"
-                  size="icon"
-                  className="h-11 w-full bg-transparent sm:h-10 sm:w-10"
-                  title="Salir"
-                  aria-label="Salir"
-                >
-                  <IconLogout />
-                </Button>
-                {userInfoCapsuleDesktop}
-              </div>
             ) : (
               <div className="flex w-full min-w-0 flex-col gap-2 lg:flex-1 lg:flex-row lg:items-center lg:gap-2">
                 <nav className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto p-1 lg:flex-1 lg:overflow-visible">
-                  <NavLink href="/app" label="Dashboard" />
-                  <NavLink href="/app/forecast" label="Forecast" />
-                  <NavLink href="/app/alerts" label="Alertas" />
-                  <NavLink href="/app/entities" label="Entidades" />
-                  <NavLink href="/app/usage" label="Registro uso" />
-                  <NavLink href="/app/entity-types" label="Tipos entidad" />
-                  <NavLink href="/app/deadline-types" label="Tipos vencimiento" />
-                  <NavLink href="/app/users" label="Usuarios" />
+                  <NavLink href="/app" label="Dashboard" icon={<IconHome />} />
+                  <NavLink href="/app/forecast" label="Forecast" icon={<IconForecast />} />
+                  <NavLink href="/app/alerts" label="Alertas" icon={<IconAlert />} />
+                  <NavLink href="/app/entities" label="Entidades" icon={<IconEntities />} />
+                  <NavLink href="/app/usage" label="Registro uso" icon={<IconUsage />} />
+                  <NavLink href="/app/settings/semaphore" label="Semáforo" icon={<IconTraffic />} />
+                  <NavLink href="/app/entity-types" label="Tipos entidad" icon={<IconTag />} />
+                  <NavLink href="/app/deadline-types" label="Tipos vencimiento" icon={<IconTag />} />
+                  <NavLink href="/app/users" label="Usuarios" icon={<IconUsers />} />
                 </nav>
-                <div className="ml-auto flex w-full items-center justify-end gap-2 lg:w-auto lg:flex-nowrap">
-                  <Link href="/app/profile">
-                    <Button variant="outline" size="sm" className="bg-transparent">
-                      Perfil
+                <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end lg:flex-nowrap">
+                  <Link href="/app/entities?new=1" className="block">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-11 w-full bg-transparent sm:h-10 sm:w-10"
+                      title="Nueva entidad"
+                      aria-label="Nueva entidad"
+                    >
+                      <IconPlus />
                     </Button>
                   </Link>
-                  <Button onClick={logout} variant="outline" size="sm" className="bg-transparent">
-                    Salir
+                  <Link href="/app/settings/semaphore" className="block">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-11 w-full bg-transparent sm:h-10 sm:w-10"
+                      title="Semáforo"
+                      aria-label="Semáforo"
+                    >
+                      <IconTraffic />
+                    </Button>
+                  </Link>
+                  <Button
+                    onClick={refreshApp}
+                    variant="outline"
+                    size="icon"
+                    className="h-11 w-full bg-transparent sm:h-10 sm:w-10"
+                    title="Refrescar"
+                    aria-label="Refrescar"
+                  >
+                    <IconRefresh />
+                  </Button>
+                  <Link href="/app/entities" className="block">
+                    <Button variant="outline" size="icon" className="h-11 w-full bg-transparent sm:h-10 sm:w-10" title="Menú" aria-label="Menú">
+                      <IconMenu />
+                    </Button>
+                  </Link>
+                  <Link href="/app/profile" className="block">
+                    <Button variant="outline" size="icon" className="h-11 w-full bg-transparent sm:h-10 sm:w-10" title="Perfil" aria-label="Perfil">
+                      <IconUser />
+                    </Button>
+                  </Link>
+                  <Button
+                    onClick={logout}
+                    variant="outline"
+                    size="icon"
+                    className="h-11 w-full bg-transparent sm:h-10 sm:w-10"
+                    title="Salir"
+                    aria-label="Salir"
+                  >
+                    <IconLogout />
                   </Button>
                   {userInfoCapsuleDesktop}
                 </div>

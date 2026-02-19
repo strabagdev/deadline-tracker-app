@@ -41,7 +41,6 @@ export async function GET(req: Request) {
     }
 
     const orgId = access.organizationId;
-
     const { data, error } = await db
       .from("deadline_forecasts")
       .select(
