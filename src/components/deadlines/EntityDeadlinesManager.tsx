@@ -120,7 +120,7 @@ export default function EntityDeadlinesManager({
     setGeneralMsg("");
     setCreateMsg("");
     setEditMsg("");
-    void bootstrap(false);
+    void bootstrap(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entityId]);
 
@@ -206,7 +206,6 @@ export default function EntityDeadlinesManager({
 
   useEffect(() => {
     if (!sectionExpanded) return;
-    if (!deadlineTypeId) return;
     if (loadedDetails) return;
     void (async () => {
       setLoading(true);
@@ -215,7 +214,7 @@ export default function EntityDeadlinesManager({
       setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sectionExpanded, deadlineTypeId, loadedDetails, tracksUsage]);
+  }, [sectionExpanded, loadedDetails, tracksUsage]);
 
   async function createDeadline() {
     if (!deadlineTypeId) {
@@ -505,7 +504,7 @@ export default function EntityDeadlinesManager({
             </>
           ) : null}
           <Button
-            onClick={() => void bootstrap(Boolean(deadlineTypeId))}
+            onClick={() => void bootstrap(true)}
             disabled={anyBusy || usageLogsBusy}
             variant="outline"
             size="sm"
@@ -743,7 +742,7 @@ export default function EntityDeadlinesManager({
       {sectionExpanded && editMsg ? <p className="mt-1 whitespace-pre-wrap text-sm text-rose-600">{editMsg}</p> : null}
 
       {!sectionExpanded ? null : !loadedDetails ? (
-        <p className="text-sm text-slate-500">Selecciona un tipo de vencimiento para cargar los datos de esta sección.</p>
+        <p className="text-sm text-slate-500">Cargando datos de vencimientos...</p>
       ) : loading ? (
         <div className="flex justify-center py-3">
           <Loader label="Cargando vencimientos..." />

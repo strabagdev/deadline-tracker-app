@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 type ForecastSummary = {
   upcoming_7_days: number;
   upcoming_30_days: number;
-  active_alerts: number;
   total_forecasts: number;
 };
 
@@ -22,31 +21,42 @@ type ForecastEntity = {
   deadline_name: string;
   forecast_due_date: string | null;
   days_remaining: number | null;
-  risk_level: "green" | "yellow" | "red";
+  risk_level: "green" | "yellow" | "orange" | "red" | "none";
   risk_score: number;
 };
 
-type ForecastAlert = {
-  id: string;
-  entity_id: string;
-  deadline_id: string | null;
-  type: string;
-  severity: string;
-  message: string;
-  created_at: string;
-};
+type Status = "red" | "orange" | "yellow" | "green" | "none";
 
 function riskBadgeClass(level: string) {
   if (level === "red") return "border-rose-300 bg-rose-100 text-rose-800";
+  if (level === "orange") return "border-orange-300 bg-orange-100 text-orange-800";
   if (level === "yellow") return "border-amber-300 bg-amber-100 text-amber-800";
+  if (level === "none") return "border-slate-300 bg-slate-100 text-slate-700";
   return "border-emerald-300 bg-emerald-100 text-emerald-800";
+}
+
+function statusLabel(level: string) {
+  if (level === "red") return "Vencido";
+  if (level === "orange") return "Urgente";
+  if (level === "yellow") return "Por vencer";
+  if (level === "green") return "Al día";
+  if (level === "none") return "Sin info";
+  return level;
 }
 
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "—";
-  return d.toLocaleDateString();
+  return d.toLocaleDateString(undefined, { timeZone: "UTC" });
+}
+
+function statusPriority(s: Status) {
+  if (s === "red") return 0;
+  if (s === "orange") return 1;
+  if (s === "yellow") return 2;
+  if (s === "green") return 3;
+  return 4;
 }
 
 export default function ForecastPage() {
@@ -56,11 +66,9 @@ export default function ForecastPage() {
   const [summary, setSummary] = useState<ForecastSummary>({
     upcoming_7_days: 0,
     upcoming_30_days: 0,
-    active_alerts: 0,
     total_forecasts: 0,
   });
   const [rows, setRows] = useState<ForecastEntity[]>([]);
-  const [alerts, setAlerts] = useState<ForecastAlert[]>([]);
   const [computedAt, setComputedAt] = useState<string>("");
 
   async function recompute() {
@@ -87,7 +95,6 @@ export default function ForecastPage() {
 
     setSummary(json.summary ?? summary);
     setRows(Array.isArray(json.entities) ? json.entities : []);
-    setAlerts(Array.isArray(json.alerts) ? json.alerts : []);
     setComputedAt(String(json.computed_at ?? ""));
     setBusy(false);
     setLoading(false);
@@ -98,7 +105,17 @@ export default function ForecastPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const alertPreview = useMemo(() => alerts.slice(0, 10), [alerts]);
+  const orderedRows = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      const pa = statusPriority(a.risk_level);
+      const pb = statusPriority(b.risk_level);
+      if (pa !== pb) return pa - pb;
+      const da = a.days_remaining ?? Number.MAX_SAFE_INTEGER;
+      const db = b.days_remaining ?? Number.MAX_SAFE_INTEGER;
+      if (da !== db) return da - db;
+      return a.entity_name.localeCompare(b.entity_name);
+    });
+  }, [rows]);
 
   return (
     <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
@@ -107,7 +124,7 @@ export default function ForecastPage() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <CardTitle>OpsAhead Forecast</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Proyección de vencimientos, riesgo y alertas automáticas.</p>
+              <p className="mt-1 text-sm text-slate-500">Proyección de vencimientos, estado y alertas automáticas.</p>
             </div>
             <div className="flex items-center gap-2">
               <Link href="/app">
@@ -132,7 +149,7 @@ export default function ForecastPage() {
         </div>
       ) : (
         <>
-          <section className="grid gap-3 md:grid-cols-4">
+          <section className="grid gap-3 md:grid-cols-3">
             <Card>
               <CardHeader className="pb-2"><CardTitle className="text-sm">Próximos 7 días</CardTitle></CardHeader>
               <CardContent><div className="text-2xl font-semibold">{summary.upcoming_7_days}</div></CardContent>
@@ -142,11 +159,7 @@ export default function ForecastPage() {
               <CardContent><div className="text-2xl font-semibold">{summary.upcoming_30_days}</div></CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Alertas activas</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-semibold">{summary.active_alerts}</div></CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Forecasts</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Entidades</CardTitle></CardHeader>
               <CardContent><div className="text-2xl font-semibold">{summary.total_forecasts}</div></CardContent>
             </Card>
           </section>
@@ -165,9 +178,9 @@ export default function ForecastPage() {
                     <div>Próximo vencimiento</div>
                     <div>Fecha estimada</div>
                     <div>Días restantes</div>
-                    <div>Riesgo</div>
+                    <div>Estado</div>
                   </div>
-                  {rows.map((r) => (
+                  {orderedRows.map((r) => (
                     <div key={`${r.entity_id}-${r.deadline_id}`} className="grid min-w-[760px] grid-cols-[1.4fr_1.1fr_0.9fr_0.9fr_0.8fr] items-center border-b px-3 py-2 text-sm">
                       <div className="min-w-0">
                         <Link href={`/app/entities/${r.entity_id}`} className="truncate font-semibold text-slate-900 hover:underline">
@@ -175,11 +188,11 @@ export default function ForecastPage() {
                         </Link>
                       </div>
                       <div className="truncate text-slate-700">{r.deadline_name}</div>
-                      <div className="text-slate-700">{fmtDate(r.forecast_due_date)}</div>
-                      <div className="text-slate-700">{r.days_remaining ?? "—"}</div>
+                      <div className="text-slate-700">{r.forecast_due_date ? fmtDate(r.forecast_due_date) : "Sin fecha estimada"}</div>
+                      <div className="text-slate-700">{r.days_remaining ?? "Sin info"}</div>
                       <div>
                         <Badge variant="outline" className={riskBadgeClass(r.risk_level)}>
-                          {r.risk_level}
+                          {statusLabel(r.risk_level)}
                         </Badge>
                       </div>
                     </div>
@@ -189,32 +202,8 @@ export default function ForecastPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Alertas activas</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {alertPreview.length === 0 ? (
-                <p className="text-sm text-slate-500">Sin alertas activas.</p>
-              ) : (
-                <div className="space-y-2">
-                  {alertPreview.map((a) => (
-                    <div key={a.id} className="rounded-xl border bg-slate-50 px-3 py-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="outline">{a.type}</Badge>
-                        <Badge variant="outline" className={riskBadgeClass(a.severity)}>{a.severity}</Badge>
-                        <span className="text-xs text-slate-500">{new Date(a.created_at).toLocaleString()}</span>
-                      </div>
-                      <p className="mt-1 text-sm text-slate-700">{a.message}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </>
       )}
     </main>
   );
 }
-
