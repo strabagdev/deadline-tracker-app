@@ -769,15 +769,15 @@ export default function EntityDeadlinesManager({
               <div key={d.id} className="rounded-xl border bg-white p-3">
                 {!isEditing ? (
                   <div className="grid items-center gap-2 lg:grid-cols-[minmax(210px,1.3fr)_minmax(120px,0.9fr)_minmax(140px,1fr)_minmax(170px,1fr)_auto]">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`h-2.5 w-2.5 shrink-0 rounded-full ${getDeadlineStateDotClass(d)}`}
-                          title="Estado actual del vencimiento"
-                          aria-label="Estado actual del vencimiento"
-                        />
-                        <div className="truncate text-sm font-semibold text-slate-900">{t?.name ?? "Tipo desconocido"}</div>
-                      </div>
+                    <div className="relative min-w-0 pl-5">
+                      <span
+                        className="absolute left-0 top-1/2 inline-flex h-4 w-4 -translate-y-1/2 items-center justify-center"
+                        title="Estado actual del vencimiento"
+                        aria-label="Estado actual del vencimiento"
+                      >
+                        <span className={`h-2.5 w-2.5 rounded-full ${getDeadlineStateDotClass(d)}`} />
+                      </span>
+                      <div className="truncate text-sm font-semibold text-slate-900">{t?.name ?? "Tipo desconocido"}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
                         <Badge variant="outline">{t?.measure_by === "date" ? "Por fecha" : "Por uso"}</Badge>
                         <Badge variant="outline">{t?.requires_document ? "Requiere doc" : "Sin doc"}</Badge>
@@ -838,12 +838,14 @@ export default function EntityDeadlinesManager({
                   <>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="relative pl-5">
                       <span
-                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${getDeadlineStateDotClass(d)}`}
+                        className="absolute left-0 top-1/2 inline-flex h-4 w-4 -translate-y-1/2 items-center justify-center"
                         title="Estado actual del vencimiento"
                         aria-label="Estado actual del vencimiento"
-                      />
+                      >
+                        <span className={`h-2.5 w-2.5 rounded-full ${getDeadlineStateDotClass(d)}`} />
+                      </span>
                       <div className="text-sm font-semibold text-slate-900">{t?.name ?? "Tipo desconocido"}</div>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">

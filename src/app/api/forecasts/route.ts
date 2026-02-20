@@ -11,7 +11,18 @@ type ForecastRowRaw = {
   risk_level: "green" | "yellow" | "orange" | "red" | "none";
   risk_score: number;
   computed_at: string;
-  entities?: { name: string | null } | { name: string | null }[] | null;
+  entities?:
+    | {
+        name: string | null;
+        entity_type_id: string | null;
+        entity_types?: { id: string; name: string | null } | { id: string; name: string | null }[] | null;
+      }
+    | {
+        name: string | null;
+        entity_type_id: string | null;
+        entity_types?: { id: string; name: string | null } | { id: string; name: string | null }[] | null;
+      }[]
+    | null;
   deadlines?:
     | { deadline_types?: { name: string | null } | { name: string | null }[] | null }
     | { deadline_types?: { name: string | null } | { name: string | null }[] | null }[]
@@ -52,7 +63,7 @@ export async function GET(req: Request) {
         risk_level,
         risk_score,
         computed_at,
-        entities(name),
+        entities(name, entity_type_id, entity_types(id, name)),
         deadlines(deadline_types(name))
       `
       )
@@ -64,11 +75,14 @@ export async function GET(req: Request) {
 
     const rows = rowsRaw.map((r) => {
       const entity = pickOne(r.entities);
+      const entityType = pickOne(entity?.entity_types ?? null);
       const deadline = pickOne(r.deadlines);
       const deadlineType = pickOne(deadline?.deadline_types ?? null);
       return {
         entity_id: r.entity_id,
         entity_name: entity?.name ?? "Entidad",
+        entity_type_id: entity?.entity_type_id ?? null,
+        entity_type_name: entityType?.name ?? "Sin tipo",
         deadline_id: r.deadline_id,
         deadline_name: deadlineType?.name ?? "Vencimiento",
         forecast_due_date: r.forecast_due_date,

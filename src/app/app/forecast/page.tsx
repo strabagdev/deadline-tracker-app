@@ -7,6 +7,7 @@ import { Loader } from "@/components/ui/loader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 
 type ForecastSummary = {
   upcoming_7_days: number;
@@ -18,6 +19,8 @@ type ForecastSummary = {
 type ForecastEntity = {
   entity_id: string;
   entity_name: string;
+  entity_type_id: string | null;
+  entity_type_name: string;
   deadline_id: string;
   deadline_name: string;
   forecast_due_date: string | null;
@@ -79,6 +82,8 @@ export default function ForecastPage() {
   });
   const [rows, setRows] = useState<ForecastEntity[]>([]);
   const [computedAt, setComputedAt] = useState<string>("");
+  const [filterEntityType, setFilterEntityType] = useState<string>("all");
+  const [q, setQ] = useState("");
   const [labels, setLabels] = useState<StatusLabels>({
     red: "Vencido",
     orange: "Por vencer",
@@ -159,7 +164,16 @@ export default function ForecastPage() {
   }, []);
 
   const orderedRows = useMemo(() => {
-    return [...rows].sort((a, b) => {
+    const needle = q.trim().toLowerCase();
+    const filtered = rows.filter((r) => {
+      if (filterEntityType !== "all" && r.entity_type_id !== filterEntityType) return false;
+      if (!needle) return true;
+      const entity = r.entity_name.toLowerCase();
+      const type = (r.entity_type_name ?? "").toLowerCase();
+      const deadline = r.deadline_name.toLowerCase();
+      return entity.includes(needle) || type.includes(needle) || deadline.includes(needle);
+    });
+    return [...filtered].sort((a, b) => {
       const pa = statusPriority(a.risk_level);
       const pb = statusPriority(b.risk_level);
       if (pa !== pb) return pa - pb;
@@ -168,6 +182,16 @@ export default function ForecastPage() {
       if (da !== db) return da - db;
       return a.entity_name.localeCompare(b.entity_name);
     });
+  }, [filterEntityType, q, rows]);
+
+  const entityTypeOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of rows) {
+      if (r.entity_type_id) map.set(r.entity_type_id, r.entity_type_name || "Sin tipo");
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" }));
   }, [rows]);
 
   return (
@@ -221,8 +245,29 @@ export default function ForecastPage() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Por entidad</CardTitle>
             </CardHeader>
-            <CardContent className="pt-0">
-              {rows.length === 0 ? (
+            <CardContent className="space-y-3 pt-0">
+              <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_220px]">
+                <Input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Buscar por entidad, tipo o vencimiento..."
+                  className="h-10"
+                />
+                <select
+                  aria-label="Filtrar por tipo de entidad"
+                  value={filterEntityType}
+                  onChange={(e) => setFilterEntityType(e.target.value)}
+                  className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                >
+                  <option value="all">Todos los tipos</option>
+                  {entityTypeOptions.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {orderedRows.length === 0 ? (
                 <p className="text-sm text-slate-500">No hay datos de forecast para mostrar.</p>
               ) : (
                 <div className="overflow-x-auto rounded-xl border">
@@ -240,6 +285,7 @@ export default function ForecastPage() {
                         <Link href={`/app/entities/${r.entity_id}`} className="truncate font-semibold text-slate-900 hover:underline">
                           {r.entity_name}
                         </Link>
+                        <div className="truncate text-[11px] text-slate-500">{r.entity_type_name || "Sin tipo"}</div>
                       </div>
                       <div className="truncate text-slate-700">{r.deadline_name}</div>
                       <div className="text-slate-700">{r.forecast_due_date ? fmtDate(r.forecast_due_date) : "Sin fecha estimada"}</div>

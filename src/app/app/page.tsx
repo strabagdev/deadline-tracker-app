@@ -523,6 +523,19 @@ export default function AppDashboard() {
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
+              <select
+                aria-label="Filtrar por tipo de entidad"
+                value={filterEntityType}
+                onChange={(e) => setFilterEntityType(e.target.value)}
+                className="hidden h-9 min-w-[180px] rounded-xl border border-slate-300 bg-white px-3 text-sm md:block"
+              >
+                <option value="all">Todos los tipos</option>
+                {entityTypeOptions.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
               {renderSecondaryFilter("hidden md:block", "md:absolute md:right-0 md:min-w-[360px]")}
               <Button
                 size="sm"

@@ -389,7 +389,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       <footer className="border-t bg-white px-4 py-3">
         <div className="mx-auto max-w-[1100px] text-xs text-slate-500">
-          v2 · Fase: Optimización UX/UI + validación integral de flujos
+          v2 · Implementando una mejora en el sistema de registro de uso, para que sea dinámico entre unidades y estados
         </div>
       </footer>
     </div>
