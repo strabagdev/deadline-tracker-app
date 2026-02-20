@@ -243,6 +243,7 @@ export async function POST(req: Request) {
         upcoming_7_days: dueIn7,
         upcoming_30_days: dueIn30,
         total_forecasts: forecastRows.length,
+        total_entities: entitiesView.length,
       },
       entities: entitiesView,
       computed_at: now.toISOString(),

@@ -104,6 +104,7 @@ export async function GET(req: Request) {
         upcoming_7_days: dueIn7,
         upcoming_30_days: dueIn30,
         total_forecasts: rows.length,
+        total_entities: entitiesView.length,
       },
       entities: entitiesView,
       computed_at: computedAt,

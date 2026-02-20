@@ -12,6 +12,7 @@ type ForecastSummary = {
   upcoming_7_days: number;
   upcoming_30_days: number;
   total_forecasts: number;
+  total_entities?: number;
 };
 
 type ForecastEntity = {
@@ -67,6 +68,7 @@ export default function ForecastPage() {
     upcoming_7_days: 0,
     upcoming_30_days: 0,
     total_forecasts: 0,
+    total_entities: 0,
   });
   const [rows, setRows] = useState<ForecastEntity[]>([]);
   const [computedAt, setComputedAt] = useState<string>("");
@@ -182,7 +184,7 @@ export default function ForecastPage() {
             </Card>
             <Card>
               <CardHeader className="pb-2"><CardTitle className="text-sm">Entidades</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-semibold">{summary.total_forecasts}</div></CardContent>
+              <CardContent><div className="text-2xl font-semibold">{summary.total_entities ?? rows.length}</div></CardContent>
             </Card>
           </section>
 
