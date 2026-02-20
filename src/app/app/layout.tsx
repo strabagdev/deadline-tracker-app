@@ -313,6 +313,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <NavLink href="/app/settings/semaphore" label="Semáforo" icon={<IconTraffic />} />
                   <NavLink href="/app/entity-types" label="Tipos entidad" icon={<IconTag />} />
                   <NavLink href="/app/deadline-types" label="Tipos vencimiento" icon={<IconTag />} />
+                  <NavLink href="/app/usage-units" label="Unidades uso" icon={<IconTag />} />
                   <NavLink href="/app/users" label="Usuarios" icon={<IconUsers />} />
                 </nav>
                 <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end lg:flex-nowrap">

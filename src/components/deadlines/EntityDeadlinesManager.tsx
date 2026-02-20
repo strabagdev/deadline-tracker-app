@@ -48,6 +48,13 @@ type UsageLogRow = {
   created_at?: string;
 };
 
+type UsageUnit = {
+  id: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+};
+
 type DeadlineEditDraft = {
   last_done_date: string;
   next_due_date: string;
@@ -87,6 +94,7 @@ export default function EntityDeadlinesManager({
   tracksUsage: boolean;
 }) {
   const [types, setTypes] = useState<DeadlineType[]>([]);
+  const [usageUnits, setUsageUnits] = useState<UsageUnit[]>([]);
   const [deadlines, setDeadlines] = useState<DeadlineRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [createBusy, setCreateBusy] = useState(false);
@@ -111,13 +119,14 @@ export default function EntityDeadlinesManager({
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [deadlineTypeId, setDeadlineTypeId] = useState<string>("");
   const selectedType = useMemo(() => types.find((t) => t.id === deadlineTypeId) || null, [types, deadlineTypeId]);
+  const usageUnitNameSet = useMemo(() => new Set(usageUnits.map((u) => u.name)), [usageUnits]);
 
   const [lastDoneDate, setLastDoneDate] = useState<string>("");
   const [nextDueDate, setNextDueDate] = useState<string>("");
 
   const [lastDoneUsage, setLastDoneUsage] = useState<string>("");
   const [frequency, setFrequency] = useState<string>("");
-  const [frequencyUnit, setFrequencyUnit] = useState<string>("hours");
+  const [frequencyUnit, setFrequencyUnit] = useState<string>("");
   const [usageDailyAverage, setUsageDailyAverage] = useState<string>("");
   const [usageDailyAverageMode, setUsageDailyAverageMode] = useState<"manual" | "auto">("manual");
   const anyBusy = createBusy || editBusy;
@@ -126,6 +135,7 @@ export default function EntityDeadlinesManager({
     setSectionExpanded(true);
     setLoadedDetails(false);
     setTypes([]);
+    setUsageUnits([]);
     setDeadlines([]);
     setUsageLogs([]);
     setDeadlineTypeId("");
@@ -140,7 +150,7 @@ export default function EntityDeadlinesManager({
   async function bootstrap(loadDetails = true) {
     setLoading(true);
     setGeneralMsg("");
-    await loadTypes();
+    await Promise.all([loadTypes(), loadUsageUnits()]);
     if (loadDetails) {
       await Promise.all([loadDeadlines(), tracksUsage ? loadUsageLogs() : Promise.resolve()]);
       setLoadedDetails(true);
@@ -166,6 +176,24 @@ export default function EntityDeadlinesManager({
     setTypes(list);
     if (list.length === 0) setDeadlineTypeId("");
     if (deadlineTypeId && !list.some((t) => t.id === deadlineTypeId)) setDeadlineTypeId("");
+  }
+
+  async function loadUsageUnits() {
+    const token = await getToken();
+    if (!token) return;
+
+    const res = await fetch("/api/usage-units?active=1", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setGeneralMsg((prev) => prev || json.error || "No se pudieron cargar las unidades de uso");
+      setUsageUnits([]);
+      return;
+    }
+
+    const list: UsageUnit[] = json.usage_units ?? [];
+    setUsageUnits(list);
   }
 
   async function loadDeadlines() {
@@ -201,21 +229,17 @@ export default function EntityDeadlinesManager({
     setUsageLogs(json.usage_logs ?? []);
   }
 
-  function resetFormForType() {
+  useEffect(() => {
     // keep selected type, reset only the inputs
     setCreateMsg("");
     setLastDoneDate("");
     setNextDueDate("");
     setLastDoneUsage("");
     setFrequency("");
-    setFrequencyUnit("hours");
+    setFrequencyUnit(usageUnits[0]?.name ?? "");
     setUsageDailyAverage("");
     setUsageDailyAverageMode("manual");
-  }
-
-  useEffect(() => {
-    resetFormForType();
-  }, [deadlineTypeId]);
+  }, [deadlineTypeId, usageUnits]);
 
   useEffect(() => {
     if (!sectionExpanded) return;
@@ -261,6 +285,11 @@ export default function EntityDeadlinesManager({
       // usage
       if (lastDoneUsage === "" || frequency === "") {
         setCreateMsg("Para tipo por uso: completa last done usage y frecuencia");
+        setCreateBusy(false);
+        return;
+      }
+      if (!frequencyUnit) {
+        setCreateMsg("Para tipo por uso: debes seleccionar una unidad");
         setCreateBusy(false);
         return;
       }
@@ -369,7 +398,7 @@ export default function EntityDeadlinesManager({
       next_due_date: d.next_due_date ?? "",
       last_done_usage: d.last_done_usage != null ? String(d.last_done_usage) : "",
       frequency: d.frequency != null ? String(d.frequency) : "",
-      frequency_unit: d.frequency_unit ?? "hours",
+      frequency_unit: d.frequency_unit ?? usageUnits[0]?.name ?? "",
       usage_daily_average_mode:
         (d.usage_daily_average_mode ?? "manual") === "auto" ? "auto" : "manual",
       usage_daily_average: d.usage_daily_average != null ? String(d.usage_daily_average) : "",
@@ -408,6 +437,11 @@ export default function EntityDeadlinesManager({
     } else {
       if (editDraft.last_done_usage === "" || editDraft.frequency === "") {
         setEditMsg("Para vencimientos por uso: last done usage y frecuencia son requeridos.");
+        setEditBusy(false);
+        return;
+      }
+      if (!editDraft.frequency_unit) {
+        setEditMsg("Para vencimientos por uso: la unidad es requerida.");
         setEditBusy(false);
         return;
       }
@@ -689,11 +723,18 @@ export default function EntityDeadlinesManager({
                               className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm"
                               disabled={createBusy}
                             >
-                              <option value="hours">hours</option>
-                              <option value="kilometers">kilometers</option>
-                              <option value="days">days</option>
-                              <option value="cycles">cycles</option>
+                              {!frequencyUnit ? <option value="">Selecciona unidad...</option> : null}
+                              {usageUnits.map((u) => (
+                                <option key={u.id} value={u.name}>
+                                  {u.name}
+                                </option>
+                              ))}
                             </select>
+                            {usageUnits.length === 0 ? (
+                              <div className="text-[11px] text-rose-600">
+                                No hay unidades activas. Crea una en <code>/app/usage-units</code>.
+                              </div>
+                            ) : null}
                           </div>
                           <div className="grid gap-1 text-xs text-slate-600">
                             <span>Promedio diario (modo)</span>
@@ -951,17 +992,22 @@ export default function EntityDeadlinesManager({
                               disabled={editBusy}
                             />
                             <select
-                              value={editDraft?.frequency_unit ?? "hours"}
+                              value={editDraft?.frequency_unit ?? ""}
                               onChange={(e) =>
                                 setEditDraft((prev) => (prev ? { ...prev, frequency_unit: e.target.value } : prev))
                               }
                               className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm"
                               disabled={editBusy}
                             >
-                              <option value="hours">hours</option>
-                              <option value="kilometers">kilometers</option>
-                              <option value="days">days</option>
-                              <option value="cycles">cycles</option>
+                              {editDraft?.frequency_unit && !usageUnitNameSet.has(editDraft.frequency_unit) ? (
+                                <option value={editDraft.frequency_unit}>{editDraft.frequency_unit} (actual)</option>
+                              ) : null}
+                              {!editDraft?.frequency_unit ? <option value="">Selecciona unidad...</option> : null}
+                              {usageUnits.map((u) => (
+                                <option key={u.id} value={u.name}>
+                                  {u.name}
+                                </option>
+                              ))}
                             </select>
                           </div>
                         ) : (

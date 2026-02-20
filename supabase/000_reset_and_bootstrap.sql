@@ -44,6 +44,9 @@ begin
   if to_regclass('public.deadline_types') is not null then
     execute 'truncate table public.deadline_types restart identity cascade';
   end if;
+  if to_regclass('public.usage_units') is not null then
+    execute 'truncate table public.usage_units restart identity cascade';
+  end if;
   if to_regclass('public.entity_types') is not null then
     execute 'truncate table public.entity_types restart identity cascade';
   end if;
