@@ -234,7 +234,6 @@ export default function EntityDeadlinesManager({
     const payload: Record<string, unknown> = {
       entity_id: entityId,
       deadline_type_id: deadlineTypeId,
-      last_done_date: lastDoneDate || null,
     };
 
     if (selectedType?.measure_by === "date") {
@@ -243,6 +242,7 @@ export default function EntityDeadlinesManager({
         setCreateBusy(false);
         return;
       }
+      payload.last_done_date = lastDoneDate || null;
       payload.next_due_date = nextDueDate;
     } else {
       // usage
@@ -382,10 +382,7 @@ export default function EntityDeadlinesManager({
       return;
     }
 
-    const payload: Record<string, unknown> = {
-      id: d.id,
-      last_done_date: editDraft.last_done_date || null,
-    };
+    const payload: Record<string, unknown> = { id: d.id };
 
     if (d.deadline_types?.measure_by === "date") {
       if (!editDraft.next_due_date) {
@@ -393,6 +390,7 @@ export default function EntityDeadlinesManager({
         setEditBusy(false);
         return;
       }
+      payload.last_done_date = editDraft.last_done_date || null;
       payload.next_due_date = editDraft.next_due_date;
     } else {
       if (editDraft.last_done_usage === "" || editDraft.frequency === "") {
@@ -621,7 +619,7 @@ export default function EntityDeadlinesManager({
                     </select>
                   </div>
 
-                  {selectedType ? (
+                  {selectedType?.measure_by === "date" ? (
                     <div className="grid gap-1 text-xs text-slate-600 md:max-w-[220px]">
                       <span>Última realización (opcional)</span>
                       <Input
@@ -792,21 +790,23 @@ export default function EntityDeadlinesManager({
                 </div>
 
                 <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  <div className="grid gap-1 text-xs text-slate-600">
-                    <span className="font-medium text-slate-700">Última realización</span>
-                    {editingDeadlineId === d.id ? (
-                      <Input
-                        type="date"
-                        value={editDraft?.last_done_date ?? ""}
-                        onChange={(e) =>
-                          setEditDraft((prev) => (prev ? { ...prev, last_done_date: e.target.value } : prev))
-                        }
-                        disabled={editBusy}
-                      />
-                    ) : (
-                      <span className="text-sm text-slate-800">{d.last_done_date ?? "-"}</span>
-                    )}
-                  </div>
+                  {t?.measure_by === "date" ? (
+                    <div className="grid gap-1 text-xs text-slate-600">
+                      <span className="font-medium text-slate-700">Última realización</span>
+                      {editingDeadlineId === d.id ? (
+                        <Input
+                          type="date"
+                          value={editDraft?.last_done_date ?? ""}
+                          onChange={(e) =>
+                            setEditDraft((prev) => (prev ? { ...prev, last_done_date: e.target.value } : prev))
+                          }
+                          disabled={editBusy}
+                        />
+                      ) : (
+                        <span className="text-sm text-slate-800">{d.last_done_date ?? "-"}</span>
+                      )}
+                    </div>
+                  ) : null}
                   {t?.measure_by === "date" ? (
                     <div className="grid gap-1 text-xs text-slate-600">
                       <span className="font-medium text-slate-700">Próximo vencimiento</span>
