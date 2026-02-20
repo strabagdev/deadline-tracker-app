@@ -58,6 +58,10 @@ type SemaphoreSettings = {
   yellow_days: number;
   orange_days: number;
   red_days: number;
+  label_green: string;
+  label_yellow: string;
+  label_orange: string;
+  label_red: string;
 };
 type ViewMode = "cards" | "list";
 
@@ -140,15 +144,6 @@ function statusTone(s: Status): { border: string; soft: string; strong: string }
   return { border: "#e2e8f0", soft: "#f8fafc", strong: "#475569" };
 }
 
-const statusFilterMeta: Array<{ key: Status | "all"; title: string }> = [
-  { key: "all", title: "Todos" },
-  { key: "red", title: "Vencido" },
-  { key: "orange", title: "Urgente" },
-  { key: "yellow", title: "Por vencer" },
-  { key: "green", title: "Al día" },
-  { key: "none", title: "Sin info" },
-];
-
 export default function AppDashboard() {
   const router = useRouter();
 
@@ -173,7 +168,23 @@ export default function AppDashboard() {
     yellow_days: 60,
     orange_days: 30,
     red_days: 15,
+    label_green: "Al día",
+    label_yellow: "Aviso",
+    label_orange: "Por vencer",
+    label_red: "Vencido",
   });
+
+  const statusFilterMeta = useMemo<Array<{ key: Status | "all"; title: string }>>(
+    () => [
+      { key: "all", title: "Todos" },
+      { key: "red", title: semaphore.label_red || "Vencido" },
+      { key: "orange", title: semaphore.label_orange || "Por vencer" },
+      { key: "yellow", title: semaphore.label_yellow || "Aviso" },
+      { key: "green", title: semaphore.label_green || "Al día" },
+      { key: "none", title: "Sin info" },
+    ],
+    [semaphore.label_green, semaphore.label_yellow, semaphore.label_orange, semaphore.label_red]
+  );
 
   useEffect(() => {
     void load();
@@ -222,6 +233,10 @@ export default function AppDashboard() {
         yellow_days: Number(sjson.settings.yellow_days ?? 60),
         orange_days: Number(sjson.settings.orange_days ?? 30),
         red_days: Number(sjson.settings.red_days ?? 15),
+        label_green: String(sjson.settings.label_green ?? "Al día"),
+        label_yellow: String(sjson.settings.label_yellow ?? "Aviso"),
+        label_orange: String(sjson.settings.label_orange ?? "Por vencer"),
+        label_red: String(sjson.settings.label_red ?? "Vencido"),
       });
     }
 
@@ -246,6 +261,10 @@ export default function AppDashboard() {
         yellowDays: Number(semaphore.yellow_days ?? 60),
         orangeDays: Number(semaphore.orange_days ?? 30),
         redDays: Number(semaphore.red_days ?? 15),
+        labelGreen: semaphore.label_green,
+        labelYellow: semaphore.label_yellow,
+        labelOrange: semaphore.label_orange,
+        labelRed: semaphore.label_red,
       });
       const status: Status = (nearest?.status as Status) ?? "none";
       return { entity: e, latestUsage: latest, latestUsageAt: latestAt, nearest, status, hasActiveDeadlines };

@@ -4,6 +4,10 @@ export type SemaphoreThresholds = {
   yellowDays: number;
   orangeDays: number;
   redDays: number;
+  labelGreen?: string;
+  labelYellow?: string;
+  labelOrange?: string;
+  labelRed?: string;
 };
 
 export type DeadlineLike = {
@@ -41,11 +45,14 @@ function addDays(base: Date, days: number) {
 }
 
 function classify(diffDays: number, thresholds: SemaphoreThresholds) {
-  if (diffDays <= 0) return { status: "red" as const, label: "Vencido" };
-  if (diffDays <= thresholds.redDays) return { status: "red" as const, label: "Crítico" };
-  if (diffDays <= thresholds.orangeDays) return { status: "orange" as const, label: "Por vencer" };
-  if (diffDays <= thresholds.yellowDays) return { status: "yellow" as const, label: "Por vencer" };
-  return { status: "green" as const, label: "Vigente" };
+  const labelRed = thresholds.labelRed ?? "Vencido";
+  const labelOrange = thresholds.labelOrange ?? "Por vencer";
+  const labelYellow = thresholds.labelYellow ?? "Aviso";
+  const labelGreen = thresholds.labelGreen ?? "Al día";
+  if (diffDays <= 0) return { status: "red" as const, label: labelRed };
+  if (diffDays <= thresholds.orangeDays) return { status: "orange" as const, label: labelOrange };
+  if (diffDays <= thresholds.yellowDays) return { status: "yellow" as const, label: labelYellow };
+  return { status: "green" as const, label: labelGreen };
 }
 
 export function calculateDeadlineStatus(deadline: DeadlineLike, latestUsage: number | null, thresholds: SemaphoreThresholds): DeadlineStatusResult {

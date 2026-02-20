@@ -17,6 +17,10 @@ type SettingsPayload = {
     yellow_days: number;
     orange_days: number;
     red_days: number;
+    label_green: string;
+    label_yellow: string;
+    label_orange: string;
+    label_red: string;
   }>;
 };
 
@@ -24,6 +28,10 @@ type UnifiedThresholds = {
   yellow_days: number;
   orange_days: number;
   red_days: number;
+  label_green: string;
+  label_yellow: string;
+  label_orange: string;
+  label_red: string;
 };
 
 function readApiError(payload: unknown) {
@@ -49,6 +57,10 @@ export default function SemaphoreSettingsPage() {
     yellow_days: 60,
     orange_days: 30,
     red_days: 15,
+    label_green: "Al día",
+    label_yellow: "Aviso",
+    label_orange: "Por vencer",
+    label_red: "Vencido",
   });
 
   useEffect(() => {
@@ -74,6 +86,9 @@ export default function SemaphoreSettingsPage() {
     if (![y, o, r].every((n) => Number.isFinite(n))) return "Los umbrales deben ser numéricos.";
     if (y < 0 || o < 0 || r < 0) return "Los umbrales no pueden ser negativos.";
     if (!(y >= o && o >= r)) return "Debe cumplirse: yellow ≥ orange ≥ red.";
+    if (![th.label_green, th.label_yellow, th.label_orange, th.label_red].every((v) => String(v).trim().length > 0)) {
+      return "Los nombres de estado no pueden estar vacíos.";
+    }
     return "";
   }
 
@@ -105,6 +120,10 @@ export default function SemaphoreSettingsPage() {
       yellow_days: Number(s.yellow_days ?? 60),
       orange_days: Number(s.orange_days ?? 30),
       red_days: Number(s.red_days ?? 15),
+      label_green: String(s.label_green ?? "Al día"),
+      label_yellow: String(s.label_yellow ?? "Aviso"),
+      label_orange: String(s.label_orange ?? "Por vencer"),
+      label_red: String(s.label_red ?? "Vencido"),
     });
 
     setLoading(false);
@@ -130,6 +149,10 @@ export default function SemaphoreSettingsPage() {
       yellow_days: Math.trunc(t.yellow_days),
       orange_days: Math.trunc(t.orange_days),
       red_days: Math.trunc(t.red_days),
+      label_green: String(t.label_green).trim(),
+      label_yellow: String(t.label_yellow).trim(),
+      label_orange: String(t.label_orange).trim(),
+      label_red: String(t.label_red).trim(),
     };
 
     const res = await fetch("/api/settings/semaphore", {
@@ -199,11 +222,10 @@ export default function SemaphoreSettingsPage() {
             <form onSubmit={save} className="space-y-4">
               <div className="rounded-2xl border bg-slate-50 p-3">
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="border-emerald-300 bg-emerald-100 text-emerald-800">🟢 Al día</Badge>
-                  <Badge variant="outline" className="border-amber-300 bg-amber-100 text-amber-800">🟡 ≤ Yellow</Badge>
-                  <Badge variant="outline" className="border-orange-300 bg-orange-100 text-orange-800">🟠 ≤ Orange</Badge>
-                  <Badge variant="outline" className="border-rose-300 bg-rose-100 text-rose-800">🔴 ≤ Red</Badge>
-                  <Badge variant="outline">Vencido: días ≤ 0</Badge>
+                  <Badge variant="outline" className="border-emerald-300 bg-emerald-100 text-emerald-800">🟢 {t.label_green}</Badge>
+                  <Badge variant="outline" className="border-amber-300 bg-amber-100 text-amber-800">🟡 {t.label_yellow}</Badge>
+                  <Badge variant="outline" className="border-orange-300 bg-orange-100 text-orange-800">🟠 {t.label_orange}</Badge>
+                  <Badge variant="outline" className="border-rose-300 bg-rose-100 text-rose-800">🔴 {t.label_red} (días ≤ 0)</Badge>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-3">
@@ -232,6 +254,41 @@ export default function SemaphoreSettingsPage() {
                       value={String(t.red_days)}
                       onChange={(e) => setT((p) => ({ ...p, red_days: Number(e.target.value) }))}
                       inputMode="numeric"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <label className="grid gap-1.5 text-xs text-slate-600">
+                    Nombre estado verde
+                    <Input
+                      disabled={!canEdit || saving}
+                      value={t.label_green}
+                      onChange={(e) => setT((p) => ({ ...p, label_green: e.target.value }))}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-xs text-slate-600">
+                    Nombre estado amarillo
+                    <Input
+                      disabled={!canEdit || saving}
+                      value={t.label_yellow}
+                      onChange={(e) => setT((p) => ({ ...p, label_yellow: e.target.value }))}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-xs text-slate-600">
+                    Nombre estado naranjo
+                    <Input
+                      disabled={!canEdit || saving}
+                      value={t.label_orange}
+                      onChange={(e) => setT((p) => ({ ...p, label_orange: e.target.value }))}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-xs text-slate-600">
+                    Nombre estado rojo
+                    <Input
+                      disabled={!canEdit || saving}
+                      value={t.label_red}
+                      onChange={(e) => setT((p) => ({ ...p, label_red: e.target.value }))}
                     />
                   </label>
                 </div>

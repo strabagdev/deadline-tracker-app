@@ -27,6 +27,14 @@ type AlertsSummary = {
   resolved_recent: number;
 };
 
+type StatusLabels = {
+  red: string;
+  orange: string;
+  yellow: string;
+  green: string;
+  none: string;
+};
+
 function severityClass(level: string) {
   if (level === "red") return "border-rose-300 bg-rose-100 text-rose-800";
   if (level === "orange") return "border-orange-300 bg-orange-100 text-orange-800";
@@ -35,12 +43,12 @@ function severityClass(level: string) {
   return "border-slate-300 bg-slate-100 text-slate-700";
 }
 
-function severityLabel(level: string) {
-  if (level === "red") return "Vencido";
-  if (level === "orange") return "Urgente";
-  if (level === "yellow") return "Por vencer";
-  if (level === "green") return "Al día";
-  return "Sin info";
+function severityLabel(level: string, labels: StatusLabels) {
+  if (level === "red") return labels.red;
+  if (level === "orange") return labels.orange;
+  if (level === "yellow") return labels.yellow;
+  if (level === "green") return labels.green;
+  return labels.none;
 }
 
 export default function AlertsPage() {
@@ -50,6 +58,13 @@ export default function AlertsPage() {
   const [summary, setSummary] = useState<AlertsSummary>({ active: 0, resolved_recent: 0 });
   const [active, setActive] = useState<AlertRow[]>([]);
   const [recentResolved, setRecentResolved] = useState<AlertRow[]>([]);
+  const [labels, setLabels] = useState<StatusLabels>({
+    red: "Vencido",
+    orange: "Por vencer",
+    yellow: "Aviso",
+    green: "Al día",
+    none: "Sin info",
+  });
 
   async function getTokenOrRedirect() {
     const { data } = await supabaseAuth.auth.getSession();
@@ -80,6 +95,21 @@ export default function AlertsPage() {
     setSummary(json.summary ?? { active: 0, resolved_recent: 0 });
     setActive(Array.isArray(json.active) ? json.active : []);
     setRecentResolved(Array.isArray(json.recent_resolved) ? json.recent_resolved : []);
+
+    const sres = await fetch("/api/settings/semaphore", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const sjson = await sres.json().catch(() => ({}));
+    if (sres.ok && sjson?.settings) {
+      setLabels({
+        red: String(sjson.settings.label_red ?? "Vencido"),
+        orange: String(sjson.settings.label_orange ?? "Por vencer"),
+        yellow: String(sjson.settings.label_yellow ?? "Aviso"),
+        green: String(sjson.settings.label_green ?? "Al día"),
+        none: "Sin info",
+      });
+    }
+
     setLoading(false);
   }
 
@@ -163,7 +193,7 @@ export default function AlertsPage() {
                     <div key={a.id} className="rounded-xl border bg-slate-50 px-3 py-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline" className={severityClass(a.severity)}>
-                          {severityLabel(a.severity)}
+                          {severityLabel(a.severity, labels)}
                         </Badge>
                         <Badge variant="outline">{a.entity_name ?? "Entidad"}</Badge>
                         <Badge variant="outline">{a.deadline_name ?? "Vencimiento"}</Badge>
@@ -190,7 +220,7 @@ export default function AlertsPage() {
                     <div key={a.id} className="rounded-lg border bg-white px-3 py-2 text-sm">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline" className={severityClass(a.severity)}>
-                          {severityLabel(a.severity)}
+                          {severityLabel(a.severity, labels)}
                         </Badge>
                         <span className="text-slate-700">{a.message}</span>
                       </div>

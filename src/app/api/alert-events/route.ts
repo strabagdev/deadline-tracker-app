@@ -43,10 +43,16 @@ function pickOne<T>(value: T | T[] | null | undefined): T | null {
   return value ?? null;
 }
 
-function eventMessage(entityName: string, deadlineName: string, level: ForecastRow["risk_level"], daysRemaining: number | null) {
-  if (level === "red") return `${entityName}: ${deadlineName} vencido${daysRemaining != null ? ` (${daysRemaining} días)` : ""}.`;
-  if (level === "orange") return `${entityName}: ${deadlineName} urgente${daysRemaining != null ? ` (${daysRemaining} días)` : ""}.`;
-  if (level === "yellow") return `${entityName}: ${deadlineName} por vencer${daysRemaining != null ? ` (${daysRemaining} días)` : ""}.`;
+function eventMessage(
+  entityName: string,
+  deadlineName: string,
+  level: ForecastRow["risk_level"],
+  daysRemaining: number | null,
+  labels: { red: string; orange: string; yellow: string }
+) {
+  if (level === "red") return `${entityName}: ${deadlineName} ${labels.red.toLowerCase()}${daysRemaining != null ? ` (${daysRemaining} días)` : ""}.`;
+  if (level === "orange") return `${entityName}: ${deadlineName} ${labels.orange.toLowerCase()}${daysRemaining != null ? ` (${daysRemaining} días)` : ""}.`;
+  if (level === "yellow") return `${entityName}: ${deadlineName} ${labels.yellow.toLowerCase()}${daysRemaining != null ? ` (${daysRemaining} días)` : ""}.`;
   return `${entityName}: ${deadlineName} requiere revisión.`;
 }
 
@@ -65,6 +71,17 @@ export async function POST(req: Request) {
     const orgId = access.organizationId;
     const nowIso = new Date().toISOString();
     const EVENT_TYPE = "forecast_risk";
+    const { data: settingsData, error: settingsErr } = await db
+      .from("organization_settings")
+      .select("label_red, label_orange, label_yellow")
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (settingsErr) throw settingsErr;
+    const labels = {
+      red: String(settingsData?.label_red ?? "Vencido"),
+      orange: String(settingsData?.label_orange ?? "Por vencer"),
+      yellow: String(settingsData?.label_yellow ?? "Aviso"),
+    };
 
     const { data: forecastData, error: forecastErr } = await db
       .from("deadline_forecasts")
@@ -96,7 +113,7 @@ export async function POST(req: Request) {
           deadline_id: r.deadline_id,
           event_type: EVENT_TYPE,
           severity: r.risk_level,
-          message: eventMessage(entityName, deadlineName, r.risk_level, r.days_remaining),
+          message: eventMessage(entityName, deadlineName, r.risk_level, r.days_remaining, labels),
         };
       });
 

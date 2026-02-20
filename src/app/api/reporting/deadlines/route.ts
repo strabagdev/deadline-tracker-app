@@ -99,7 +99,6 @@ function statusFromDays(
 ): ReportStatus {
   if (daysRemaining == null || Number.isNaN(daysRemaining)) return "yellow";
   if (daysRemaining <= 0) return "red";
-  if (daysRemaining <= thresholds.redDays) return "red";
   if (daysRemaining <= thresholds.orangeDays) return "orange";
   if (daysRemaining <= thresholds.yellowDays) return "yellow";
   return "green";

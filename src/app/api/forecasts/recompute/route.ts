@@ -41,7 +41,7 @@ function riskFromDays(
   thresholds: { yellowDays: number; orangeDays: number; redDays: number }
 ): { level: RiskLevel; score: number } {
   if (daysRemaining == null || Number.isNaN(daysRemaining)) return { level: "none", score: 0 };
-  if (daysRemaining <= thresholds.redDays) return { level: "red", score: 100 };
+  if (daysRemaining <= 0) return { level: "red", score: 100 };
   if (daysRemaining <= thresholds.orangeDays) return { level: "orange", score: 80 };
   if (daysRemaining <= thresholds.yellowDays) return { level: "yellow", score: 60 };
   return { level: "green", score: 25 };

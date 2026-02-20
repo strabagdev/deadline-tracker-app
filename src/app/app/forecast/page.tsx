@@ -27,6 +27,13 @@ type ForecastEntity = {
 };
 
 type Status = "red" | "orange" | "yellow" | "green" | "none";
+type StatusLabels = {
+  red: string;
+  orange: string;
+  yellow: string;
+  green: string;
+  none: string;
+};
 
 function riskBadgeClass(level: string) {
   if (level === "red") return "border-rose-300 bg-rose-100 text-rose-800";
@@ -36,12 +43,12 @@ function riskBadgeClass(level: string) {
   return "border-emerald-300 bg-emerald-100 text-emerald-800";
 }
 
-function statusLabel(level: string) {
-  if (level === "red") return "Vencido";
-  if (level === "orange") return "Urgente";
-  if (level === "yellow") return "Por vencer";
-  if (level === "green") return "Al día";
-  if (level === "none") return "Sin info";
+function statusLabel(level: string, labels: StatusLabels) {
+  if (level === "red") return labels.red;
+  if (level === "orange") return labels.orange;
+  if (level === "yellow") return labels.yellow;
+  if (level === "green") return labels.green;
+  if (level === "none") return labels.none;
   return level;
 }
 
@@ -72,6 +79,13 @@ export default function ForecastPage() {
   });
   const [rows, setRows] = useState<ForecastEntity[]>([]);
   const [computedAt, setComputedAt] = useState<string>("");
+  const [labels, setLabels] = useState<StatusLabels>({
+    red: "Vencido",
+    orange: "Por vencer",
+    yellow: "Aviso",
+    green: "Al día",
+    none: "Sin info",
+  });
 
   async function loadForecasts() {
     setLoading(true);
@@ -96,6 +110,21 @@ export default function ForecastPage() {
     setSummary(json.summary ?? summary);
     setRows(Array.isArray(json.entities) ? json.entities : []);
     setComputedAt(String(json.computed_at ?? ""));
+
+    const sres = await fetch("/api/settings/semaphore", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const sjson = await sres.json().catch(() => ({}));
+    if (sres.ok && sjson?.settings) {
+      setLabels({
+        red: String(sjson.settings.label_red ?? "Vencido"),
+        orange: String(sjson.settings.label_orange ?? "Por vencer"),
+        yellow: String(sjson.settings.label_yellow ?? "Aviso"),
+        green: String(sjson.settings.label_green ?? "Al día"),
+        none: "Sin info",
+      });
+    }
+
     setLoading(false);
   }
 
@@ -218,7 +247,7 @@ export default function ForecastPage() {
                       <div className="text-slate-700">{Math.round(Number(r.risk_score ?? 0))}</div>
                       <div>
                         <Badge variant="outline" className={riskBadgeClass(r.risk_level)}>
-                          {statusLabel(r.risk_level)}
+                          {statusLabel(r.risk_level, labels)}
                         </Badge>
                       </div>
                     </div>
