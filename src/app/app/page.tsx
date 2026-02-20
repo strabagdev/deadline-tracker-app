@@ -249,7 +249,9 @@ export default function AppDashboard() {
       const t = e.entity_types;
       if (t?.id) map.set(t.id, t.name);
     }
-    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" }));
   }, [entities]);
 
   const computedAll = useMemo(() => {
@@ -349,6 +351,20 @@ export default function AppDashboard() {
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * pageSize;
   const pagedRows = rows.slice(pageStart, pageStart + pageSize);
+  const groupedPagedRows = useMemo(() => {
+    const map = new Map<string, typeof pagedRows>();
+    for (const row of pagedRows) {
+      const typeName = row.entity.entity_types?.name ?? "Sin tipo";
+      const current = map.get(typeName) ?? [];
+      current.push(row);
+      map.set(typeName, current);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => {
+      if (a === "Sin tipo") return 1;
+      if (b === "Sin tipo") return -1;
+      return a.localeCompare(b, "es", { sensitivity: "base" });
+    });
+  }, [pagedRows]);
 
   const hasEntities = (meta?.entity_count_in_org ?? entities.length) > 0;
   const hasActiveFilters =
@@ -589,8 +605,14 @@ export default function AppDashboard() {
         ) : (
           <>
             {viewMode === "cards" ? (
-              <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
-                {pagedRows.map((r) => {
+              <div className="space-y-3">
+                {groupedPagedRows.map(([typeName, typeRows]) => (
+                  <section key={typeName} className="space-y-2">
+                    <div className="sticky top-0 z-10 rounded-lg border bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700 backdrop-blur">
+                      {typeName}
+                    </div>
+                    <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
+                      {typeRows.map((r) => {
                   const e = r.entity;
                   const nearest = r.nearest;
                   const tone = statusTone(r.status);
@@ -605,69 +627,72 @@ export default function AppDashboard() {
                       ? fmtDate(nearest.due)
                       : "Sin fecha estimada";
 
-                  return (
-                    <article
-                      key={e.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => router.push(`/app/entities/${e.id}`)}
-                      onKeyDown={(ev) => {
-                        if (ev.key === "Enter" || ev.key === " ") {
-                          ev.preventDefault();
-                          router.push(`/app/entities/${e.id}`);
-                        }
-                      }}
-                      className="grid min-h-[112px] cursor-pointer content-between gap-1.5 rounded-2xl border p-2.5 shadow-sm transition-shadow hover:shadow-md"
-                      style={{ borderColor: tone.border, background: tone.soft }}
-                      title="Abrir ficha"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <Badge variant="outline" className="text-[11px] font-semibold" style={{ borderColor: tone.border, color: tone.strong }}>
-                          {r.hasActiveDeadlines ? nearest?.label ?? "Sin info" : "Sin vencimientos"}
-                        </Badge>
-                        <div className="text-[11px] font-medium text-slate-600">{dueLabel}</div>
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="truncate text-[14px] font-semibold leading-tight text-slate-900">{e.name}</div>
-                        <div className="mt-0.5 truncate text-[11px] text-slate-500">{e.entity_types?.name ?? "Sin tipo"}</div>
-                        {cardFields.length > 0 ? (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {cardFields.slice(0, 3).map((field) => (
-                              <Badge key={`${e.id}-${field.name}`} variant="outline" className="bg-white text-[10px] font-normal text-slate-600">
-                                {field.value_text}
+                        return (
+                          <article
+                            key={e.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => router.push(`/app/entities/${e.id}`)}
+                            onKeyDown={(ev) => {
+                              if (ev.key === "Enter" || ev.key === " ") {
+                                ev.preventDefault();
+                                router.push(`/app/entities/${e.id}`);
+                              }
+                            }}
+                            className="grid min-h-[112px] cursor-pointer content-between gap-1.5 rounded-2xl border p-2.5 shadow-sm transition-shadow hover:shadow-md"
+                            style={{ borderColor: tone.border, background: tone.soft }}
+                            title="Abrir ficha"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <Badge variant="outline" className="text-[11px] font-semibold" style={{ borderColor: tone.border, color: tone.strong }}>
+                                {r.hasActiveDeadlines ? nearest?.label ?? "Sin info" : "Sin vencimientos"}
                               </Badge>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
+                              <div className="text-[11px] font-medium text-slate-600">{dueLabel}</div>
+                            </div>
 
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {r.hasActiveDeadlines ? (
-                          <Badge variant="outline" className="bg-white text-[10px] font-medium text-slate-600">
-                            {`${nearest?.typeName ?? "Sin tipo"}${
-                              nearest?.measureBy === "usage"
-                                ? " · uso"
-                                : nearest?.measureBy === "date"
-                                  ? " · fecha"
-                                  : ""
-                            }`}
-                          </Badge>
-                        ) : null}
-                        {hasLatestUsage ? (
-                          <Badge variant="outline" className="bg-white text-[10px] font-medium text-slate-700">
-                            Uso: {r.latestUsage}
-                          </Badge>
-                        ) : null}
-                        {hasLatestUsageAt ? (
-                          <Badge variant="outline" className="bg-white text-[10px] font-medium text-slate-700">
-                            Último: {new Date(r.latestUsageAt as string).toLocaleDateString()}
-                          </Badge>
-                        ) : null}
-                      </div>
-                    </article>
-                  );
-                })}
+                            <div className="min-w-0">
+                              <div className="truncate text-[14px] font-semibold leading-tight text-slate-900">{e.name}</div>
+                              <div className="mt-0.5 truncate text-[11px] text-slate-500">{e.entity_types?.name ?? "Sin tipo"}</div>
+                              {cardFields.length > 0 ? (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {cardFields.slice(0, 3).map((field) => (
+                                    <Badge key={`${e.id}-${field.name}`} variant="outline" className="bg-white text-[10px] font-normal text-slate-600">
+                                      {field.value_text}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {r.hasActiveDeadlines ? (
+                                <Badge variant="outline" className="bg-white text-[10px] font-medium text-slate-600">
+                                  {`${nearest?.typeName ?? "Sin tipo"}${
+                                    nearest?.measureBy === "usage"
+                                      ? " · uso"
+                                      : nearest?.measureBy === "date"
+                                        ? " · fecha"
+                                        : ""
+                                  }`}
+                                </Badge>
+                              ) : null}
+                              {hasLatestUsage ? (
+                                <Badge variant="outline" className="bg-white text-[10px] font-medium text-slate-700">
+                                  Uso: {r.latestUsage}
+                                </Badge>
+                              ) : null}
+                              {hasLatestUsageAt ? (
+                                <Badge variant="outline" className="bg-white text-[10px] font-medium text-slate-700">
+                                  Último: {new Date(r.latestUsageAt as string).toLocaleDateString()}
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
               </div>
             ) : (
               <div className="overflow-x-auto rounded-2xl border bg-white">
@@ -677,72 +702,77 @@ export default function AppDashboard() {
                   <div>Próximo vencimiento</div>
                   <div className="text-right">Uso</div>
                 </div>
-                {pagedRows.map((r) => {
-                  const e = r.entity;
-                  const nearest = r.nearest;
-                  const tone = statusTone(r.status);
-                  const cardFields = (e.card_fields ?? []).filter((f) => String(f.value_text ?? "").trim() !== "");
-                  return (
-                    <div
-                      key={e.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => router.push(`/app/entities/${e.id}`)}
-                      onKeyDown={(ev) => {
-                        if (ev.key === "Enter" || ev.key === " ") {
-                          ev.preventDefault();
-                          router.push(`/app/entities/${e.id}`);
-                        }
-                      }}
-                      className="grid cursor-pointer grid-cols-[1.3fr_0.95fr_1.55fr_0.8fr] items-center gap-0 border-b px-3 py-2.5 text-sm transition-colors hover:bg-slate-50"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate font-semibold text-slate-900">{e.name}</div>
-                        <div className="truncate text-[11px] text-slate-500">{e.entity_types?.name ?? "Sin tipo"}</div>
-                      </div>
-                      <div>
-                        <Badge variant="outline" className="font-semibold" style={{ borderColor: tone.border, color: tone.strong }}>
-                          {r.hasActiveDeadlines ? nearest?.label ?? "Sin info" : "Sin vencimientos"}
-                        </Badge>
-                      </div>
-                      <div className="min-w-0">
-                        <div className="truncate text-[13px] font-medium text-slate-900">
-                          {!r.hasActiveDeadlines
-                            ? "—"
-                            : nearest?.due
-                              ? fmtDate(nearest.due)
-                              : "Sin fecha estimada"}
-                        </div>
-                        <div className="truncate text-[11px] text-slate-500">
-                          {!r.hasActiveDeadlines
-                            ? ""
-                            : `${nearest?.typeName ?? "Sin tipo"}${
-                                nearest?.measureBy === "usage"
-                                  ? " · por uso"
-                                  : nearest?.measureBy === "date"
-                                    ? " · por fecha"
-                                    : ""
-                              }`}
-                        </div>
-                        {cardFields.length > 0 ? (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {cardFields.slice(0, 2).map((field) => (
-                              <Badge key={`${e.id}-${field.name}`} variant="outline" className="bg-slate-50 text-[10px] font-normal text-slate-600">
-                                {field.value_text}
-                              </Badge>
-                            ))}
+                {groupedPagedRows.map(([typeName, typeRows]) => (
+                  <React.Fragment key={typeName}>
+                    <div className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100">{typeName}</div>
+                    {typeRows.map((r) => {
+                      const e = r.entity;
+                      const nearest = r.nearest;
+                      const tone = statusTone(r.status);
+                      const cardFields = (e.card_fields ?? []).filter((f) => String(f.value_text ?? "").trim() !== "");
+                      return (
+                        <div
+                          key={e.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => router.push(`/app/entities/${e.id}`)}
+                          onKeyDown={(ev) => {
+                            if (ev.key === "Enter" || ev.key === " ") {
+                              ev.preventDefault();
+                              router.push(`/app/entities/${e.id}`);
+                            }
+                          }}
+                          className="grid cursor-pointer grid-cols-[1.3fr_0.95fr_1.55fr_0.8fr] items-center gap-0 border-b px-3 py-2.5 text-sm transition-colors hover:bg-slate-50"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate font-semibold text-slate-900">{e.name}</div>
+                            <div className="truncate text-[11px] text-slate-500">{e.entity_types?.name ?? "Sin tipo"}</div>
                           </div>
-                        ) : null}
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[13px] font-medium text-slate-800">{r.latestUsage != null ? r.latestUsage : "—"}</div>
-                        <div className="text-[11px] text-slate-500">
-                          {r.latestUsageAt ? new Date(r.latestUsageAt).toLocaleDateString() : ""}
+                          <div>
+                            <Badge variant="outline" className="font-semibold" style={{ borderColor: tone.border, color: tone.strong }}>
+                              {r.hasActiveDeadlines ? nearest?.label ?? "Sin info" : "Sin vencimientos"}
+                            </Badge>
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate text-[13px] font-medium text-slate-900">
+                              {!r.hasActiveDeadlines
+                                ? "—"
+                                : nearest?.due
+                                  ? fmtDate(nearest.due)
+                                  : "Sin fecha estimada"}
+                            </div>
+                            <div className="truncate text-[11px] text-slate-500">
+                              {!r.hasActiveDeadlines
+                                ? ""
+                                : `${nearest?.typeName ?? "Sin tipo"}${
+                                    nearest?.measureBy === "usage"
+                                      ? " · por uso"
+                                      : nearest?.measureBy === "date"
+                                        ? " · por fecha"
+                                        : ""
+                                  }`}
+                            </div>
+                            {cardFields.length > 0 ? (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {cardFields.slice(0, 2).map((field) => (
+                                  <Badge key={`${e.id}-${field.name}`} variant="outline" className="bg-slate-50 text-[10px] font-normal text-slate-600">
+                                    {field.value_text}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="text-right">
+                            <div className="text-[13px] font-medium text-slate-800">{r.latestUsage != null ? r.latestUsage : "—"}</div>
+                            <div className="text-[11px] text-slate-500">
+                              {r.latestUsageAt ? new Date(r.latestUsageAt).toLocaleDateString() : ""}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
               </div>
             )}
 
