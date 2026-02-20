@@ -403,7 +403,7 @@ export default function AppDashboard() {
   function renderSecondaryFilter(placementClassName?: string, menuClassName?: string) {
     if (secondaryFilterOptions.length === 0) return null;
     return (
-      <div className={cn("relative", placementClassName)}>
+      <div className={cn("relative z-20", placementClassName)}>
         <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
@@ -426,7 +426,7 @@ export default function AppDashboard() {
         </div>
 
         {secondaryMenuOpen ? (
-          <div className={cn("mt-2 max-h-44 overflow-auto rounded-xl border bg-white p-2 shadow-sm", menuClassName)}>
+          <div className={cn("mt-2 max-h-44 overflow-auto rounded-xl border bg-white p-2 shadow-sm z-30", menuClassName)}>
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
