@@ -751,8 +751,71 @@ export default function EntityDeadlinesManager({
         <div className="grid gap-2">
           {deadlines.map((d) => {
             const t = d.deadline_types;
+            const isEditing = editingDeadlineId === d.id;
             return (
               <div key={d.id} className="rounded-xl border bg-white p-3">
+                {!isEditing ? (
+                  <div className="grid items-center gap-2 lg:grid-cols-[minmax(210px,1.3fr)_minmax(120px,0.9fr)_minmax(140px,1fr)_minmax(170px,1fr)_auto]">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-slate-900">{t?.name ?? "Tipo desconocido"}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                        <Badge variant="outline">{t?.measure_by === "date" ? "Por fecha" : "Por uso"}</Badge>
+                        <Badge variant="outline">{t?.requires_document ? "Requiere doc" : "Sin doc"}</Badge>
+                        <span>{new Date(d.created_at).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                    <div className="grid gap-0.5 text-xs text-slate-600">
+                      <span className="font-medium text-slate-700">
+                        {t?.measure_by === "date" ? "Última realización" : "Último uso"}
+                      </span>
+                      <span className="text-sm text-slate-800">
+                        {t?.measure_by === "date" ? d.last_done_date ?? "-" : d.last_done_usage ?? "-"}
+                      </span>
+                    </div>
+                    <div className="grid gap-0.5 text-xs text-slate-600">
+                      <span className="font-medium text-slate-700">
+                        {t?.measure_by === "date" ? "Próximo vencimiento" : "Frecuencia"}
+                      </span>
+                      <span className="text-sm text-slate-800">
+                        {t?.measure_by === "date"
+                          ? d.next_due_date ?? "-"
+                          : `${d.frequency ?? "-"} ${d.frequency_unit ?? ""}`.trim()}
+                      </span>
+                    </div>
+                    <div className="grid gap-0.5 text-xs text-slate-600">
+                      <span className="font-medium text-slate-700">
+                        {t?.measure_by === "date" ? "Creado" : "Promedio diario"}
+                      </span>
+                      <span className="text-sm text-slate-800">
+                        {t?.measure_by === "date" ? (
+                          new Date(d.created_at).toLocaleDateString()
+                        ) : (
+                          <>
+                            {d.usage_daily_average ?? "-"}{" "}
+                            <span className="text-slate-500">
+                              ({(d.usage_daily_average_mode ?? "manual") === "auto" ? "auto" : "manual"})
+                            </span>
+                          </>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap justify-start gap-1.5 lg:justify-end">
+                      <Button onClick={() => startEditDeadline(d)} disabled={editBusy} variant="outline" size="sm">
+                        Editar
+                      </Button>
+                      <Button
+                        onClick={() => deleteDeadline(d.id)}
+                        disabled={editBusy}
+                        variant="destructive"
+                        size="sm"
+                        title="Eliminar vencimiento"
+                      >
+                        Eliminar
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div className="text-sm font-semibold text-slate-900">{t?.name ?? "Tipo desconocido"}</div>
@@ -789,7 +852,7 @@ export default function EntityDeadlinesManager({
                   )}
                 </div>
 
-                <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                <div className="mt-2 grid items-start gap-2 md:grid-cols-2 lg:grid-cols-4">
                   {t?.measure_by === "date" ? (
                     <div className="grid gap-1 text-xs text-slate-600">
                       <span className="font-medium text-slate-700">Última realización</span>
@@ -823,6 +886,12 @@ export default function EntityDeadlinesManager({
                         <span className="text-sm text-slate-800">{d.next_due_date ?? "-"}</span>
                       )}
                     </div>
+                  ) : null}
+                  {t?.measure_by === "date" ? (
+                    <div className="hidden lg:block" aria-hidden />
+                  ) : null}
+                  {t?.measure_by === "date" ? (
+                    <div className="hidden lg:block" aria-hidden />
                   ) : (
                     <>
                       <div className="grid gap-1 text-xs text-slate-600">
@@ -919,6 +988,8 @@ export default function EntityDeadlinesManager({
                     </>
                   )}
                 </div>
+                  </>
+                )}
               </div>
             );
           })}

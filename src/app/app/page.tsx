@@ -400,6 +400,79 @@ export default function AppDashboard() {
     );
   }
 
+  function renderSecondaryFilter(placementClassName?: string, menuClassName?: string) {
+    if (secondaryFilterOptions.length === 0) return null;
+    return (
+      <div className={cn("relative", placementClassName)}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setSecondaryMenuOpen((v) => !v)}
+            className="min-h-9"
+          >
+            <span>Filtro secundario</span>
+            <span className="text-xs">{secondaryMenuOpen ? "▲" : "▼"}</span>
+          </Button>
+          {filterSecondary !== "all" ? (
+            <Badge variant="outline" className="max-w-[280px] truncate border-indigo-300 bg-indigo-50 text-indigo-800">
+              {filterSecondary}
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
+              Todos
+            </Badge>
+          )}
+        </div>
+
+        {secondaryMenuOpen ? (
+          <div className={cn("mt-2 max-h-44 overflow-auto rounded-xl border bg-white p-2 shadow-sm", menuClassName)}>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setFilterSecondary("all");
+                  setSecondaryMenuOpen(false);
+                }}
+                className={cn(
+                  "min-w-[54px] shrink-0 justify-center border font-semibold",
+                  filterSecondary === "all"
+                    ? "!border-indigo-500 !bg-indigo-100 !text-indigo-800"
+                    : "!border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200"
+                )}
+                title="Todos los valores"
+              >
+                <span>Todos</span>
+              </Button>
+              {secondaryFilterOptions.map((opt) => (
+                <Button
+                  key={opt.value}
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setFilterSecondary(opt.value);
+                    setSecondaryMenuOpen(false);
+                  }}
+                  className={cn(
+                    "min-w-[54px] shrink-0 justify-center border font-semibold",
+                    filterSecondary === opt.value
+                      ? "!border-indigo-500 !bg-indigo-100 !text-indigo-800"
+                      : "!border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200"
+                  )}
+                  title={opt.value}
+                >
+                  <span className="max-w-[180px] truncate">{opt.value}</span>
+                  <span className="font-semibold">{opt.count}</span>
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
       <Card>
@@ -434,7 +507,6 @@ export default function AppDashboard() {
                   aria-label="Vista tarjetas"
                 >
                   <IconGrid />
-                  <span className="hidden sm:inline">Tarjetas</span>
                 </Button>
                 <Button
                   size="sm"
@@ -445,89 +517,23 @@ export default function AppDashboard() {
                   aria-label="Vista lista"
                 >
                   <IconList />
-                  <span className="hidden sm:inline">Lista</span>
                 </Button>
               </div>
-              {secondaryFilterOptions.length > 0 ? (
-                <div className="relative mt-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setSecondaryMenuOpen((v) => !v)}
-                      className="min-h-9"
-                    >
-                      <span>Filtro secundario</span>
-                      <span className="text-xs">{secondaryMenuOpen ? "▲" : "▼"}</span>
-                    </Button>
-                    {filterSecondary !== "all" ? (
-                      <Badge variant="outline" className="max-w-[280px] truncate border-indigo-300 bg-indigo-50 text-indigo-800">
-                        {filterSecondary}
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
-                        Todos
-                      </Badge>
-                    )}
-                  </div>
-
-                  {secondaryMenuOpen ? (
-                    <div className="mt-2 max-h-44 overflow-auto rounded-xl border bg-white p-2 shadow-sm">
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setFilterSecondary("all");
-                            setSecondaryMenuOpen(false);
-                          }}
-                          className={cn(
-                            "min-w-[54px] shrink-0 justify-center border font-semibold",
-                            filterSecondary === "all"
-                              ? "!border-indigo-500 !bg-indigo-100 !text-indigo-800"
-                              : "!border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200"
-                          )}
-                          title="Todos los valores"
-                        >
-                          <span>Todos</span>
-                        </Button>
-                        {secondaryFilterOptions.map((opt) => (
-                          <Button
-                            key={opt.value}
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setFilterSecondary(opt.value);
-                              setSecondaryMenuOpen(false);
-                            }}
-                            className={cn(
-                              "min-w-[54px] shrink-0 justify-center border font-semibold",
-                              filterSecondary === opt.value
-                                ? "!border-indigo-500 !bg-indigo-100 !text-indigo-800"
-                                : "!border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200"
-                            )}
-                            title={opt.value}
-                          >
-                            <span className="max-w-[180px] truncate">{opt.value}</span>
-                            <span className="font-semibold">{opt.count}</span>
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
+              {renderSecondaryFilter("mt-2 md:hidden")}
             </div>
 
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setDashboardPanelCollapsed((v) => !v)}
-              className="min-h-10 min-w-[116px] shrink-0 justify-between lg:min-h-9"
-            >
-              <span>{dashboardPanelCollapsed ? "Buscar" : "Ocultar"}</span>
-              <span className="text-xs">{dashboardPanelCollapsed ? "▼" : "▲"}</span>
-            </Button>
+            <div className="flex shrink-0 items-center gap-2">
+              {renderSecondaryFilter("hidden md:block", "md:absolute md:right-0 md:min-w-[360px]")}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setDashboardPanelCollapsed((v) => !v)}
+                className="min-h-10 min-w-[116px] justify-between lg:min-h-9"
+              >
+                <span>{dashboardPanelCollapsed ? "Buscar" : "Ocultar"}</span>
+                <span className="text-xs">{dashboardPanelCollapsed ? "▼" : "▲"}</span>
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="py-3">
