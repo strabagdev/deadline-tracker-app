@@ -32,6 +32,9 @@ begin
   if to_regclass('public.usage_logs') is not null then
     execute 'truncate table public.usage_logs restart identity cascade';
   end if;
+  if to_regclass('public.usage_log_field_values') is not null then
+    execute 'truncate table public.usage_log_field_values restart identity cascade';
+  end if;
   if to_regclass('public.deadlines') is not null then
     execute 'truncate table public.deadlines restart identity cascade';
   end if;
@@ -43,6 +46,9 @@ begin
   end if;
   if to_regclass('public.deadline_types') is not null then
     execute 'truncate table public.deadline_types restart identity cascade';
+  end if;
+  if to_regclass('public.usage_fields') is not null then
+    execute 'truncate table public.usage_fields restart identity cascade';
   end if;
   if to_regclass('public.usage_units') is not null then
     execute 'truncate table public.usage_units restart identity cascade';

@@ -66,6 +66,34 @@ function makeRepo(db: DataClient): UsageLogsRepo {
       if (error) throw error;
       return { id: String(data?.id ?? "") };
     },
+    getUsageFieldsByIds: async (orgId, usageFieldIds) => {
+      if (usageFieldIds.length === 0) return [];
+      const { data, error } = await db
+        .from("usage_fields")
+        .select("id, field_type")
+        .eq("organization_id", orgId)
+        .in("id", usageFieldIds);
+      if (error) throw error;
+      return (data ?? []).map((r) => ({
+        id: String(r.id),
+        field_type: String(r.field_type) as "text" | "number" | "date" | "boolean" | "select",
+      }));
+    },
+    createUsageLogFieldValues: async (orgId, usageLogId, fieldValues) => {
+      if (fieldValues.length === 0) return;
+      const { error } = await db.from("usage_log_field_values").insert(
+        fieldValues.map((f) => ({
+          organization_id: orgId,
+          usage_log_id: usageLogId,
+          usage_field_id: f.usageFieldId,
+          value_text: f.valueText,
+          value_number: f.valueNumber,
+          value_date: f.valueDate,
+          value_boolean: f.valueBoolean,
+        }))
+      );
+      if (error) throw error;
+    },
     getUsageLogById: (orgId, id) => getUsageLogById(db, orgId, id),
     deleteUsageLog: async (orgId, id) => {
       const { error } = await db

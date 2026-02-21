@@ -26,3 +26,24 @@ test("parseUsageLogsCreateBody valida entity_id y value", () => {
     assert.ok(typeof ok.loggedAt === "string");
   }
 });
+
+test("parseUsageLogsCreateBody valida field_values", () => {
+  const bad = parseUsageLogsCreateBody({
+    entity_id: "e1",
+    value: 10,
+    field_values: [{ usage_field_id: "", value: "x" }],
+  });
+  assert.equal(bad.ok, false);
+
+  const ok = parseUsageLogsCreateBody({
+    entity_id: "e1",
+    value: 10,
+    field_values: [{ usage_field_id: "f1", value: "x" }],
+  });
+  assert.equal(ok.ok, true);
+  if (ok.ok) {
+    assert.equal(ok.fieldValues.length, 1);
+    assert.equal(ok.fieldValues[0].usageFieldId, "f1");
+    assert.equal(ok.fieldValues[0].value, "x");
+  }
+});

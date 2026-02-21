@@ -13,10 +13,32 @@ type UsageLogRef = {
   entity_id: string;
 };
 
+type UsageFieldDef = {
+  id: string;
+  field_type: "text" | "number" | "date" | "boolean" | "select";
+};
+
+type UsageLogFieldValueInput = {
+  usageFieldId: string;
+  value: unknown;
+};
+
 export type UsageLogsRepo = {
   requireEntityInOrg: (orgId: string, entityId: string) => Promise<boolean>;
   listUsageLogs: (orgId: string, entityId: string, limit: number) => Promise<UsageLogRow[]>;
   createUsageLog: (orgId: string, entityId: string, value: number, loggedAt: string) => Promise<{ id: string }>;
+  getUsageFieldsByIds: (orgId: string, usageFieldIds: string[]) => Promise<UsageFieldDef[]>;
+  createUsageLogFieldValues: (
+    orgId: string,
+    usageLogId: string,
+    fieldValues: Array<{
+      usageFieldId: string;
+      valueText: string | null;
+      valueNumber: number | null;
+      valueDate: string | null;
+      valueBoolean: boolean | null;
+    }>
+  ) => Promise<void>;
   getUsageLogById: (orgId: string, id: string) => Promise<UsageLogRef | null>;
   deleteUsageLog: (orgId: string, id: string) => Promise<void>;
 };
@@ -46,11 +68,111 @@ export async function handleUsageLogsPost(
   const parsed = parseUsageLogsCreateBody(rawBody);
   if (!parsed.ok) return { status: 400, body: { error: parsed.error, code: "BAD_REQUEST" } };
 
-  const { entityId, value, loggedAt } = parsed;
+  const { entityId, value, loggedAt, fieldValues } = parsed;
   const okEntity = await repo.requireEntityInOrg(orgId, entityId);
   if (!okEntity) return { status: 404, body: { error: "entity not found", code: "ENTITY_NOT_FOUND" } };
 
   const created = await repo.createUsageLog(orgId, entityId, value, loggedAt);
+  if (fieldValues.length > 0) {
+    const deduped = new Map<string, UsageLogFieldValueInput>();
+    for (const fv of fieldValues) {
+      if (deduped.has(fv.usageFieldId)) {
+        return { status: 400, body: { error: "duplicate usage_field_id in field_values", code: "BAD_REQUEST" } };
+      }
+      deduped.set(fv.usageFieldId, fv);
+    }
+    const normalized = Array.from(deduped.values());
+    const fieldDefs = await repo.getUsageFieldsByIds(
+      orgId,
+      normalized.map((f) => f.usageFieldId)
+    );
+    if (fieldDefs.length !== normalized.length) {
+      return { status: 400, body: { error: "invalid usage_field_id in field_values", code: "BAD_REQUEST" } };
+    }
+    const defsById = new Map(fieldDefs.map((f) => [f.id, f]));
+    const typedValues: Array<{
+      usageFieldId: string;
+      valueText: string | null;
+      valueNumber: number | null;
+      valueDate: string | null;
+      valueBoolean: boolean | null;
+    }> = [];
+    for (const fv of normalized) {
+      const def = defsById.get(fv.usageFieldId);
+      if (!def) {
+        return { status: 400, body: { error: "invalid usage_field_id in field_values", code: "BAD_REQUEST" } };
+      }
+
+      if (def.field_type === "number") {
+        const n = Number(fv.value);
+        if (!Number.isFinite(n)) {
+          return { status: 400, body: { error: `field ${fv.usageFieldId} requires numeric value`, code: "BAD_REQUEST" } };
+        }
+        typedValues.push({
+          usageFieldId: fv.usageFieldId,
+          valueText: null,
+          valueNumber: n,
+          valueDate: null,
+          valueBoolean: null,
+        });
+        continue;
+      }
+
+      if (def.field_type === "boolean") {
+        let b: boolean | null = null;
+        if (typeof fv.value === "boolean") b = fv.value;
+        else if (typeof fv.value === "string") {
+          const s = fv.value.trim().toLowerCase();
+          if (s === "true" || s === "1") b = true;
+          if (s === "false" || s === "0") b = false;
+        } else if (typeof fv.value === "number") {
+          if (fv.value === 1) b = true;
+          if (fv.value === 0) b = false;
+        }
+        if (b === null) {
+          return { status: 400, body: { error: `field ${fv.usageFieldId} requires boolean value`, code: "BAD_REQUEST" } };
+        }
+        typedValues.push({
+          usageFieldId: fv.usageFieldId,
+          valueText: null,
+          valueNumber: null,
+          valueDate: null,
+          valueBoolean: b,
+        });
+        continue;
+      }
+
+      if (def.field_type === "date") {
+        const s = String(fv.value ?? "").trim();
+        const d = new Date(s);
+        if (!s || !Number.isFinite(d.getTime())) {
+          return { status: 400, body: { error: `field ${fv.usageFieldId} requires date value`, code: "BAD_REQUEST" } };
+        }
+        typedValues.push({
+          usageFieldId: fv.usageFieldId,
+          valueText: null,
+          valueNumber: null,
+          valueDate: d.toISOString().slice(0, 10),
+          valueBoolean: null,
+        });
+        continue;
+      }
+
+      const textValue = String(fv.value ?? "").trim();
+      if (!textValue) {
+        return { status: 400, body: { error: `field ${fv.usageFieldId} requires text value`, code: "BAD_REQUEST" } };
+      }
+      typedValues.push({
+        usageFieldId: fv.usageFieldId,
+        valueText: textValue,
+        valueNumber: null,
+        valueDate: null,
+        valueBoolean: null,
+      });
+    }
+
+    await repo.createUsageLogFieldValues(orgId, created.id, typedValues);
+  }
   return { status: 201, body: { id: created.id } };
 }
 
