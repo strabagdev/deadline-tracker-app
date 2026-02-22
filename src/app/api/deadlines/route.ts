@@ -77,19 +77,29 @@ async function getEntity(db: DataClient, orgId: string, entityId: string): Promi
   return data || null;
 }
 
-async function getLatestUsage(db: DataClient, orgId: string, entityId: string): Promise<{ value: number; logged_at: string } | null> {
+async function getLatestUsage(
+  db: DataClient,
+  orgId: string,
+  entityId: string
+): Promise<{ value: number; logged_on: string | null; logged_at: string } | null> {
   const { data, error } = await db
     .from("usage_logs")
-    .select("value, logged_at")
+    .select("value, logged_on, logged_at")
     .eq("organization_id", orgId)
     .eq("entity_id", entityId)
+    .not("value", "is", null)
+    .order("logged_on", { ascending: false })
     .order("logged_at", { ascending: false })
     .limit(1);
 
   if (error) throw error;
   const row = (data ?? [])[0];
   if (!row) return null;
-  return { value: Number(row.value), logged_at: String(row.logged_at) };
+  return {
+    value: Number(row.value),
+    logged_on: row.logged_on ? String(row.logged_on) : null,
+    logged_at: String(row.logged_at),
+  };
 }
 
 /**
@@ -99,14 +109,16 @@ async function getLatestUsage(db: DataClient, orgId: string, entityId: string): 
  * - Requires >=2 logs with at least 1 day between min/max logged_at
  */
 async function computeAutoDailyAverage(db: DataClient, orgId: string, entityId: string): Promise<number | null> {
-  const since = new Date(Date.now() - 30 * MS_PER_DAY).toISOString();
+  const since = new Date(Date.now() - 30 * MS_PER_DAY).toISOString().slice(0, 10);
 
   const { data, error } = await db
     .from("usage_logs")
-    .select("value, logged_at")
+    .select("value, logged_on, logged_at")
     .eq("organization_id", orgId)
     .eq("entity_id", entityId)
-    .gte("logged_at", since)
+    .not("value", "is", null)
+    .gte("logged_on", since)
+    .order("logged_on", { ascending: true })
     .order("logged_at", { ascending: true })
     .limit(5000);
 

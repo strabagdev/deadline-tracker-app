@@ -200,9 +200,11 @@ export async function GET(req: Request) {
       entityIds.map(async (entityId) => {
         const { data, error } = await db
           .from("usage_logs")
-          .select("entity_id, value, logged_at")
+          .select("entity_id, value, logged_on, logged_at")
           .eq("organization_id", orgId)
           .eq("entity_id", entityId)
+          .not("value", "is", null)
+          .order("logged_on", { ascending: false })
           .order("logged_at", { ascending: false })
           .limit(1);
         if (error) throw error;

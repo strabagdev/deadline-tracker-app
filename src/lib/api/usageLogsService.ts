@@ -3,7 +3,9 @@ import { parseUsageLogsCreateBody, parseUsageLogsGetParams } from "./usageLogsIn
 type UsageLogRow = {
   id: string;
   entity_id: string;
-  value: number;
+  value: number | null;
+  value_text?: string | null;
+  logged_on?: string | null;
   logged_at: string;
   field_values?: Array<{
     usage_field_id: string;
@@ -36,7 +38,14 @@ type UsageLogFieldValueInput = {
 export type UsageLogsRepo = {
   requireEntityInOrg: (orgId: string, entityId: string) => Promise<boolean>;
   listUsageLogs: (orgId: string, entityId: string, limit: number) => Promise<UsageLogRow[]>;
-  createUsageLog: (orgId: string, entityId: string, value: number, loggedAt: string) => Promise<{ id: string }>;
+  createUsageLog: (
+    orgId: string,
+    entityId: string,
+    value: number | null,
+    valueText: string | null,
+    loggedOn: string,
+    loggedAt: string
+  ) => Promise<{ id: string }>;
   getUsageFieldsByIds: (orgId: string, usageFieldIds: string[]) => Promise<UsageFieldDef[]>;
   createUsageLogFieldValues: (
     orgId: string,
@@ -78,11 +87,11 @@ export async function handleUsageLogsPost(
   const parsed = parseUsageLogsCreateBody(rawBody);
   if (!parsed.ok) return { status: 400, body: { error: parsed.error, code: "BAD_REQUEST" } };
 
-  const { entityId, value, loggedAt, fieldValues } = parsed;
+  const { entityId, valueNumber, valueText, loggedAt, loggedOn, fieldValues } = parsed;
   const okEntity = await repo.requireEntityInOrg(orgId, entityId);
   if (!okEntity) return { status: 404, body: { error: "entity not found", code: "ENTITY_NOT_FOUND" } };
 
-  const created = await repo.createUsageLog(orgId, entityId, value, loggedAt);
+  const created = await repo.createUsageLog(orgId, entityId, valueNumber, valueText, loggedOn, loggedAt);
   if (fieldValues.length > 0) {
     const deduped = new Map<string, UsageLogFieldValueInput>();
     for (const fv of fieldValues) {

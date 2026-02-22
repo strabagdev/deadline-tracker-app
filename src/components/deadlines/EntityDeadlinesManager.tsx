@@ -44,7 +44,9 @@ type DeadlineRow = {
 type UsageLogRow = {
   id: string;
   entity_id: string;
-  value: number;
+  value: number | null;
+  value_text?: string | null;
+  logged_on?: string | null;
   logged_at: string;
   created_at?: string;
   field_values?: Array<{
@@ -93,7 +95,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 function computeAutoDailyAverageFromLogs(logs: UsageLogRow[]) {
   const sinceTs = Date.now() - 30 * MS_PER_DAY;
   const inWindow = logs
-    .filter((l) => new Date(l.logged_at).getTime() >= sinceTs)
+    .filter((l) => new Date(l.logged_at).getTime() >= sinceTs && Number.isFinite(Number(l.value)))
     .slice()
     .sort((a, b) => new Date(a.logged_at).getTime() - new Date(b.logged_at).getTime());
   if (inWindow.length < 2) return null;
@@ -127,7 +129,8 @@ function getDeadlineStateDotClass(d: DeadlineRow, usageLogs: UsageLogRow[]) {
     return "bg-emerald-500";
   }
 
-  const latestUsage = usageLogs.length > 0 ? Number(usageLogs[0].value) : null;
+  const latestNumericLog = usageLogs.find((l) => Number.isFinite(Number(l.value)));
+  const latestUsage = latestNumericLog ? Number(latestNumericLog.value) : null;
   const mode = normalizeDeadlinesMode(d.usage_daily_average_mode);
   const manualAvg = Number.isFinite(Number(d.usage_daily_average)) ? Number(d.usage_daily_average) : null;
   const autoAvg = computeAutoDailyAverageFromLogs(usageLogs);
@@ -152,6 +155,13 @@ function renderUsageFieldValue(v: NonNullable<UsageLogRow["field_values"]>[numbe
   if (v.value_number !== null) return String(v.value_number);
   if (v.value_date) return v.value_date;
   if (v.value_text) return v.value_text;
+  return "—";
+}
+
+function renderUsageMainValue(l: UsageLogRow) {
+  const t = String(l.value_text ?? "").trim();
+  if (t) return t;
+  if (l.value != null && Number.isFinite(Number(l.value))) return String(l.value);
   return "—";
 }
 
@@ -410,17 +420,13 @@ export default function EntityDeadlinesManager({
       return;
     }
 
-    const loggedAtIso = usageLogLoggedAt
-      ? new Date(`${usageLogLoggedAt}T00:00:00`).toISOString()
-      : new Date().toISOString();
-
     const res = await fetch("/api/usage-logs", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         entity_id: entityId,
         value: valueNum,
-        logged_at: loggedAtIso,
+        logged_on: usageLogLoggedAt || null,
       }),
     });
 
@@ -688,8 +694,8 @@ export default function EntityDeadlinesManager({
                       <div key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white px-2.5 py-2">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant="outline" className="font-semibold">{l.value}</Badge>
-                            <span className="text-xs text-slate-500">{new Date(l.logged_at).toLocaleDateString()}</span>
+                            <Badge variant="outline" className="font-semibold">{renderUsageMainValue(l)}</Badge>
+                            <span className="text-xs text-slate-500">{String(l.logged_on ?? "").trim() || new Date(l.logged_at).toLocaleDateString(undefined, { timeZone: "UTC" })}</span>
                           </div>
                           {Array.isArray(l.field_values) && l.field_values.length > 0 ? (
                             <div className="mt-1 flex flex-wrap gap-1">

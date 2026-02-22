@@ -38,23 +38,29 @@ function pickOne<T>(value: T | T[] | null | undefined): T | null {
 }
 
 async function getLatestUsageByEntity(db: DataClient, orgId: string, entityIds: string[]) {
-  const out: Record<string, { value: number; logged_at: string }> = {};
+  const out: Record<string, { value: number; logged_at: string; logged_on: string | null }> = {};
   if (entityIds.length === 0) return out;
 
   const { data, error } = await db
     .from("usage_logs")
-    .select("entity_id, value, logged_at")
+    .select("entity_id, value, logged_on, logged_at")
     .eq("organization_id", orgId)
     .in("entity_id", entityIds)
+    .not("value", "is", null)
     .order("entity_id", { ascending: true })
+    .order("logged_on", { ascending: false })
     .order("logged_at", { ascending: false })
     .limit(100000);
 
   if (error) throw error;
 
-  for (const row of (data ?? []) as Array<{ entity_id: string; value: number; logged_at: string }>) {
+  for (const row of (data ?? []) as Array<{ entity_id: string; value: number; logged_on: string | null; logged_at: string }>) {
     if (!out[row.entity_id]) {
-      out[row.entity_id] = { value: Number(row.value), logged_at: String(row.logged_at) };
+      out[row.entity_id] = {
+        value: Number(row.value),
+        logged_on: row.logged_on ? String(row.logged_on) : null,
+        logged_at: String(row.logged_at),
+      };
     }
   }
 

@@ -28,7 +28,7 @@ type EntityRow = {
   entity_types?: EntityType | null;
 };
 
-type LatestUsageByEntity = Record<string, { value: number; logged_at: string }>;
+type LatestUsageByEntity = Record<string, { value: number; logged_at: string; logged_on?: string | null }>;
 type UsageUnit = { id: string; name: string; is_active: boolean };
 type UsageField = {
   id: string;
@@ -149,16 +149,40 @@ export default function UsagePage() {
     setErrorMsg("");
     setOkMsg("");
 
-    const rawValue = (draftByEntity[entityId] ?? "").trim();
-    if (!rawValue) {
-      setErrorMsg("Ingresa un valor de uso antes de guardar.");
-      return;
-    }
+    const entity = entities.find((e) => e.id === entityId);
+    const dynamicFields = entity ? getEntityUsageFields(entity) : [];
+    const dynamicDraft = fieldDraftByEntity[entityId] ?? {};
+    const fieldValues = dynamicFields
+      .map((f) => {
+        const raw = dynamicDraft[f.id] ?? "";
+        if (raw === "") return null;
+        if (f.field_type === "number") return { usage_field_id: f.id, value: Number(raw) };
+        if (f.field_type === "boolean") return { usage_field_id: f.id, value: raw === "true" };
+        return { usage_field_id: f.id, value: raw };
+      })
+      .filter((v): v is { usage_field_id: string; value: string | number | boolean } => Boolean(v));
 
-    const value = Number(rawValue);
-    if (!Number.isFinite(value) || value < 0) {
-      setErrorMsg("Ingresa un valor numérico válido (mayor o igual a 0).");
-      return;
+    const rawValue = (draftByEntity[entityId] ?? "").trim();
+    let value: number | null = null;
+    let valueText: string | null = null;
+    if (!rawValue) {
+      if (fieldValues.length === 0) {
+        setErrorMsg("Ingresa un valor de uso o completa al menos un campo dinámico.");
+        return;
+      }
+      const latestValue = usage[entityId]?.value;
+      value = Number.isFinite(Number(latestValue)) ? Number(latestValue) : 0;
+    } else {
+      const numeric = Number(rawValue);
+      if (Number.isFinite(numeric)) {
+        if (numeric < 0) {
+          setErrorMsg("Ingresa un valor numérico válido (mayor o igual a 0).");
+          return;
+        }
+        value = numeric;
+      } else {
+        valueText = rawValue;
+      }
     }
 
     const token = await getTokenOrRedirect();
@@ -166,26 +190,14 @@ export default function UsagePage() {
 
     setSavingByEntity((prev) => ({ ...prev, [entityId]: true }));
     try {
-      const entity = entities.find((e) => e.id === entityId);
-      const dynamicFields = entity ? getEntityUsageFields(entity) : [];
-      const dynamicDraft = fieldDraftByEntity[entityId] ?? {};
-      const fieldValues = dynamicFields
-        .map((f) => {
-          const raw = dynamicDraft[f.id] ?? "";
-          if (raw === "") return null;
-          if (f.field_type === "number") return { usage_field_id: f.id, value: Number(raw) };
-          if (f.field_type === "boolean") return { usage_field_id: f.id, value: raw === "true" };
-          return { usage_field_id: f.id, value: raw };
-        })
-        .filter((v): v is { usage_field_id: string; value: string | number | boolean } => Boolean(v));
-
       const payload: Record<string, unknown> = {
         entity_id: entityId,
-        value,
       };
+      if (value != null) payload.value = value;
+      if (valueText) payload.value_text = valueText;
       if (fieldValues.length > 0) payload.field_values = fieldValues;
       if (loggedAtDate) {
-        payload.logged_at = `${loggedAtDate}T00:00:00Z`;
+        payload.logged_on = loggedAtDate;
       }
 
       const res = await fetch("/api/usage-logs", {
@@ -363,15 +375,14 @@ export default function UsagePage() {
                     </div>
                     <div className="text-sm font-medium text-slate-800">{latest?.value ?? "—"}</div>
                     <div className="text-xs text-slate-500">
-                      {latest?.logged_at ? new Date(latest.logged_at).toLocaleDateString() : "—"}
+                      {latest?.logged_on || (latest?.logged_at ? new Date(latest.logged_at).toLocaleDateString(undefined, { timeZone: "UTC" }) : "—")}
                     </div>
                     <div className="grid gap-2">
                       <div className="flex items-center gap-2">
                         <Input
                           value={draftByEntity[e.id] ?? ""}
                           onChange={(ev) => setDraftByEntity((prev) => ({ ...prev, [e.id]: ev.target.value }))}
-                          inputMode="decimal"
-                          placeholder="Ej: 1245"
+                          placeholder="Ej: 1245 o Estado OK"
                           className="h-9"
                           disabled={saving}
                         />

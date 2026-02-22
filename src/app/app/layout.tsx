@@ -136,6 +136,18 @@ function IconUsers({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+function IconReport({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <path d="M14 3v6h6" />
+      <path d="M8 13h8" />
+      <path d="M8 17h8" />
+      <path d="M8 9h2" />
+    </svg>
+  );
+}
+
 function NavLink({ href, label, icon }: { href: string; label: string; icon: React.ReactNode }) {
   const pathname = usePathname();
   const active = pathname === href || (href !== "/app" && pathname.startsWith(href + "/"));
@@ -310,6 +322,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <NavLink href="/app/alerts" label="Alertas" icon={<IconAlert />} />
                   <NavLink href="/app/entities" label="Entidades" icon={<IconEntities />} />
                   <NavLink href="/app/usage" label="Registro uso" icon={<IconUsage />} />
+                  <NavLink href="/app/reports/usage" label="Reportes uso" icon={<IconReport />} />
                   <NavLink href="/app/settings/semaphore" label="Semáforo" icon={<IconTraffic />} />
                   <NavLink href="/app/entity-types" label="Tipos entidad" icon={<IconTag />} />
                   <NavLink href="/app/deadline-types" label="Tipos vencimiento" icon={<IconTag />} />

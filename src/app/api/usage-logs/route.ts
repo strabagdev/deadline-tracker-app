@@ -45,9 +45,10 @@ function makeRepo(db: DataClient): UsageLogsRepo {
     listUsageLogs: async (orgId, entityId, limit) => {
       const { data, error } = await db
         .from("usage_logs")
-        .select("id, entity_id, value, logged_at")
+        .select("id, entity_id, value, value_text, logged_on, logged_at")
         .eq("organization_id", orgId)
         .eq("entity_id", entityId)
+        .order("logged_on", { ascending: false })
         .order("logged_at", { ascending: false })
         .limit(limit);
       if (error) throw error;
@@ -55,7 +56,9 @@ function makeRepo(db: DataClient): UsageLogsRepo {
       const logs = (data ?? []) as Array<{
         id: string;
         entity_id: string;
-        value: number;
+        value: number | null;
+        value_text?: string | null;
+        logged_on?: string | null;
         logged_at: string;
       }>;
       if (logs.length === 0) return [];
@@ -124,13 +127,15 @@ function makeRepo(db: DataClient): UsageLogsRepo {
         field_values: byLogId[l.id] ?? [],
       }));
     },
-    createUsageLog: async (orgId, entityId, value, loggedAt) => {
+    createUsageLog: async (orgId, entityId, value, valueText, loggedOn, loggedAt) => {
       const { data, error } = await db
         .from("usage_logs")
         .insert({
           organization_id: orgId,
           entity_id: entityId,
           value,
+          value_text: valueText,
+          logged_on: loggedOn,
           logged_at: loggedAt,
         })
         .select("id")

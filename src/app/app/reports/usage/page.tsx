@@ -1,0 +1,348 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { supabaseAuth } from "@/lib/supabase/authClient";
+import { Loader } from "@/components/ui/loader";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toCsv } from "@/lib/csv/simpleCsv";
+import { csvToSpreadsheetXml } from "@/lib/csv/spreadsheetXml";
+
+type Row = {
+  id: string;
+  entity_id: string;
+  entity_name: string;
+  entity_type_id: string | null;
+  entity_type_name: string;
+  usage_unit_name: string;
+  logged_on: string;
+  logged_at: string;
+  value: number | null;
+  value_text: string | null;
+  value_display: string;
+  field_values: Array<{ usage_field_id: string; name: string; value: string }>;
+};
+
+type TypeOption = { id: string; name: string };
+
+function todayInput() {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function defaultFromInput() {
+  const d = new Date();
+  d.setDate(d.getDate() - 30);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function formatBusinessDate(dateText: string) {
+  return String(dateText ?? "").trim() || "—";
+}
+
+function escapeHtml(v: string) {
+  return v
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function buildPrintHtml(rows: Row[], title: string, subtitle: string) {
+      const tableRows = rows
+    .map((r) => {
+      const fields = r.field_values.map((fv) => `${fv.name}: ${fv.value}`).join(" · ");
+      return `<tr>
+        <td>${escapeHtml(r.entity_name)}</td>
+        <td>${escapeHtml(r.entity_type_name)}</td>
+        <td>${escapeHtml(formatBusinessDate(r.logged_on))}</td>
+        <td>${escapeHtml(r.value_display)}</td>
+        <td>${escapeHtml(r.usage_unit_name || "—")}</td>
+        <td>${escapeHtml(fields || "—")}</td>
+      </tr>`;
+    })
+    .join("");
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${escapeHtml(title)}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; color: #0f172a; }
+      h1 { font-size: 20px; margin: 0 0 6px; }
+      p { margin: 0 0 16px; color: #475569; font-size: 12px; }
+      table { width: 100%; border-collapse: collapse; font-size: 11px; }
+      th, td { border: 1px solid #cbd5e1; padding: 6px 8px; vertical-align: top; text-align: left; }
+      th { background: #f1f5f9; }
+    </style>
+  </head>
+  <body>
+    <h1>${escapeHtml(title)}</h1>
+    <p>${escapeHtml(subtitle)}</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Entidad</th>
+          <th>Tipo</th>
+          <th>Fecha</th>
+          <th>Valor</th>
+          <th>Unidad</th>
+          <th>Campos dinámicos</th>
+        </tr>
+      </thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+  </body>
+</html>`;
+}
+
+export default function UsageReportsPage() {
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const [rows, setRows] = useState<Row[]>([]);
+  const [typeOptions, setTypeOptions] = useState<TypeOption[]>([]);
+
+  const [dateMode, setDateMode] = useState<"range" | "single">("range");
+  const [dateFrom, setDateFrom] = useState(defaultFromInput());
+  const [dateTo, setDateTo] = useState(todayInput());
+  const [singleDate, setSingleDate] = useState(todayInput());
+  const [entityTypeId, setEntityTypeId] = useState("all");
+  const [q, setQ] = useState("");
+
+  async function getTokenOrRedirect() {
+    const { data } = await supabaseAuth.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      window.location.href = "/login";
+      return null;
+    }
+    return token;
+  }
+
+  async function load() {
+    setLoading(true);
+    setErrorMsg("");
+    const token = await getTokenOrRedirect();
+    if (!token) return;
+
+    const qs = new URLSearchParams();
+    if (dateMode === "single") {
+      if (singleDate) {
+        qs.set("date_from", singleDate);
+        qs.set("date_to", singleDate);
+      }
+    } else {
+      if (dateFrom) qs.set("date_from", dateFrom);
+      if (dateTo) qs.set("date_to", dateTo);
+    }
+    if (entityTypeId && entityTypeId !== "all") qs.set("entity_type_id", entityTypeId);
+    qs.set("limit", "5000");
+
+    const res = await fetch(`/api/reporting/usage-values?${qs.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setErrorMsg(json.error || "No se pudo cargar el reporte.");
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
+    setRows((json.rows ?? []) as Row[]);
+    const opts = (json.entity_type_options ?? []) as TypeOption[];
+    setTypeOptions(opts);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateMode, dateFrom, dateTo, singleDate, entityTypeId]);
+
+  const filteredRows = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return rows;
+    return rows.filter((r) => {
+      const fields = r.field_values.map((f) => `${f.name} ${f.value}`).join(" ").toLowerCase();
+      return (
+        r.entity_name.toLowerCase().includes(needle) ||
+        r.entity_type_name.toLowerCase().includes(needle) ||
+        r.value_display.toLowerCase().includes(needle) ||
+        fields.includes(needle)
+      );
+    });
+  }, [q, rows]);
+
+  async function exportExcel() {
+    setBusy(true);
+    try {
+      const csvRows = [
+        ["Entidad", "Tipo entidad", "Fecha", "Valor", "Unidad", "Campos dinámicos"],
+        ...filteredRows.map((r) => [
+          r.entity_name,
+          r.entity_type_name,
+          formatBusinessDate(r.logged_on),
+          r.value_display,
+          r.usage_unit_name || "",
+          r.field_values.map((fv) => `${fv.name}: ${fv.value}`).join(" | "),
+        ]),
+      ];
+      const csv = toCsv(csvRows);
+      const xml = csvToSpreadsheetXml(csv, "ReporteUso");
+      const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8;" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "reporte_uso.xls";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function exportPdf() {
+    setBusy(true);
+    try {
+      const subtitle = `Filtro: ${entityTypeId === "all" ? "Todos los tipos" : "Tipo específico"} · Fecha: ${
+        dateMode === "single" ? (singleDate || "—") : `${dateFrom || "—"} a ${dateTo || "—"}`
+      } · Registros: ${filteredRows.length}`;
+      const html = buildPrintHtml(filteredRows, "Reporte de Valores de Uso", subtitle);
+      const win = window.open("", "_blank");
+      if (!win) {
+        setErrorMsg("No se pudo abrir la ventana de impresión. Revisa el bloqueo de popups.");
+        return;
+      }
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      win.print();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle>Reportes de Uso</CardTitle>
+              <p className="mt-1 text-sm text-slate-500">Consulta histórica de registros de uso con filtros y exportación.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link href="/app/usage">
+                <Button variant="outline" size="sm">Registro uso</Button>
+              </Link>
+              <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading || busy}>
+                Refrescar
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
+
+      {errorMsg ? <p className="whitespace-pre-wrap text-sm text-rose-600">{errorMsg}</p> : null}
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Filtros</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="grid gap-2 md:grid-cols-[170px_170px_170px_220px_minmax(220px,1fr)]">
+            <select
+              value={dateMode}
+              onChange={(e) => setDateMode(e.target.value as "range" | "single")}
+              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+            >
+              <option value="range">Rango de fechas</option>
+              <option value="single">Fecha exacta</option>
+            </select>
+            {dateMode === "single" ? (
+              <Input type="date" value={singleDate} onChange={(e) => setSingleDate(e.target.value)} />
+            ) : (
+              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+            )}
+            {dateMode === "single" ? (
+              <div className="h-10" />
+            ) : (
+              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            )}
+            <select
+              value={entityTypeId}
+              onChange={(e) => setEntityTypeId(e.target.value)}
+              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+            >
+              <option value="all">Todos los tipos</option>
+              {typeOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por entidad, valor o campo..." />
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => void exportExcel()} disabled={loading || busy || filteredRows.length === 0}>
+              Exportar Excel
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => void exportPdf()} disabled={loading || busy || filteredRows.length === 0}>
+              Exportar PDF
+            </Button>
+            <span className="text-xs text-slate-500">Registros: {filteredRows.length}</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Resultados</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {loading ? (
+            <div className="flex justify-center py-6">
+              <Loader label="Cargando reporte..." />
+            </div>
+          ) : filteredRows.length === 0 ? (
+            <p className="text-sm text-slate-500">No hay registros para los filtros seleccionados.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border">
+              <div className="grid min-w-[980px] grid-cols-[1.2fr_0.9fr_0.9fr_0.9fr_0.8fr_1.5fr] border-b bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+                <div>Entidad</div>
+                <div>Tipo</div>
+                <div>Fecha</div>
+                <div>Valor</div>
+                <div>Unidad</div>
+                <div>Campos dinámicos</div>
+              </div>
+              {filteredRows.map((r) => (
+                <div key={r.id} className="grid min-w-[980px] grid-cols-[1.2fr_0.9fr_0.9fr_0.9fr_0.8fr_1.5fr] border-b px-3 py-2 text-sm">
+                  <div className="truncate font-medium text-slate-800">{r.entity_name}</div>
+                  <div className="truncate text-slate-700">{r.entity_type_name}</div>
+                  <div className="text-slate-700">{formatBusinessDate(r.logged_on)}</div>
+                  <div className="truncate text-slate-800">{r.value_display}</div>
+                  <div className="truncate text-slate-600">{r.usage_unit_name || "—"}</div>
+                  <div className="truncate text-slate-600">
+                    {r.field_values.length > 0 ? r.field_values.map((fv) => `${fv.name}: ${fv.value}`).join(" · ") : "—"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </main>
+  );
+}
