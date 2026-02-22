@@ -45,8 +45,15 @@ type EntityRow = {
   name: string;
   created_at: string;
   entity_type_id: string;
+  usage_unit_id?: string | null;
   entity_types?: EntityType | null;
   deadlines?: Deadline[] | null;
+};
+
+type UsageUnit = {
+  id: string;
+  name: string;
+  is_active: boolean;
 };
 
 type LatestUsageByEntity = Record<string, { value: number; logged_at: string }>;
@@ -150,7 +157,9 @@ export default function EntitiesPage() {
   const [createName, setCreateName] = useState<string>("");
   const [createEntityTypeId, setCreateEntityTypeId] = useState<string>("");
   const [createTracksUsage, setCreateTracksUsage] = useState<boolean>(false);
+  const [createUsageUnitId, setCreateUsageUnitId] = useState<string>("");
   const [entityTypes, setEntityTypes] = useState<EntityType[]>([]);
+  const [usageUnits, setUsageUnits] = useState<UsageUnit[]>([]);
   const [typesLoading, setTypesLoading] = useState<boolean>(false);
   const [creating, setCreating] = useState<boolean>(false);
   const [importOpen, setImportOpen] = useState<boolean>(false);
@@ -222,16 +231,24 @@ export default function EntitiesPage() {
       return;
     }
 
-    const res = await fetch("/api/entity-types", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const [typesRes, unitsRes] = await Promise.all([
+      fetch("/api/entity-types", { headers: { Authorization: `Bearer ${token}` } }),
+      fetch("/api/usage-units?active=1", { headers: { Authorization: `Bearer ${token}` } }),
+    ]);
 
-    const json = await res.json().catch(() => ({}));
-    if (res.ok) {
-      const list = (json.entity_types ?? json.data ?? json ?? []) as EntityType[];
+    const typesJson = await typesRes.json().catch(() => ({}));
+    const unitsJson = await unitsRes.json().catch(() => ({}));
+    if (typesRes.ok) {
+      const list = (typesJson.entity_types ?? typesJson.data ?? typesJson ?? []) as EntityType[];
       const safe = Array.isArray(list) ? list : [];
       setEntityTypes(safe);
       if (!createEntityTypeId && safe[0]?.id) setCreateEntityTypeId(safe[0].id);
+    }
+    if (unitsRes.ok) {
+      const list = (unitsJson.usage_units ?? []) as UsageUnit[];
+      const safe = Array.isArray(list) ? list : [];
+      setUsageUnits(safe);
+      if (!createUsageUnitId && safe[0]?.id) setCreateUsageUnitId(safe[0].id);
     }
 
     setTypesLoading(false);
@@ -312,6 +329,7 @@ export default function EntitiesPage() {
         name,
         entity_type_id: createEntityTypeId,
         tracks_usage: createTracksUsage,
+        usage_unit_id: createTracksUsage ? (createUsageUnitId || null) : null,
       }),
     });
 
@@ -324,6 +342,7 @@ export default function EntitiesPage() {
 
     setCreateName("");
     setCreateTracksUsage(false);
+    setCreateUsageUnitId(usageUnits[0]?.id ?? "");
     setShowCreate(false);
 
     const id = json.entity?.id || json.id;
@@ -685,8 +704,28 @@ export default function EntitiesPage() {
                   </Button>
                 </div>
 
+                {createTracksUsage ? (
+                  <div className="grid gap-1 md:max-w-[320px]">
+                    <label htmlFor="entity_usage_unit" className="text-[11px] font-medium text-slate-500">Unidad de uso</label>
+                    <select
+                      id="entity_usage_unit"
+                      value={createUsageUnitId}
+                      onChange={(e) => setCreateUsageUnitId(e.target.value)}
+                      disabled={usageUnits.length === 0}
+                      className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-100"
+                    >
+                      <option value="">Sin unidad</option>
+                      {usageUnits.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+
                 <p className="text-[11px] text-slate-500">
-                  Si activas <span className="font-medium">Con uso</span>, podrás registrar uso para vencimientos por horas/km.
+                  Si activas <span className="font-medium">Con uso</span>, podrás asignar una unidad y registrar uso en esa métrica.
                 </p>
               </form>
             )}

@@ -32,8 +32,20 @@ function getErrorMessage(error: unknown): string {
   return "error";
 }
 
+function startOfLocalDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function parseDateOnlyLocal(isoDateOnly: string) {
+  const [y, m, d] = isoDateOnly.split("-").map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return new Date(NaN);
+  return new Date(y, m - 1, d);
+}
+
 function daysUntil(date: Date, now = new Date()): number {
-  return Math.ceil((date.getTime() - now.getTime()) / MS_PER_DAY);
+  const due = startOfLocalDay(date);
+  const today = startOfLocalDay(now);
+  return Math.ceil((due.getTime() - today.getTime()) / MS_PER_DAY);
 }
 
 function riskFromDays(
@@ -92,6 +104,7 @@ export async function POST(req: Request) {
 
     if (deadlinesErr) throw deadlinesErr;
     const deadlines = (deadlinesData ?? []) as DeadlineRow[];
+    const currentDeadlineIds = new Set(deadlines.map((d) => d.id));
 
     const entityIds = Array.from(new Set(deadlines.map((d) => d.entity_id)));
 
@@ -134,7 +147,8 @@ export async function POST(req: Request) {
 
       if (measureBy === "date") {
         if (d.next_due_date) {
-          const due = new Date(d.next_due_date);
+          const raw = String(d.next_due_date).trim();
+          const due = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? parseDateOnlyLocal(raw) : new Date(raw);
           if (Number.isFinite(due.getTime())) {
             forecastDueDate = due;
             daysRemaining = daysUntil(due, now);
@@ -195,6 +209,33 @@ export async function POST(req: Request) {
         { onConflict: "organization_id,deadline_id" }
       );
       if (upsertForecastErr) throw upsertForecastErr;
+    }
+
+    // Purga pronósticos obsoletos (vencimientos eliminados/inactivos que ya no entran al recompute).
+    // Si quedan filas huérfanas, pueden seguir generando alertas "vencido" aunque el vencimiento ya cambió.
+    {
+      const { data: existingForecasts, error: existingForecastsErr } = await db
+        .from("deadline_forecasts")
+        .select("deadline_id")
+        .eq("organization_id", orgId);
+      if (existingForecastsErr) throw existingForecastsErr;
+
+      const staleDeadlineIds = Array.from(
+        new Set(
+          (existingForecasts ?? [])
+            .map((r) => String(r.deadline_id ?? ""))
+            .filter((id) => id && !currentDeadlineIds.has(id))
+        )
+      );
+
+      if (staleDeadlineIds.length > 0) {
+        const { error: deleteStaleErr } = await db
+          .from("deadline_forecasts")
+          .delete()
+          .eq("organization_id", orgId)
+          .in("deadline_id", staleDeadlineIds);
+        if (deleteStaleErr) throw deleteStaleErr;
+      }
     }
 
     const nearestByEntity = new Map<

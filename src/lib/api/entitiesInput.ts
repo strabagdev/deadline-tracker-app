@@ -8,12 +8,20 @@ export function parseEntityCreateBody(body: unknown) {
   const name = String(payload.name ?? "").trim();
   const entityTypeId = String(payload.entity_type_id ?? "").trim();
   const tracksUsage = Boolean(payload.tracks_usage ?? false);
+  const usageUnitId = payload.usage_unit_id != null ? String(payload.usage_unit_id).trim() : "";
   const fieldValues = Array.isArray(payload.field_values) ? (payload.field_values as unknown[]) : [];
 
   if (!name) return { ok: false as const, error: "name required" };
   if (!entityTypeId) return { ok: false as const, error: "entity_type_id required" };
 
-  return { ok: true as const, name, entityTypeId, tracksUsage, fieldValues };
+  return {
+    ok: true as const,
+    name,
+    entityTypeId,
+    tracksUsage,
+    usageUnitId: usageUnitId || null,
+    fieldValues,
+  };
 }
 
 export function normalizeFieldValues(fieldValues: unknown[]): FieldValueInput[] {
@@ -36,9 +44,10 @@ export function parseEntityUpdateBody(body: unknown) {
   const payload = (body ?? {}) as Record<string, unknown>;
   const name = payload.name != null ? String(payload.name).trim() : null;
   const tracksUsage = payload.tracks_usage != null ? Boolean(payload.tracks_usage) : null;
+  const usageUnitId = payload.usage_unit_id !== undefined ? (payload.usage_unit_id ? String(payload.usage_unit_id).trim() : null) : undefined;
   const fieldValues = Array.isArray(payload.field_values) ? (payload.field_values as unknown[]) : null;
 
-  return { name, tracksUsage, fieldValues };
+  return { name, tracksUsage, usageUnitId, fieldValues };
 }
 
 export function splitUpdateFieldValues(fieldValues: unknown[]) {

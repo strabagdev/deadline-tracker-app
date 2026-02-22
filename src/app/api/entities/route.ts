@@ -8,6 +8,7 @@ import {
   handleEntitiesPut,
   type EntitiesRepo,
 } from "@/lib/api/entitiesService";
+import { syncForecastAndAlertsForEntity } from "@/lib/api/forecastAlertsSync";
 
 /**
  * Phase 1.3
@@ -20,6 +21,7 @@ type EntityRow = {
   name: string;
   entity_type_id: string;
   tracks_usage: boolean;
+  usage_unit_id: string | null;
   created_at: string;
 };
 
@@ -61,8 +63,9 @@ function makeRepo(db: DataClient): EntitiesRepo {
           entity_type_id: input.entityTypeId,
           name: input.name,
           tracks_usage: input.tracksUsage,
+          usage_unit_id: input.usageUnitId,
         })
-        .select("id, name, entity_type_id, tracks_usage, created_at")
+        .select("id, name, entity_type_id, tracks_usage, usage_unit_id, created_at")
         .single();
       if (insErr) throw insErr;
       return entity as {
@@ -70,8 +73,19 @@ function makeRepo(db: DataClient): EntitiesRepo {
         name: string;
         entity_type_id: string;
         tracks_usage: boolean;
+        usage_unit_id: string | null;
         created_at: string;
       };
+    },
+    usageUnitExistsInOrg: async (orgId, usageUnitId) => {
+      const { data, error } = await db
+        .from("usage_units")
+        .select("id")
+        .eq("organization_id", orgId)
+        .eq("id", usageUnitId)
+        .maybeSingle();
+      if (error) throw error;
+      return !!data?.id;
     },
     insertFieldValues: async (rows) => {
       const { error } = await db.from("entity_field_values").insert(rows);
@@ -141,7 +155,7 @@ export async function GET(req: Request) {
     if (!id) {
       const { data, error } = await db
         .from("entities")
-        .select("id, name, entity_type_id, tracks_usage, created_at")
+        .select("id, name, entity_type_id, tracks_usage, usage_unit_id, created_at")
         .eq("organization_id", orgId)
         .order("created_at", { ascending: false });
 
@@ -173,7 +187,7 @@ export async function GET(req: Request) {
     // Detail
     const { data: entity, error: eErr } = await db
       .from("entities")
-      .select("id, name, entity_type_id, tracks_usage, created_at")
+      .select("id, name, entity_type_id, tracks_usage, usage_unit_id, created_at")
       .eq("organization_id", orgId)
       .eq("id", id)
       .maybeSingle();
@@ -189,6 +203,18 @@ export async function GET(req: Request) {
       .maybeSingle();
 
     if (etErr) throw etErr;
+    const usageUnitId = String((entity as { usage_unit_id?: string | null }).usage_unit_id ?? "").trim();
+    let usageUnit: { id: string; name: string; is_active: boolean } | null = null;
+    if (usageUnitId) {
+      const { data: uuData, error: uuErr } = await db
+        .from("usage_units")
+        .select("id, name, is_active")
+        .eq("organization_id", orgId)
+        .eq("id", usageUnitId)
+        .maybeSingle();
+      if (uuErr) throw uuErr;
+      usageUnit = (uuData ?? null) as { id: string; name: string; is_active: boolean } | null;
+    }
 
     const { data: fields, error: fErr } = await db
       .from("entity_fields")
@@ -220,6 +246,7 @@ export async function GET(req: Request) {
       entity: {
         ...entity,
         entity_type: entityType ?? null,
+        usage_unit: usageUnit,
         fields: mergedFields,
       },
     });
@@ -262,6 +289,19 @@ export async function PUT(req: Request) {
     const id = url.searchParams.get("id");
     const body = await req.json().catch(() => ({}));
     const response = await handleEntitiesPut(access.organizationId, id ?? "", body, makeRepo(db));
+    if (response.status < 400 && id) {
+      try {
+        await syncForecastAndAlertsForEntity(db, access.organizationId, id);
+      } catch (syncErr: unknown) {
+        return NextResponse.json(
+          {
+            ...response.body,
+            sync_warning: getErrorMessage(syncErr),
+          },
+          { status: response.status }
+        );
+      }
+    }
     return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });

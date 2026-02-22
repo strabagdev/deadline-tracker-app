@@ -13,10 +13,26 @@ export function numOrNaN(v: unknown) {
   return Number.isFinite(n) ? n : NaN;
 }
 
+function startOfLocalDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function parseDateOnlyLocal(isoDateOnly: string) {
+  const [y, m, d] = isoDateOnly.split("-").map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return new Date(NaN);
+  return new Date(y, m - 1, d);
+}
+
 export function daysDiffFromNowISO(dateIso: string) {
-  const d = new Date(dateIso);
-  const now = new Date();
-  return Math.ceil((d.getTime() - now.getTime()) / MS_PER_DAY);
+  const raw = String(dateIso ?? "").trim();
+  if (!raw) return NaN;
+
+  const due = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+    ? parseDateOnlyLocal(raw)
+    : startOfLocalDay(new Date(raw));
+  const today = startOfLocalDay(new Date());
+  if (!Number.isFinite(due.getTime())) return NaN;
+  return Math.ceil((due.getTime() - today.getTime()) / MS_PER_DAY);
 }
 
 export function semaphoreFromDays(days: number): "ok" | "warn" | "urgent" | "critical" | "expired" {

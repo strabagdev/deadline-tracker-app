@@ -88,7 +88,7 @@ export async function handleDeadlinesPost(orgId: string, rawBody: unknown, repo:
       lastDoneDate: parsed.lastDoneDate,
       nextDueDate: parsed.nextDueDate,
     });
-    return { status: 201, body: { id: created.id } };
+    return { status: 201, body: { id: created.id, entity_id: entityId } };
   }
 
   const created = await repo.createUsageDeadline(orgId, {
@@ -104,7 +104,7 @@ export async function handleDeadlinesPost(orgId: string, rawBody: unknown, repo:
     usageDailyAverage: parsed.usageDailyAverage,
   });
 
-  return { status: 201, body: { id: created.id } };
+  return { status: 201, body: { id: created.id, entity_id: entityId } };
 }
 
 export async function handleDeadlinesPut(orgId: string, rawBody: unknown, repo: DeadlinesRepo): Promise<ServiceResponse> {
@@ -144,7 +144,7 @@ export async function handleDeadlinesPut(orgId: string, rawBody: unknown, repo: 
     patch.usage_daily_average_mode = "manual";
 
     await repo.updateDeadline(orgId, id, patch);
-    return { status: 200, body: { ok: true } };
+    return { status: 200, body: { ok: true, entity_id: existing.entity_id } };
   }
 
   if (!entity.tracks_usage) {
@@ -193,11 +193,13 @@ export async function handleDeadlinesPut(orgId: string, rawBody: unknown, repo: 
   }
 
   await repo.updateDeadline(orgId, id, patch);
-  return { status: 200, body: { ok: true } };
+  return { status: 200, body: { ok: true, entity_id: existing.entity_id } };
 }
 
 export async function handleDeadlinesDelete(orgId: string, id: string, repo: DeadlinesRepo): Promise<ServiceResponse> {
   if (!id) return { status: 400, body: { error: "id required", code: "BAD_REQUEST" } };
+  const existing = await repo.getDeadlineById(orgId, id);
+  if (!existing) return { status: 404, body: { error: "not found", code: "DEADLINE_NOT_FOUND" } };
   await repo.deleteDeadline(orgId, id);
-  return { status: 200, body: { ok: true } };
+  return { status: 200, body: { ok: true, entity_id: existing.entity_id } };
 }

@@ -39,6 +39,7 @@ type DashboardEntityRow = {
   created_at: string;
   entity_type_id: string | null;
   tracks_usage: boolean;
+  usage_unit_id?: string | null;
   entity_types?: { id: string; name: string } | null;
   deadlines?: DashboardDeadlineRow[] | null;
 };

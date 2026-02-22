@@ -8,6 +8,7 @@ import {
   handleUsageLogsPost,
   type UsageLogsRepo,
 } from "@/lib/api/usageLogsService";
+import { syncForecastAndAlertsForEntity } from "@/lib/api/forecastAlertsSync";
 
 type DataClient = ReturnType<typeof createDataServerClient>;
 
@@ -50,7 +51,78 @@ function makeRepo(db: DataClient): UsageLogsRepo {
         .order("logged_at", { ascending: false })
         .limit(limit);
       if (error) throw error;
-      return data ?? [];
+
+      const logs = (data ?? []) as Array<{
+        id: string;
+        entity_id: string;
+        value: number;
+        logged_at: string;
+      }>;
+      if (logs.length === 0) return [];
+
+      const logIds = logs.map((l) => l.id);
+      const { data: valuesData, error: valuesError } = await db
+        .from("usage_log_field_values")
+        .select(
+          `
+          usage_log_id,
+          usage_field_id,
+          value_text,
+          value_number,
+          value_date,
+          value_boolean,
+          usage_fields(name, key, field_type)
+        `
+        )
+        .eq("organization_id", orgId)
+        .in("usage_log_id", logIds);
+      if (valuesError) throw valuesError;
+
+      const byLogId: Record<
+        string,
+        Array<{
+          usage_field_id: string;
+          name: string;
+          key: string;
+          field_type: "text" | "number" | "date" | "boolean" | "select";
+          value_text: string | null;
+          value_number: number | null;
+          value_date: string | null;
+          value_boolean: boolean | null;
+        }>
+      > = {};
+
+      for (const row of (valuesData ?? []) as Array<{
+        usage_log_id: string;
+        usage_field_id: string;
+        value_text: string | null;
+        value_number: number | null;
+        value_date: string | null;
+        value_boolean: boolean | null;
+        usage_fields?:
+          | { name: string | null; key: string | null; field_type: string | null }
+          | { name: string | null; key: string | null; field_type: string | null }[]
+          | null;
+      }>) {
+        const fieldRaw = Array.isArray(row.usage_fields) ? row.usage_fields[0] : row.usage_fields;
+        const item = {
+          usage_field_id: String(row.usage_field_id),
+          name: String(fieldRaw?.name ?? ""),
+          key: String(fieldRaw?.key ?? ""),
+          field_type: String(fieldRaw?.field_type ?? "text") as "text" | "number" | "date" | "boolean" | "select",
+          value_text: row.value_text ?? null,
+          value_number: row.value_number != null ? Number(row.value_number) : null,
+          value_date: row.value_date ?? null,
+          value_boolean: row.value_boolean ?? null,
+        };
+        if (!byLogId[row.usage_log_id]) byLogId[row.usage_log_id] = [];
+        byLogId[row.usage_log_id].push(item);
+      }
+
+      return logs.map((l) => ({
+        ...l,
+        field_values: byLogId[l.id] ?? [],
+      }));
     },
     createUsageLog: async (orgId, entityId, value, loggedAt) => {
       const { data, error } = await db
@@ -144,6 +216,20 @@ export async function POST(req: Request) {
     }
     const body = await req.json().catch(() => ({}));
     const response = await handleUsageLogsPost(access.organizationId, body, makeRepo(db));
+    const entityId = typeof response.body?.entity_id === "string" ? response.body.entity_id : "";
+    if (response.status < 400 && entityId) {
+      try {
+        await syncForecastAndAlertsForEntity(db, access.organizationId, entityId);
+      } catch (syncErr: unknown) {
+        return NextResponse.json(
+          {
+            ...response.body,
+            sync_warning: getErrorMessage(syncErr),
+          },
+          { status: response.status }
+        );
+      }
+    }
     return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
@@ -165,6 +251,20 @@ export async function DELETE(req: Request) {
       );
     }
     const response = await handleUsageLogsDelete(access.organizationId, req.url, makeRepo(db));
+    const entityId = typeof response.body?.entity_id === "string" ? response.body.entity_id : "";
+    if (response.status < 400 && entityId) {
+      try {
+        await syncForecastAndAlertsForEntity(db, access.organizationId, entityId);
+      } catch (syncErr: unknown) {
+        return NextResponse.json(
+          {
+            ...response.body,
+            sync_warning: getErrorMessage(syncErr),
+          },
+          { status: response.status }
+        );
+      }
+    }
     return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });

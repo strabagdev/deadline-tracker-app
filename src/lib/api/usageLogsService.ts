@@ -5,6 +5,16 @@ type UsageLogRow = {
   entity_id: string;
   value: number;
   logged_at: string;
+  field_values?: Array<{
+    usage_field_id: string;
+    name: string;
+    key: string;
+    field_type: "text" | "number" | "date" | "boolean" | "select";
+    value_text: string | null;
+    value_number: number | null;
+    value_date: string | null;
+    value_boolean: boolean | null;
+  }>;
 };
 
 type UsageLogRef = {
@@ -173,7 +183,7 @@ export async function handleUsageLogsPost(
 
     await repo.createUsageLogFieldValues(orgId, created.id, typedValues);
   }
-  return { status: 201, body: { id: created.id } };
+  return { status: 201, body: { id: created.id, entity_id: entityId } };
 }
 
 export async function handleUsageLogsDelete(orgId: string, reqUrl: string, repo: UsageLogsRepo): Promise<ServiceResponse> {
@@ -185,5 +195,5 @@ export async function handleUsageLogsDelete(orgId: string, reqUrl: string, repo:
   if (!existing) return { status: 404, body: { error: "usage log not found", code: "USAGE_LOG_NOT_FOUND" } };
 
   await repo.deleteUsageLog(orgId, id);
-  return { status: 200, body: { ok: true } };
+  return { status: 200, body: { ok: true, entity_id: existing.entity_id } };
 }

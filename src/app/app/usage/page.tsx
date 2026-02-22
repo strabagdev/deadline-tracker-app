@@ -19,10 +19,25 @@ type EntityRow = {
   name: string;
   entity_type_id: string;
   tracks_usage: boolean;
+  usage_unit_id?: string | null;
+  deadlines?: Array<{
+    id: string;
+    frequency_unit: string | null;
+    deadline_types?: { measure_by: "date" | "usage"; is_active: boolean } | null;
+  }> | null;
   entity_types?: EntityType | null;
 };
 
 type LatestUsageByEntity = Record<string, { value: number; logged_at: string }>;
+type UsageUnit = { id: string; name: string; is_active: boolean };
+type UsageField = {
+  id: string;
+  usage_unit_id: string;
+  name: string;
+  key: string;
+  field_type: "text" | "number" | "date" | "boolean" | "select";
+  options?: unknown;
+};
 
 function todayDateInput() {
   const d = new Date();
@@ -39,6 +54,8 @@ export default function UsagePage() {
 
   const [entities, setEntities] = useState<EntityRow[]>([]);
   const [usage, setUsage] = useState<LatestUsageByEntity>({});
+  const [usageUnits, setUsageUnits] = useState<UsageUnit[]>([]);
+  const [usageFieldsByUnit, setUsageFieldsByUnit] = useState<Record<string, UsageField[]>>({});
 
   const [q, setQ] = useState("");
   const [filterType, setFilterType] = useState("all");
@@ -47,6 +64,7 @@ export default function UsagePage() {
   const [loggedAtDate, setLoggedAtDate] = useState(todayDateInput());
 
   const [draftByEntity, setDraftByEntity] = useState<Record<string, string>>({});
+  const [fieldDraftByEntity, setFieldDraftByEntity] = useState<Record<string, Record<string, string>>>({});
   const [savingByEntity, setSavingByEntity] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -80,9 +98,51 @@ export default function UsagePage() {
     }
 
     const allEntities = (json.entities ?? []) as EntityRow[];
-    setEntities(allEntities.filter((e) => e.tracks_usage));
+    const tracked = allEntities.filter((e) => e.tracks_usage);
+    setEntities(tracked);
     setUsage((json.latest_usage_by_entity ?? {}) as LatestUsageByEntity);
+
+    const unitsRes = await fetch("/api/usage-units?active=1", { headers: { Authorization: `Bearer ${token}` } });
+    const unitsJson = await unitsRes.json().catch(() => ({}));
+    if (unitsRes.ok) {
+      const units = (unitsJson.usage_units ?? []) as UsageUnit[];
+      setUsageUnits(units);
+
+      const fieldPairs = await Promise.all(
+        units.map(async (u) => {
+          const res = await fetch(`/api/usage-fields?usage_unit_id=${encodeURIComponent(u.id)}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const json = await res.json().catch(() => ({}));
+          const fields = (res.ok ? json.usage_fields : []) as UsageField[];
+          return [u.id, fields] as const;
+        })
+      );
+      const byUnit: Record<string, UsageField[]> = {};
+      for (const [unitId, fields] of fieldPairs) byUnit[unitId] = fields;
+      setUsageFieldsByUnit(byUnit);
+
+    } else {
+      setUsageUnits([]);
+      setUsageFieldsByUnit({});
+    }
     setLoading(false);
+  }
+
+  function getEntityUsageFields(entity: EntityRow) {
+    const unitId = String(entity.usage_unit_id ?? "").trim();
+    if (!unitId) return [];
+    return usageFieldsByUnit[unitId] ?? [];
+  }
+
+  function getEntityUsageMeta(entity: EntityRow) {
+    const unitId = String(entity.usage_unit_id ?? "").trim();
+    if (!unitId) return { unitName: "", reason: "La entidad no tiene unidad de uso asignada." };
+    const unitName = usageUnits.find((u) => u.id === unitId)?.name ?? "";
+    if (!unitName) return { unitName: "", reason: "La unidad asignada no está activa o no existe en el catálogo." };
+    const fields = usageFieldsByUnit[unitId] ?? [];
+    if (fields.length === 0) return { unitName, reason: "Sin campos configurados para esta unidad." };
+    return { unitName, reason: "" };
   }
 
   async function saveUsage(entityId: string) {
@@ -97,7 +157,7 @@ export default function UsagePage() {
 
     const value = Number(rawValue);
     if (!Number.isFinite(value) || value < 0) {
-      setErrorMsg("El valor de uso debe ser numérico y no negativo.");
+      setErrorMsg("Ingresa un valor numérico válido (mayor o igual a 0).");
       return;
     }
 
@@ -106,10 +166,24 @@ export default function UsagePage() {
 
     setSavingByEntity((prev) => ({ ...prev, [entityId]: true }));
     try {
+      const entity = entities.find((e) => e.id === entityId);
+      const dynamicFields = entity ? getEntityUsageFields(entity) : [];
+      const dynamicDraft = fieldDraftByEntity[entityId] ?? {};
+      const fieldValues = dynamicFields
+        .map((f) => {
+          const raw = dynamicDraft[f.id] ?? "";
+          if (raw === "") return null;
+          if (f.field_type === "number") return { usage_field_id: f.id, value: Number(raw) };
+          if (f.field_type === "boolean") return { usage_field_id: f.id, value: raw === "true" };
+          return { usage_field_id: f.id, value: raw };
+        })
+        .filter((v): v is { usage_field_id: string; value: string | number | boolean } => Boolean(v));
+
       const payload: Record<string, unknown> = {
         entity_id: entityId,
         value,
       };
+      if (fieldValues.length > 0) payload.field_values = fieldValues;
       if (loggedAtDate) {
         payload.logged_at = `${loggedAtDate}T00:00:00Z`;
       }
@@ -129,6 +203,7 @@ export default function UsagePage() {
       }
 
       setDraftByEntity((prev) => ({ ...prev, [entityId]: "" }));
+      setFieldDraftByEntity((prev) => ({ ...prev, [entityId]: {} }));
       setOkMsg("Uso registrado correctamente.");
       await load();
     } finally {
@@ -273,11 +348,13 @@ export default function UsagePage() {
                 <div>Entidad</div>
                 <div>Último uso</div>
                 <div>Fecha último</div>
-                <div>Nuevo registro</div>
+                <div>Nuevo registro + campos</div>
               </div>
               {pagedRows.map((e) => {
                 const latest = usage[e.id];
                 const saving = Boolean(savingByEntity[e.id]);
+                const dynamicFields = getEntityUsageFields(e);
+                const usageMeta = getEntityUsageMeta(e);
                 return (
                   <div key={e.id} className="grid min-w-[760px] grid-cols-[1.3fr_0.9fr_0.9fr_1fr] items-center gap-2 border-b px-3 py-2">
                     <div className="min-w-0">
@@ -288,23 +365,96 @@ export default function UsagePage() {
                     <div className="text-xs text-slate-500">
                       {latest?.logged_at ? new Date(latest.logged_at).toLocaleDateString() : "—"}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={draftByEntity[e.id] ?? ""}
-                        onChange={(ev) => setDraftByEntity((prev) => ({ ...prev, [e.id]: ev.target.value }))}
-                        inputMode="decimal"
-                        placeholder="Ej: 1245"
-                        className="h-9"
-                        disabled={saving}
-                      />
-                      <Button
-                        size="sm"
-                        onClick={() => void saveUsage(e.id)}
-                        disabled={saving}
-                        className="h-9"
-                      >
-                        {saving ? "..." : "Guardar"}
-                      </Button>
+                    <div className="grid gap-2">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={draftByEntity[e.id] ?? ""}
+                          onChange={(ev) => setDraftByEntity((prev) => ({ ...prev, [e.id]: ev.target.value }))}
+                          inputMode="decimal"
+                          placeholder="Ej: 1245"
+                          className="h-9"
+                          disabled={saving}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => void saveUsage(e.id)}
+                          disabled={saving}
+                          className="h-9"
+                        >
+                          {saving ? "..." : "Guardar"}
+                        </Button>
+                      </div>
+                      {dynamicFields.length > 0 ? (
+                        <div className="grid gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                          {dynamicFields.map((f) => {
+                            const current = fieldDraftByEntity[e.id]?.[f.id] ?? "";
+                            const selectOptions = Array.isArray(f.options)
+                              ? f.options.map((x) => String(x))
+                              : [];
+                            return (
+                              <div key={f.id} className="grid gap-1">
+                                <label className="text-[11px] font-medium text-slate-600">{f.name}</label>
+                                {f.field_type === "boolean" ? (
+                                  <select
+                                    value={current}
+                                    onChange={(ev) =>
+                                      setFieldDraftByEntity((prev) => ({
+                                        ...prev,
+                                        [e.id]: { ...(prev[e.id] ?? {}), [f.id]: ev.target.value },
+                                      }))
+                                    }
+                                    disabled={saving}
+                                    className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                                  >
+                                    <option value="">Sin dato</option>
+                                    <option value="true">Sí</option>
+                                    <option value="false">No</option>
+                                  </select>
+                                ) : f.field_type === "select" && selectOptions.length > 0 ? (
+                                  <select
+                                    value={current}
+                                    onChange={(ev) =>
+                                      setFieldDraftByEntity((prev) => ({
+                                        ...prev,
+                                        [e.id]: { ...(prev[e.id] ?? {}), [f.id]: ev.target.value },
+                                      }))
+                                    }
+                                    disabled={saving}
+                                    className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                                  >
+                                    <option value="">Selecciona...</option>
+                                    {selectOptions.map((opt) => (
+                                      <option key={opt} value={opt}>
+                                        {opt}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <Input
+                                    value={current}
+                                    onChange={(ev) =>
+                                      setFieldDraftByEntity((prev) => ({
+                                        ...prev,
+                                        [e.id]: { ...(prev[e.id] ?? {}), [f.id]: ev.target.value },
+                                      }))
+                                    }
+                                    type={f.field_type === "date" ? "date" : "text"}
+                                    inputMode={f.field_type === "number" ? "decimal" : "text"}
+                                    placeholder={f.field_type === "number" ? "Ej: 10.5" : ""}
+                                    className="h-9"
+                                    disabled={saving}
+                                  />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1 text-[11px] text-slate-500">
+                          {usageMeta.unitName ? `Unidad: ${usageMeta.unitName}. ` : ""}
+                          {usageMeta.reason}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

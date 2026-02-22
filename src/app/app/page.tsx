@@ -3,7 +3,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
-import { pickNearestDeadline } from "@/lib/deadlines/calculateDeadlineStatus";
 import { Loader } from "@/components/ui/loader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,37 +10,25 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-type DeadlineType = {
-  id: string;
-  name: string;
-  measure_by: "date" | "usage";
-  requires_document: boolean;
-  is_active: boolean;
-};
-
-type Deadline = {
-  id: string;
-  deadline_type_id: string;
-  last_done_date: string | null;
-  next_due_date: string | null;
-  last_done_usage: number | null;
-  frequency: number | null;
-  frequency_unit: string | null;
-  usage_daily_average: number | null;
-  created_at: string;
-  deadline_types?: DeadlineType | null;
-};
-
 type EntityType = { id: string; name: string };
+type NearestForecast = {
+  deadline_id: string;
+  deadline_name: string;
+  measure_by: "date" | "usage" | "unknown";
+  forecast_due_date: string | null;
+  days_remaining: number | null;
+  risk_level: Status;
+  risk_score: number;
+};
 
 type EntityRow = {
   id: string;
   name: string;
   created_at: string;
-  entity_type_id: string;
+  entity_type_id: string | null;
   entity_types?: EntityType | null;
-  deadlines?: Deadline[] | null;
   card_fields?: Array<{ name: string; value_text: string }>;
+  nearest_forecast?: NearestForecast | null;
 };
 
 type LatestUsageByEntity = Record<string, { value: number; logged_at: string }>;
@@ -258,20 +245,29 @@ export default function AppDashboard() {
     return entities.map((e) => {
       const latest = usage[e.id]?.value ?? null;
       const latestAt = usage[e.id]?.logged_at ?? null;
-      const hasActiveDeadlines = (e.deadlines ?? []).some((d) => d.deadline_types?.is_active !== false);
-      const nearest = pickNearestDeadline(e.deadlines, latest, {
-        yellowDays: Number(semaphore.yellow_days ?? 60),
-        orangeDays: Number(semaphore.orange_days ?? 30),
-        redDays: Number(semaphore.red_days ?? 15),
-        labelGreen: semaphore.label_green,
-        labelYellow: semaphore.label_yellow,
-        labelOrange: semaphore.label_orange,
-        labelRed: semaphore.label_red,
-      });
-      const status: Status = (nearest?.status as Status) ?? "none";
+      const nf = e.nearest_forecast ?? null;
+      const hasActiveDeadlines = Boolean(nf);
+      const status: Status = nf?.risk_level ?? "none";
+      const nearest = nf
+        ? {
+            due: nf.forecast_due_date ? new Date(nf.forecast_due_date) : null,
+            label:
+              nf.risk_level === "red"
+                ? semaphore.label_red
+                : nf.risk_level === "orange"
+                  ? semaphore.label_orange
+                  : nf.risk_level === "yellow"
+                    ? semaphore.label_yellow
+                    : nf.risk_level === "green"
+                      ? semaphore.label_green
+                      : "Sin info",
+            typeName: nf.deadline_name ?? "Sin tipo",
+            measureBy: nf.measure_by,
+          }
+        : null;
       return { entity: e, latestUsage: latest, latestUsageAt: latestAt, nearest, status, hasActiveDeadlines };
     });
-  }, [entities, usage, semaphore]);
+  }, [entities, usage, semaphore.label_green, semaphore.label_orange, semaphore.label_red, semaphore.label_yellow]);
 
   const countsAll = useMemo(() => {
     let red = 0,

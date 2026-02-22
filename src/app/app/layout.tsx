@@ -272,7 +272,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-10 border-b bg-white/95 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b bg-white/95 backdrop-blur">
         <div className={cn("mx-auto grid gap-2 px-4 py-2", isSuperAdmin ? "max-w-[1100px]" : "max-w-[1400px]")}>
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-2 whitespace-nowrap">
@@ -282,10 +282,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   alt="Logo plataforma"
                   width={38}
                   height={38}
-                  className="h-9 w-9 rounded-lg object-cover"
+                  className="h-11 w-11 rounded-lg object-cover sm:h-9 sm:w-9"
                 />
               ) : null}
-              <Link href={isSuperAdmin ? "/app/super-admin" : "/app"} className="truncate text-base font-semibold text-slate-900">
+              <Link href={isSuperAdmin ? "/app/super-admin" : "/app"} className="truncate text-lg font-semibold text-slate-900 sm:text-base">
                 OpsAhead
               </Link>
               {isSuperAdmin ? <Badge variant="secondary">Global</Badge> : null}

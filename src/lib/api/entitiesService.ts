@@ -10,11 +10,13 @@ type EntityRow = {
   name: string;
   entity_type_id: string;
   tracks_usage: boolean;
+  usage_unit_id?: string | null;
   created_at: string;
 };
 
 export type EntitiesRepo = {
-  createEntity: (orgId: string, input: { name: string; entityTypeId: string; tracksUsage: boolean }) => Promise<EntityRow>;
+  createEntity: (orgId: string, input: { name: string; entityTypeId: string; tracksUsage: boolean; usageUnitId: string | null }) => Promise<EntityRow>;
+  usageUnitExistsInOrg: (orgId: string, usageUnitId: string) => Promise<boolean>;
   insertFieldValues: (
     rows: Array<{ organization_id: string; entity_id: string; entity_field_id: string; value_text: string }>
   ) => Promise<void>;
@@ -36,8 +38,12 @@ export async function handleEntitiesPost(orgId: string, rawBody: unknown, repo: 
   const parsed = parseEntityCreateBody(rawBody);
   if (!parsed.ok) return { status: 400, body: { error: parsed.error, code: "BAD_REQUEST" } };
 
-  const { name, entityTypeId, tracksUsage, fieldValues } = parsed;
-  const entity = await repo.createEntity(orgId, { name, entityTypeId, tracksUsage });
+  const { name, entityTypeId, tracksUsage, usageUnitId, fieldValues } = parsed;
+  if (usageUnitId) {
+    const exists = await repo.usageUnitExistsInOrg(orgId, usageUnitId);
+    if (!exists) return { status: 400, body: { error: "invalid usage_unit_id", code: "BAD_REQUEST" } };
+  }
+  const entity = await repo.createEntity(orgId, { name, entityTypeId, tracksUsage, usageUnitId });
 
   const rows = normalizeFieldValues(fieldValues).map((fv) => ({
     organization_id: orgId,
@@ -68,6 +74,15 @@ export async function handleEntitiesPut(
   const patch: Record<string, unknown> = {};
   if (parsed.name !== null) patch.name = parsed.name;
   if (parsed.tracksUsage !== null) patch.tracks_usage = parsed.tracksUsage;
+  if (parsed.usageUnitId !== undefined) {
+    if (parsed.usageUnitId) {
+      const exists = await repo.usageUnitExistsInOrg(orgId, parsed.usageUnitId);
+      if (!exists) return { status: 400, body: { error: "invalid usage_unit_id", code: "BAD_REQUEST" } };
+      patch.usage_unit_id = parsed.usageUnitId;
+    } else {
+      patch.usage_unit_id = null;
+    }
+  }
 
   if (Object.keys(patch).length) {
     await repo.updateEntity(orgId, entityId, patch);

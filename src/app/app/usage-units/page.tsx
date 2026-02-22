@@ -20,6 +20,55 @@ type FieldDraft = {
   field_type: UsageField["field_type"];
 };
 
+type IconProps = { className?: string };
+
+function IconAdd({ className = "h-4 w-4" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+function IconEdit({ className = "h-4 w-4" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+    </svg>
+  );
+}
+
+function IconTrash({ className = "h-4 w-4" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
+  );
+}
+
+function IconSave({ className = "h-4 w-4" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+function IconCancel({ className = "h-4 w-4" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}
+
 async function getTokenOrRedirect(router: { replace: (href: string) => void }) {
   const { data } = await supabaseAuth.auth.getSession();
   const token = data.session?.access_token;
@@ -39,6 +88,8 @@ export default function UsageUnitsPage() {
 
   const [fields, setFields] = useState<UsageField[]>([]);
   const [newUnitName, setNewUnitName] = useState("");
+  const [editingUnitId, setEditingUnitId] = useState<string>("");
+  const [editUnitName, setEditUnitName] = useState("");
   const [newFieldName, setNewFieldName] = useState("");
   const [newFieldType, setNewFieldType] = useState<UsageField["field_type"]>("text");
   const [editingFieldId, setEditingFieldId] = useState<string>("");
@@ -130,6 +181,51 @@ export default function UsageUnitsPage() {
     }
 
     if (selectedId === unitId) setSelectedId("");
+    await loadUnits();
+    setBusy(false);
+  }
+
+  function startEditUnit(unit: UsageUnit) {
+    setEditingUnitId(unit.id);
+    setEditUnitName(unit.name);
+    setMsg("");
+  }
+
+  function cancelEditUnit() {
+    setEditingUnitId("");
+    setEditUnitName("");
+    setMsg("");
+  }
+
+  async function saveUnit() {
+    if (!editingUnitId) return;
+    const name = editUnitName.trim();
+    if (!name) {
+      setMsg("Nombre requerido");
+      return;
+    }
+
+    setBusy(true);
+    setMsg("");
+    const token = await getTokenOrRedirect(router);
+    if (!token) return;
+
+    const res = await fetch(`/api/usage-units?id=${encodeURIComponent(editingUnitId)}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ name }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMsg(json.error || "No se pudo actualizar la unidad");
+      setBusy(false);
+      return;
+    }
+
+    cancelEditUnit();
     await loadUnits();
     setBusy(false);
   }
@@ -295,8 +391,24 @@ export default function UsageUnitsPage() {
               style={{ flex: 1, padding: 10 }}
               disabled={busy}
             />
-            <button onClick={createUnit} disabled={busy} style={{ padding: "10px 12px" }}>
-              Crear
+            <button
+              onClick={createUnit}
+              disabled={busy}
+              title="Crear unidad"
+              aria-label="Crear unidad"
+              style={{
+                height: 40,
+                width: 40,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: 10,
+                border: "1px solid #86efac",
+                background: "#dcfce7",
+                color: "#166534",
+              }}
+            >
+              <IconAdd />
             </button>
           </div>
 
@@ -307,22 +419,133 @@ export default function UsageUnitsPage() {
               <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                 {units.map((u) => (
                   <li key={u.id} style={{ marginBottom: 8, display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
-                    <button
-                      onClick={() => setSelectedId(u.id)}
-                      style={{
-                        width: "100%",
-                        textAlign: "left",
-                        padding: 10,
-                        border: "1px solid #eee",
-                        background: u.id === selectedId ? "#f7f7f7" : "white",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <strong>{u.name}</strong>
-                    </button>
-                    <button onClick={() => void deleteUnit(u.id)} disabled={busy} style={{ padding: "10px 12px" }}>
-                      Eliminar
-                    </button>
+                    {editingUnitId === u.id ? (
+                      <>
+                        <div style={{ display: "grid", gap: 6 }}>
+                          <input
+                            value={editUnitName}
+                            onChange={(e) => setEditUnitName(e.target.value)}
+                            style={{ width: "100%", padding: 10 }}
+                            disabled={busy}
+                          />
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button
+                              onClick={() => void saveUnit()}
+                              disabled={busy}
+                              title="Guardar unidad"
+                              aria-label="Guardar unidad"
+                              style={{
+                                height: 34,
+                                width: 34,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                borderRadius: 8,
+                                border: "1px solid #86efac",
+                                background: "#dcfce7",
+                                color: "#166534",
+                              }}
+                            >
+                              <IconSave />
+                            </button>
+                            <button
+                              onClick={cancelEditUnit}
+                              disabled={busy}
+                              title="Cancelar edición"
+                              aria-label="Cancelar edición"
+                              style={{
+                                height: 34,
+                                width: 34,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                borderRadius: 8,
+                                border: "1px solid #cbd5e1",
+                                background: "#f8fafc",
+                                color: "#475569",
+                              }}
+                            >
+                              <IconCancel />
+                            </button>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => void deleteUnit(u.id)}
+                          disabled={busy}
+                          title="Eliminar unidad"
+                          aria-label="Eliminar unidad"
+                          style={{
+                            height: 40,
+                            width: 40,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            borderRadius: 10,
+                            border: "1px solid #fecaca",
+                            background: "#fef2f2",
+                            color: "#b91c1c",
+                          }}
+                        >
+                          <IconTrash />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => setSelectedId(u.id)}
+                          style={{
+                            width: "100%",
+                            textAlign: "left",
+                            padding: 10,
+                            border: "1px solid #eee",
+                            background: u.id === selectedId ? "#f7f7f7" : "white",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <strong>{u.name}</strong>
+                        </button>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button
+                            onClick={() => startEditUnit(u)}
+                            disabled={busy}
+                            title="Editar unidad"
+                            aria-label="Editar unidad"
+                            style={{
+                              height: 40,
+                              width: 40,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: 10,
+                              border: "1px solid #bfdbfe",
+                              background: "#eff6ff",
+                              color: "#1d4ed8",
+                            }}
+                          >
+                            <IconEdit />
+                          </button>
+                          <button
+                            onClick={() => void deleteUnit(u.id)}
+                            disabled={busy}
+                            title="Eliminar unidad"
+                            aria-label="Eliminar unidad"
+                            style={{
+                              height: 40,
+                              width: 40,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: 10,
+                              border: "1px solid #fecaca",
+                              background: "#fef2f2",
+                              color: "#b91c1c",
+                            }}
+                          >
+                            <IconTrash />
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -369,8 +592,24 @@ export default function UsageUnitsPage() {
                   <option value="select">select</option>
                 </select>
 
-                <button onClick={createField} disabled={busy} style={{ padding: 10 }}>
-                  Agregar
+                <button
+                  onClick={createField}
+                  disabled={busy}
+                  title="Agregar campo"
+                  aria-label="Agregar campo"
+                  style={{
+                    height: 40,
+                    width: 40,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 10,
+                    border: "1px solid #86efac",
+                    background: "#dcfce7",
+                    color: "#166534",
+                  }}
+                >
+                  <IconAdd />
                 </button>
               </div>
 
@@ -443,20 +682,84 @@ export default function UsageUnitsPage() {
                           <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
                             {editingFieldId === f.id ? (
                               <div style={{ display: "flex", gap: 8 }}>
-                                <button onClick={saveField} disabled={busy} style={{ padding: "6px 10px" }}>
-                                  Guardar
+                                <button
+                                  onClick={saveField}
+                                  disabled={busy}
+                                  title="Guardar campo"
+                                  aria-label="Guardar campo"
+                                  style={{
+                                    height: 34,
+                                    width: 34,
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    borderRadius: 8,
+                                    border: "1px solid #86efac",
+                                    background: "#dcfce7",
+                                    color: "#166534",
+                                  }}
+                                >
+                                  <IconSave />
                                 </button>
-                                <button onClick={cancelEditField} disabled={busy} style={{ padding: "6px 10px" }}>
-                                  Cancelar
+                                <button
+                                  onClick={cancelEditField}
+                                  disabled={busy}
+                                  title="Cancelar edición"
+                                  aria-label="Cancelar edición"
+                                  style={{
+                                    height: 34,
+                                    width: 34,
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    borderRadius: 8,
+                                    border: "1px solid #cbd5e1",
+                                    background: "#f8fafc",
+                                    color: "#475569",
+                                  }}
+                                >
+                                  <IconCancel />
                                 </button>
                               </div>
                             ) : (
                               <div style={{ display: "flex", gap: 8 }}>
-                                <button onClick={() => startEditField(f)} disabled={busy} style={{ padding: "6px 10px" }}>
-                                  Editar
+                                <button
+                                  onClick={() => startEditField(f)}
+                                  disabled={busy}
+                                  title="Editar campo"
+                                  aria-label="Editar campo"
+                                  style={{
+                                    height: 34,
+                                    width: 34,
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    borderRadius: 8,
+                                    border: "1px solid #bfdbfe",
+                                    background: "#eff6ff",
+                                    color: "#1d4ed8",
+                                  }}
+                                >
+                                  <IconEdit />
                                 </button>
-                                <button onClick={() => void deleteField(f.id)} disabled={busy} style={{ padding: "6px 10px" }}>
-                                  Eliminar
+                                <button
+                                  onClick={() => void deleteField(f.id)}
+                                  disabled={busy}
+                                  title="Eliminar campo"
+                                  aria-label="Eliminar campo"
+                                  style={{
+                                    height: 34,
+                                    width: 34,
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    borderRadius: 8,
+                                    border: "1px solid #fecaca",
+                                    background: "#fef2f2",
+                                    color: "#b91c1c",
+                                  }}
+                                >
+                                  <IconTrash />
                                 </button>
                               </div>
                             )}

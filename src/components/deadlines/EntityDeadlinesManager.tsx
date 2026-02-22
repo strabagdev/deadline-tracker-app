@@ -6,6 +6,7 @@ import { Loader } from "@/components/ui/loader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { computeDateStatus, computeUsageStatus, normalizeDeadlinesMode } from "@/lib/api/deadlinesComputations";
 
 type DeadlineType = {
   id: string;
@@ -46,6 +47,16 @@ type UsageLogRow = {
   value: number;
   logged_at: string;
   created_at?: string;
+  field_values?: Array<{
+    usage_field_id: string;
+    name: string;
+    key: string;
+    field_type: "text" | "number" | "date" | "boolean" | "select";
+    value_text: string | null;
+    value_number: number | null;
+    value_date: string | null;
+    value_boolean: boolean | null;
+  }>;
 };
 
 type UsageUnit = {
@@ -77,13 +88,71 @@ function isoToLocalDateInput(iso: string) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function getDeadlineStateDotClass(d: DeadlineRow) {
-  if (d.computed?.status !== "ok") return "bg-slate-300";
-  if (d.computed?.semaphore === "expired") return "bg-rose-600";
-  if (d.computed?.semaphore === "critical") return "bg-red-500";
-  if (d.computed?.semaphore === "urgent") return "bg-orange-500";
-  if (d.computed?.semaphore === "warn") return "bg-amber-400";
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function computeAutoDailyAverageFromLogs(logs: UsageLogRow[]) {
+  const sinceTs = Date.now() - 30 * MS_PER_DAY;
+  const inWindow = logs
+    .filter((l) => new Date(l.logged_at).getTime() >= sinceTs)
+    .slice()
+    .sort((a, b) => new Date(a.logged_at).getTime() - new Date(b.logged_at).getTime());
+  if (inWindow.length < 2) return null;
+
+  const first = inWindow[0];
+  const last = inWindow[inWindow.length - 1];
+  const v0 = Number(first.value);
+  const v1 = Number(last.value);
+  if (!Number.isFinite(v0) || !Number.isFinite(v1)) return null;
+
+  const t0 = new Date(first.logged_at).getTime();
+  const t1 = new Date(last.logged_at).getTime();
+  const days = Math.floor((t1 - t0) / MS_PER_DAY);
+  if (!Number.isFinite(days) || days < 1) return null;
+
+  const delta = v1 - v0;
+  if (!Number.isFinite(delta) || delta <= 0) return null;
+  const avg = delta / days;
+  if (!Number.isFinite(avg) || avg <= 0) return null;
+  return avg;
+}
+
+function getDeadlineStateDotClass(d: DeadlineRow, usageLogs: UsageLogRow[]) {
+  if ((d.deadline_types?.measure_by ?? "date") === "date") {
+    const st = computeDateStatus(d.next_due_date);
+    if (st.status !== "ok") return "bg-slate-300";
+    if (st.semaphore === "expired") return "bg-rose-600";
+    if (st.semaphore === "critical") return "bg-orange-500";
+    if (st.semaphore === "urgent") return "bg-amber-400";
+    if (st.semaphore === "warn") return "bg-yellow-400";
+    return "bg-emerald-500";
+  }
+
+  const latestUsage = usageLogs.length > 0 ? Number(usageLogs[0].value) : null;
+  const mode = normalizeDeadlinesMode(d.usage_daily_average_mode);
+  const manualAvg = Number.isFinite(Number(d.usage_daily_average)) ? Number(d.usage_daily_average) : null;
+  const autoAvg = computeAutoDailyAverageFromLogs(usageLogs);
+  const effectiveAvg = mode === "manual" ? manualAvg : autoAvg || manualAvg;
+
+  const st = computeUsageStatus({
+    latestUsage,
+    lastDoneUsage: d.last_done_usage ?? null,
+    frequency: d.frequency ?? null,
+    dailyAverage: effectiveAvg,
+  });
+  if (st.status !== "ok") return "bg-slate-300";
+  if (st.semaphore === "expired") return "bg-rose-600";
+  if (st.semaphore === "critical") return "bg-orange-500";
+  if (st.semaphore === "urgent") return "bg-amber-400";
+  if (st.semaphore === "warn") return "bg-yellow-400";
   return "bg-emerald-500";
+}
+
+function renderUsageFieldValue(v: NonNullable<UsageLogRow["field_values"]>[number]) {
+  if (v.value_boolean !== null) return v.value_boolean ? "Sí" : "No";
+  if (v.value_number !== null) return String(v.value_number);
+  if (v.value_date) return v.value_date;
+  if (v.value_text) return v.value_text;
+  return "—";
 }
 
 export default function EntityDeadlinesManager({
@@ -617,9 +686,20 @@ export default function EntityDeadlinesManager({
                   <div className="space-y-1.5">
                     {usageLogs.map((l) => (
                       <div key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white px-2.5 py-2">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="font-semibold">{l.value}</Badge>
-                          <span className="text-xs text-slate-500">{new Date(l.logged_at).toLocaleDateString()}</span>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" className="font-semibold">{l.value}</Badge>
+                            <span className="text-xs text-slate-500">{new Date(l.logged_at).toLocaleDateString()}</span>
+                          </div>
+                          {Array.isArray(l.field_values) && l.field_values.length > 0 ? (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {l.field_values.map((fv) => (
+                                <Badge key={`${l.id}-${fv.usage_field_id}`} variant="outline" className="bg-slate-50 text-[10px] text-slate-600">
+                                  {(fv.name || fv.key || "Campo")}: {renderUsageFieldValue(fv)}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                         <Button onClick={() => deleteUsageLog(l.id)} disabled={usageLogsBusy} variant="outline" size="sm">
                           Eliminar
@@ -816,7 +896,7 @@ export default function EntityDeadlinesManager({
                         title="Estado actual del vencimiento"
                         aria-label="Estado actual del vencimiento"
                       >
-                        <span className={`h-2.5 w-2.5 rounded-full ${getDeadlineStateDotClass(d)}`} />
+                        <span className={`h-2.5 w-2.5 rounded-full ${getDeadlineStateDotClass(d, usageLogs)}`} />
                       </span>
                       <div className="truncate text-sm font-semibold text-slate-900">{t?.name ?? "Tipo desconocido"}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
@@ -885,7 +965,7 @@ export default function EntityDeadlinesManager({
                         title="Estado actual del vencimiento"
                         aria-label="Estado actual del vencimiento"
                       >
-                        <span className={`h-2.5 w-2.5 rounded-full ${getDeadlineStateDotClass(d)}`} />
+                        <span className={`h-2.5 w-2.5 rounded-full ${getDeadlineStateDotClass(d, usageLogs)}`} />
                       </span>
                       <div className="text-sm font-semibold text-slate-900">{t?.name ?? "Tipo desconocido"}</div>
                     </div>

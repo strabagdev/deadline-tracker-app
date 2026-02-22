@@ -13,6 +13,7 @@ import {
   handleDeadlinesPut,
   type DeadlinesRepo,
 } from "@/lib/api/deadlinesService";
+import { syncForecastAndAlertsForEntity } from "@/lib/api/forecastAlertsSync";
 
 type MeasureBy = "date" | "usage";
 type DataClient = ReturnType<typeof createDataServerClient>;
@@ -342,6 +343,20 @@ export async function POST(req: Request) {
     }
     const body = await req.json().catch(() => ({}));
     const response = await handleDeadlinesPost(access.organizationId, body, makeDeadlinesRepo(db));
+    const entityId = typeof response.body?.entity_id === "string" ? response.body.entity_id : "";
+    if (response.status < 400 && entityId) {
+      try {
+        await syncForecastAndAlertsForEntity(db, access.organizationId, entityId);
+      } catch (syncErr: unknown) {
+        return NextResponse.json(
+          {
+            ...response.body,
+            sync_warning: getErrorMessage(syncErr),
+          },
+          { status: response.status }
+        );
+      }
+    }
     return NextResponse.json(response.body, { status: response.status });
   } catch (e: unknown) {
     return NextResponse.json({ error: getErrorMessage(e), code: "INTERNAL_ERROR" }, { status: 500 });
@@ -361,6 +376,20 @@ export async function PUT(req: Request) {
     }
     const body = await req.json().catch(() => ({}));
     const response = await handleDeadlinesPut(access.organizationId, body, makeDeadlinesRepo(db));
+    const entityId = typeof response.body?.entity_id === "string" ? response.body.entity_id : "";
+    if (response.status < 400 && entityId) {
+      try {
+        await syncForecastAndAlertsForEntity(db, access.organizationId, entityId);
+      } catch (syncErr: unknown) {
+        return NextResponse.json(
+          {
+            ...response.body,
+            sync_warning: getErrorMessage(syncErr),
+          },
+          { status: response.status }
+        );
+      }
+    }
     return NextResponse.json(response.body, { status: response.status });
   } catch (e: unknown) {
     return NextResponse.json({ error: getErrorMessage(e), code: "INTERNAL_ERROR" }, { status: 500 });
@@ -381,6 +410,20 @@ export async function DELETE(req: Request) {
     const url = new URL(req.url);
     const id = String(url.searchParams.get("id") ?? "").trim();
     const response = await handleDeadlinesDelete(access.organizationId, id, makeDeadlinesRepo(db));
+    const entityId = typeof response.body?.entity_id === "string" ? response.body.entity_id : "";
+    if (response.status < 400 && entityId) {
+      try {
+        await syncForecastAndAlertsForEntity(db, access.organizationId, entityId);
+      } catch (syncErr: unknown) {
+        return NextResponse.json(
+          {
+            ...response.body,
+            sync_warning: getErrorMessage(syncErr),
+          },
+          { status: response.status }
+        );
+      }
+    }
     return NextResponse.json(response.body, { status: response.status });
   } catch (e: unknown) {
     return NextResponse.json({ error: getErrorMessage(e), code: "INTERNAL_ERROR" }, { status: 500 });

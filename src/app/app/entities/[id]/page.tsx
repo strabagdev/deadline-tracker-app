@@ -15,8 +15,10 @@ type EntityDetail = {
   name: string;
   entity_type_id: string;
   tracks_usage: boolean;
+  usage_unit_id?: string | null;
   created_at: string;
   entity_type: { id: string; name: string; icon: string | null } | null;
+  usage_unit?: { id: string; name: string; is_active: boolean } | null;
   fields: Array<{
     id: string;
     name: string;
@@ -29,6 +31,8 @@ type EntityDetail = {
     value_updated_at: string | null;
   }>;
 };
+
+type UsageUnit = { id: string; name: string; is_active: boolean };
 
 async function getTokenOrRedirect(router: { replace: (path: string) => void }) {
   const { data } = await supabaseAuth.auth.getSession();
@@ -50,10 +54,12 @@ export default function EntityDetailPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [role, setRole] = useState<string>("");
+  const [usageUnits, setUsageUnits] = useState<UsageUnit[]>([]);
 
   const [editMode, setEditMode] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [draftTracksUsage, setDraftTracksUsage] = useState(false);
+  const [draftUsageUnitId, setDraftUsageUnitId] = useState<string>("");
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
 
   const canSave = useMemo(() => {
@@ -71,6 +77,7 @@ export default function EntityDetailPage() {
   function hydrateDraft(from: EntityDetail) {
     setDraftName(from.name);
     setDraftTracksUsage(from.tracks_usage);
+    setDraftUsageUnitId(String(from.usage_unit_id ?? ""));
     const map: Record<string, string> = {};
     from.fields.forEach((f) => (map[f.id] = f.value_text ?? ""));
     setDraftValues(map);
@@ -83,17 +90,21 @@ export default function EntityDetailPage() {
     const token = await getTokenOrRedirect(router);
     if (!token) return;
 
-    const [res, roleRes] = await Promise.all([
+    const [res, roleRes, unitsRes] = await Promise.all([
       fetch(`/api/entities?id=${encodeURIComponent(id)}`, {
         headers: { Authorization: `Bearer ${token}` },
       }),
       fetch("/api/settings/semaphore", {
         headers: { Authorization: `Bearer ${token}` },
       }),
+      fetch("/api/usage-units?active=1", {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
     ]);
 
     const json = await res.json().catch(() => ({}));
     const roleJson = await roleRes.json().catch(() => ({}));
+    const unitsJson = await unitsRes.json().catch(() => ({}));
     setRole(typeof roleJson?.role === "string" ? roleJson.role : "");
     if (!res.ok) {
       setMsg(json.error || "No se pudo cargar la entidad");
@@ -104,6 +115,11 @@ export default function EntityDetailPage() {
 
     const e = json.entity ?? null;
     setEntity(e);
+    if (unitsRes.ok) {
+      setUsageUnits((unitsJson.usage_units ?? []) as UsageUnit[]);
+    } else {
+      setUsageUnits([]);
+    }
     setLoading(false);
 
     if (e && !editMode) hydrateDraft(e);
@@ -121,6 +137,7 @@ export default function EntityDetailPage() {
     const payload = {
       name: draftName.trim(),
       tracks_usage: draftTracksUsage,
+      usage_unit_id: draftTracksUsage ? (draftUsageUnitId || null) : null,
       field_values: Object.entries(draftValues).map(([entity_field_id, value_text]) => ({
         entity_field_id,
         value_text,
@@ -264,6 +281,9 @@ export default function EntityDetailPage() {
                   <div className="flex flex-wrap items-center gap-2 md:shrink-0 md:flex-nowrap">
                     <Badge variant="outline">Tipo: {entity.entity_type?.name ?? "(sin tipo)"}</Badge>
                     <Badge variant="outline">{entity.tracks_usage ? "Registra uso" : "Sin uso"}</Badge>
+                    {entity.tracks_usage ? (
+                      <Badge variant="outline">Unidad: {entity.usage_unit?.name ?? "Sin unidad"}</Badge>
+                    ) : null}
                     <Badge variant="outline">Creado: {new Date(entity.created_at).toLocaleDateString()}</Badge>
                     {!canDelete ? <Badge variant="outline">Eliminar: solo owner/admin</Badge> : null}
                   </div>
@@ -296,6 +316,22 @@ export default function EntityDetailPage() {
                       />
                       tracks_usage (registrar uso)
                     </label>
+                    <div className="mt-2 grid gap-1">
+                      <span className="text-[11px] font-medium text-slate-500">Unidad de uso</span>
+                      <select
+                        value={draftUsageUnitId}
+                        onChange={(e) => setDraftUsageUnitId(e.target.value)}
+                        disabled={busy || !draftTracksUsage}
+                        className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-100"
+                      >
+                        <option value="">Sin unidad</option>
+                        {usageUnits.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
               </CardContent>
