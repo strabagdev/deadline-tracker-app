@@ -53,17 +53,21 @@ function escapeHtml(v: string) {
     .replaceAll("'", "&#39;");
 }
 
-function buildPrintHtml(rows: Row[], title: string, subtitle: string) {
-      const tableRows = rows
+function buildPrintHtml(rows: Row[], dynamicColumns: string[], title: string, subtitle: string) {
+  const dynamicHead = dynamicColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join("");
+  const tableRows = rows
     .map((r) => {
-      const fields = r.field_values.map((fv) => `${fv.name}: ${fv.value}`).join(" · ");
+      const byName = new Map(r.field_values.map((fv) => [fv.name, fv.value]));
+      const dynamicCells = dynamicColumns
+        .map((c) => `<td>${escapeHtml(byName.get(c) ?? "—")}</td>`)
+        .join("");
       return `<tr>
         <td>${escapeHtml(r.entity_name)}</td>
         <td>${escapeHtml(r.entity_type_name)}</td>
         <td>${escapeHtml(formatBusinessDate(r.logged_on))}</td>
         <td>${escapeHtml(r.value_display)}</td>
         <td>${escapeHtml(r.usage_unit_name || "—")}</td>
-        <td>${escapeHtml(fields || "—")}</td>
+        ${dynamicCells}
       </tr>`;
     })
     .join("");
@@ -93,7 +97,7 @@ function buildPrintHtml(rows: Row[], title: string, subtitle: string) {
           <th>Fecha</th>
           <th>Valor</th>
           <th>Unidad</th>
-          <th>Campos dinámicos</th>
+          ${dynamicHead}
         </tr>
       </thead>
       <tbody>${tableRows}</tbody>
@@ -182,18 +186,32 @@ export default function UsageReportsPage() {
     });
   }, [q, rows]);
 
+  const dynamicColumns = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of filteredRows) {
+      for (const fv of r.field_values) {
+        const name = String(fv.name ?? "").trim();
+        if (name) set.add(name);
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+  }, [filteredRows]);
+
   async function exportExcel() {
     setBusy(true);
     try {
       const csvRows = [
-        ["Entidad", "Tipo entidad", "Fecha", "Valor", "Unidad", "Campos dinámicos"],
+        ["Entidad", "Tipo entidad", "Fecha", "Valor", "Unidad", ...dynamicColumns],
         ...filteredRows.map((r) => [
           r.entity_name,
           r.entity_type_name,
           formatBusinessDate(r.logged_on),
           r.value_display,
           r.usage_unit_name || "",
-          r.field_values.map((fv) => `${fv.name}: ${fv.value}`).join(" | "),
+          ...dynamicColumns.map((col) => {
+            const found = r.field_values.find((fv) => fv.name === col);
+            return found?.value ?? "";
+          }),
         ]),
       ];
       const csv = toCsv(csvRows);
@@ -217,7 +235,7 @@ export default function UsageReportsPage() {
       const subtitle = `Filtro: ${entityTypeId === "all" ? "Todos los tipos" : "Tipo específico"} · Fecha: ${
         dateMode === "single" ? (singleDate || "—") : `${dateFrom || "—"} a ${dateTo || "—"}`
       } · Registros: ${filteredRows.length}`;
-      const html = buildPrintHtml(filteredRows, "Reporte de Valores de Uso", subtitle);
+      const html = buildPrintHtml(filteredRows, dynamicColumns, "Reporte de Valores de Uso", subtitle);
       const win = window.open("", "_blank");
       if (!win) {
         setErrorMsg("No se pudo abrir la ventana de impresión. Revisa el bloqueo de popups.");
@@ -319,26 +337,41 @@ export default function UsageReportsPage() {
             <p className="text-sm text-slate-500">No hay registros para los filtros seleccionados.</p>
           ) : (
             <div className="overflow-x-auto rounded-xl border">
-              <div className="grid min-w-[980px] grid-cols-[1.2fr_0.9fr_0.9fr_0.9fr_0.8fr_1.5fr] border-b bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
-                <div>Entidad</div>
-                <div>Tipo</div>
-                <div>Fecha</div>
-                <div>Valor</div>
-                <div>Unidad</div>
-                <div>Campos dinámicos</div>
-              </div>
-              {filteredRows.map((r) => (
-                <div key={r.id} className="grid min-w-[980px] grid-cols-[1.2fr_0.9fr_0.9fr_0.9fr_0.8fr_1.5fr] border-b px-3 py-2 text-sm">
-                  <div className="truncate font-medium text-slate-800">{r.entity_name}</div>
-                  <div className="truncate text-slate-700">{r.entity_type_name}</div>
-                  <div className="text-slate-700">{formatBusinessDate(r.logged_on)}</div>
-                  <div className="truncate text-slate-800">{r.value_display}</div>
-                  <div className="truncate text-slate-600">{r.usage_unit_name || "—"}</div>
-                  <div className="truncate text-slate-600">
-                    {r.field_values.length > 0 ? r.field_values.map((fv) => `${fv.name}: ${fv.value}`).join(" · ") : "—"}
-                  </div>
-                </div>
-              ))}
+              <table className="min-w-[980px] w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b bg-slate-50 text-[11px] text-slate-500">
+                    <th className="px-3 py-2 text-left font-medium">Entidad</th>
+                    <th className="px-3 py-2 text-left font-medium">Tipo</th>
+                    <th className="px-3 py-2 text-left font-medium">Fecha</th>
+                    <th className="px-3 py-2 text-left font-medium">Valor</th>
+                    <th className="px-3 py-2 text-left font-medium">Unidad</th>
+                    {dynamicColumns.map((col) => (
+                      <th key={col} className="px-3 py-2 text-left font-medium">
+                        {col}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.map((r) => {
+                    const byName = new Map(r.field_values.map((fv) => [fv.name, fv.value]));
+                    return (
+                      <tr key={r.id} className="border-b">
+                        <td className="px-3 py-2 font-medium text-slate-800">{r.entity_name}</td>
+                        <td className="px-3 py-2 text-slate-700">{r.entity_type_name}</td>
+                        <td className="px-3 py-2 text-slate-700">{formatBusinessDate(r.logged_on)}</td>
+                        <td className="px-3 py-2 text-slate-800">{r.value_display}</td>
+                        <td className="px-3 py-2 text-slate-600">{r.usage_unit_name || "—"}</td>
+                        {dynamicColumns.map((col) => (
+                          <td key={`${r.id}-${col}`} className="px-3 py-2 text-slate-600">
+                            {byName.get(col) ?? "—"}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>

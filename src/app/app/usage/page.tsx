@@ -29,7 +29,7 @@ type EntityRow = {
 };
 
 type LatestUsageByEntity = Record<string, { value: number; logged_at: string; logged_on?: string | null }>;
-type UsageUnit = { id: string; name: string; is_active: boolean };
+type UsageUnit = { id: string; name: string; is_active: boolean; show_in_usage_records?: boolean };
 type UsageField = {
   id: string;
   usage_unit_id: string;
@@ -137,12 +137,14 @@ export default function UsagePage() {
 
   function getEntityUsageMeta(entity: EntityRow) {
     const unitId = String(entity.usage_unit_id ?? "").trim();
-    if (!unitId) return { unitName: "", reason: "La entidad no tiene unidad de uso asignada." };
-    const unitName = usageUnits.find((u) => u.id === unitId)?.name ?? "";
-    if (!unitName) return { unitName: "", reason: "La unidad asignada no está activa o no existe en el catálogo." };
+    if (!unitId) return { unitName: "", showUnitName: false, reason: "La entidad no tiene unidad de uso asignada." };
+    const unit = usageUnits.find((u) => u.id === unitId) ?? null;
+    const unitName = unit?.name ?? "";
+    const showUnitName = unit?.show_in_usage_records !== false;
+    if (!unitName) return { unitName: "", showUnitName: false, reason: "La unidad asignada no está activa o no existe en el catálogo." };
     const fields = usageFieldsByUnit[unitId] ?? [];
-    if (fields.length === 0) return { unitName, reason: "Sin campos configurados para esta unidad." };
-    return { unitName, reason: "" };
+    if (fields.length === 0) return { unitName, showUnitName, reason: "Sin campos configurados para esta unidad." };
+    return { unitName, showUnitName, reason: "" };
   }
 
   async function saveUsage(entityId: string) {
@@ -462,7 +464,7 @@ export default function UsagePage() {
                         </div>
                       ) : (
                         <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1 text-[11px] text-slate-500">
-                          {usageMeta.unitName ? `Unidad: ${usageMeta.unitName}. ` : ""}
+                          {usageMeta.showUnitName && usageMeta.unitName ? `Unidad: ${usageMeta.unitName}. ` : ""}
                           {usageMeta.reason}
                         </div>
                       )}

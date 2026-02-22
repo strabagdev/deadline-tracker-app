@@ -29,7 +29,10 @@ type UsageLogJoin = {
         entity_type_id: string | null;
         usage_unit_id: string | null;
         entity_types?: { id: string; name: string | null } | { id: string; name: string | null }[] | null;
-        usage_units?: { id: string; name: string | null } | { id: string; name: string | null }[] | null;
+        usage_units?:
+          | { id: string; name: string | null; show_in_usage_records?: boolean | null }
+          | { id: string; name: string | null; show_in_usage_records?: boolean | null }[]
+          | null;
       }
     | {
         id: string;
@@ -37,7 +40,10 @@ type UsageLogJoin = {
         entity_type_id: string | null;
         usage_unit_id: string | null;
         entity_types?: { id: string; name: string | null } | { id: string; name: string | null }[] | null;
-        usage_units?: { id: string; name: string | null } | { id: string; name: string | null }[] | null;
+        usage_units?:
+          | { id: string; name: string | null; show_in_usage_records?: boolean | null }
+          | { id: string; name: string | null; show_in_usage_records?: boolean | null }[]
+          | null;
       }[]
     | null;
   usage_log_field_values?: UsageFieldValueJoin[] | null;
@@ -90,13 +96,13 @@ export async function GET(req: Request) {
         value_text,
         logged_on,
         logged_at,
-        entities(
+        entities!inner(
           id,
           name,
           entity_type_id,
           usage_unit_id,
           entity_types(id, name),
-          usage_units(id, name)
+          usage_units(id, name, show_in_usage_records)
         ),
         usage_log_field_values(
           usage_field_id,
@@ -121,10 +127,20 @@ export async function GET(req: Request) {
     if (error) throw error;
 
     const rowsRaw = (data ?? []) as UsageLogJoin[];
-    const rows = rowsRaw.map((r) => {
+    const rows = rowsRaw
+      .filter((r) => {
+        const entity = pickOne(r.entities);
+        if (!entity?.id) return false;
+        if (entityTypeId && entityTypeId !== "all") {
+          return String(entity.entity_type_id ?? "") === entityTypeId;
+        }
+        return true;
+      })
+      .map((r) => {
       const entity = pickOne(r.entities);
       const entityType = pickOne(entity?.entity_types ?? null);
       const unit = pickOne(entity?.usage_units ?? null);
+      const showUnit = unit?.show_in_usage_records !== false;
       const mainValueText = String(r.value_text ?? "").trim();
       const mainValueNumber = r.value != null && Number.isFinite(Number(r.value)) ? Number(r.value) : null;
       const mainValue = mainValueText || (mainValueNumber != null ? String(mainValueNumber) : "—");
@@ -142,7 +158,7 @@ export async function GET(req: Request) {
         entity_name: String(entity?.name ?? "Entidad"),
         entity_type_id: entity?.entity_type_id ? String(entity.entity_type_id) : null,
         entity_type_name: String(entityType?.name ?? "Sin tipo"),
-        usage_unit_name: String(unit?.name ?? ""),
+        usage_unit_name: showUnit ? String(unit?.name ?? "") : "",
         logged_on: String(r.logged_on),
         logged_at: String(r.logged_at),
         value: mainValueNumber,
@@ -150,7 +166,7 @@ export async function GET(req: Request) {
         value_display: mainValue,
         field_values: fieldValues,
       };
-    });
+      });
 
     const entityTypeOptions = Array.from(
       new Map(

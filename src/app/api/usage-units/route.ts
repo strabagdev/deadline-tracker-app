@@ -23,7 +23,7 @@ export async function GET(req: Request) {
     const onlyActive = new URL(req.url).searchParams.get("active") === "1";
     let q = db
       .from("usage_units")
-      .select("id, name, is_active, created_at")
+      .select("id, name, is_active, show_in_usage_records, created_at")
       .eq("organization_id", access.organizationId)
       .order("created_at", { ascending: false });
 
@@ -51,6 +51,7 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
     const name = String(body?.name ?? "").trim();
+    const showInUsageRecords = body?.show_in_usage_records == null ? true : Boolean(body.show_in_usage_records);
     if (!name) return NextResponse.json({ error: "name required", code: "BAD_REQUEST" }, { status: 400 });
 
     const { data, error } = await db
@@ -59,6 +60,7 @@ export async function POST(req: Request) {
         organization_id: access.organizationId,
         name,
         is_active: true,
+        show_in_usage_records: showInUsageRecords,
       })
       .select("id")
       .single();
@@ -93,6 +95,7 @@ export async function PUT(req: Request) {
       patch.name = name;
     }
     if (body?.is_active != null) patch.is_active = Boolean(body.is_active);
+    if (body?.show_in_usage_records != null) patch.show_in_usage_records = Boolean(body.show_in_usage_records);
 
     if (Object.keys(patch).length === 0) {
       return NextResponse.json({ error: "no fields to update", code: "BAD_REQUEST" }, { status: 400 });

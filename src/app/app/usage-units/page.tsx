@@ -4,7 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 
-type UsageUnit = { id: string; name: string; is_active: boolean; created_at: string };
+type UsageUnit = {
+  id: string;
+  name: string;
+  is_active: boolean;
+  show_in_usage_records: boolean;
+  created_at: string;
+};
 type UsageField = {
   id: string;
   usage_unit_id: string;
@@ -88,8 +94,10 @@ export default function UsageUnitsPage() {
 
   const [fields, setFields] = useState<UsageField[]>([]);
   const [newUnitName, setNewUnitName] = useState("");
+  const [newUnitShowInUsageRecords, setNewUnitShowInUsageRecords] = useState(true);
   const [editingUnitId, setEditingUnitId] = useState<string>("");
   const [editUnitName, setEditUnitName] = useState("");
+  const [editUnitShowInUsageRecords, setEditUnitShowInUsageRecords] = useState(true);
   const [newFieldName, setNewFieldName] = useState("");
   const [newFieldType, setNewFieldType] = useState<UsageField["field_type"]>("text");
   const [editingFieldId, setEditingFieldId] = useState<string>("");
@@ -146,7 +154,7 @@ export default function UsageUnitsPage() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, show_in_usage_records: newUnitShowInUsageRecords }),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -156,6 +164,7 @@ export default function UsageUnitsPage() {
     }
 
     setNewUnitName("");
+    setNewUnitShowInUsageRecords(true);
     await loadUnits();
     setBusy(false);
   }
@@ -188,12 +197,14 @@ export default function UsageUnitsPage() {
   function startEditUnit(unit: UsageUnit) {
     setEditingUnitId(unit.id);
     setEditUnitName(unit.name);
+    setEditUnitShowInUsageRecords(unit.show_in_usage_records !== false);
     setMsg("");
   }
 
   function cancelEditUnit() {
     setEditingUnitId("");
     setEditUnitName("");
+    setEditUnitShowInUsageRecords(true);
     setMsg("");
   }
 
@@ -216,7 +227,7 @@ export default function UsageUnitsPage() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, show_in_usage_records: editUnitShowInUsageRecords }),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -411,6 +422,15 @@ export default function UsageUnitsPage() {
               <IconAdd />
             </button>
           </div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12 }}>
+            <input
+              type="checkbox"
+              checked={newUnitShowInUsageRecords}
+              onChange={(e) => setNewUnitShowInUsageRecords(e.target.checked)}
+              disabled={busy}
+            />
+            Mostrar nombre de unidad en registros de uso
+          </label>
 
           <div style={{ marginTop: 12 }}>
             {units.length === 0 ? (
@@ -428,6 +448,15 @@ export default function UsageUnitsPage() {
                             style={{ width: "100%", padding: 10 }}
                             disabled={busy}
                           />
+                          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                            <input
+                              type="checkbox"
+                              checked={editUnitShowInUsageRecords}
+                              onChange={(e) => setEditUnitShowInUsageRecords(e.target.checked)}
+                              disabled={busy}
+                            />
+                            Mostrar unidad en registros
+                          </label>
                           <div style={{ display: "flex", gap: 8 }}>
                             <button
                               onClick={() => void saveUnit()}
@@ -503,6 +532,9 @@ export default function UsageUnitsPage() {
                           }}
                         >
                           <strong>{u.name}</strong>
+                          <div style={{ fontSize: 11, opacity: 0.7 }}>
+                            {u.show_in_usage_records ? "Visible en registros" : "Oculta en registros"}
+                          </div>
                         </button>
                         <div style={{ display: "flex", gap: 6 }}>
                           <button
