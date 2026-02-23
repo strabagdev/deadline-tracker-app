@@ -53,30 +53,51 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
 
-    const [{ data: entities, error: entitiesErr }, { data: units, error: unitsErr }] = await Promise.all([
-      db
-        .from("entities")
-        .select("id, name, usage_unit_id")
-        .eq("organization_id", access.organizationId)
-        .eq("entity_type_id", et.id)
-        .eq("tracks_usage", true)
-        .order("name", { ascending: true }),
-      db
+    const entitiesRes = await db
+      .from("entities")
+      .select("id, name, usage_unit_id")
+      .eq("organization_id", access.organizationId)
+      .eq("entity_type_id", et.id)
+      .eq("tracks_usage", true)
+      .order("name", { ascending: true });
+    const entities = entitiesRes.data;
+    const entitiesErr = entitiesRes.error;
+    if (entitiesErr) throw entitiesErr;
+
+    const unitsWithSuggested = await db
+      .from("usage_units")
+      .select("id, name, is_active, show_in_usage_records, suggested_values")
+      .eq("organization_id", access.organizationId)
+      .eq("is_active", true);
+    let units = unitsWithSuggested.data as Array<{
+      id: string;
+      name: string | null;
+      is_active: boolean;
+      show_in_usage_records?: boolean | null;
+      suggested_values?: string[] | null;
+    }> | null;
+    let unitsErr = unitsWithSuggested.error;
+    const unitsErrText = String((unitsErr as { message?: string } | null)?.message ?? "").toLowerCase();
+    if (unitsErr && unitsErrText.includes("suggested_values")) {
+      const unitsLegacy = await db
         .from("usage_units")
         .select("id, name, is_active, show_in_usage_records")
         .eq("organization_id", access.organizationId)
-        .eq("is_active", true),
-    ]);
-    if (entitiesErr) throw entitiesErr;
+        .eq("is_active", true);
+      units = (unitsLegacy.data ?? []).map((u) => ({ ...u, suggested_values: [] }));
+      unitsErr = unitsLegacy.error;
+    }
     if (unitsErr) throw unitsErr;
+    const entitiesSafe = entities ?? [];
+    const unitsSafe = units ?? [];
 
-    const unitIds = Array.from(new Set((entities ?? []).map((e) => String(e.usage_unit_id ?? "")).filter(Boolean)));
-    const entityIds = (entities ?? []).map((e) => String(e.id));
-    const fieldsByUnit: Record<string, Array<{ id: string; name: string; key: string; field_type: string }>> = {};
+    const unitIds = Array.from(new Set(entitiesSafe.map((e) => String(e.usage_unit_id ?? "")).filter(Boolean)));
+    const entityIds = entitiesSafe.map((e) => String(e.id));
+    const fieldsByUnit: Record<string, Array<{ id: string; name: string; key: string; field_type: string; options: unknown }>> = {};
     if (unitIds.length > 0) {
       const { data: fields, error: fieldsErr } = await db
         .from("usage_fields")
-        .select("id, usage_unit_id, name, key, field_type")
+        .select("id, usage_unit_id, name, key, field_type, options")
         .eq("organization_id", access.organizationId)
         .in("usage_unit_id", unitIds)
         .order("created_at", { ascending: true });
@@ -89,6 +110,7 @@ export async function GET(req: Request) {
           name: String(row.name ?? ""),
           key: String(row.key ?? ""),
           field_type: String(row.field_type ?? "text"),
+          options: row.options ?? null,
         });
       }
     }
@@ -112,8 +134,8 @@ export async function GET(req: Request) {
       }
     }
 
-    const unitsById = new Map((units ?? []).map((u) => [String(u.id), u]));
-    const normalizedEntities = (entities ?? []).map((e) => {
+    const unitsById = new Map((unitsSafe ?? []).map((u) => [String(u.id), u]));
+    const normalizedEntities = (entitiesSafe ?? []).map((e) => {
       const unitId = String(e.usage_unit_id ?? "");
       const unit = unitId ? unitsById.get(unitId) : null;
       return {
@@ -122,6 +144,9 @@ export async function GET(req: Request) {
         usage_unit_id: unitId || null,
         usage_unit_name: unit?.show_in_usage_records === false ? "" : String(unit?.name ?? ""),
         usage_unit_visible: unit?.show_in_usage_records !== false,
+        usage_unit_suggested_values: Array.isArray(unit?.suggested_values)
+          ? unit?.suggested_values.map((v) => String(v)).filter((v) => v.trim().length > 0)
+          : [],
         fields: unitId ? fieldsByUnit[unitId] ?? [] : [],
         logged_days: daysByEntity[String(e.id)] ?? [],
       };

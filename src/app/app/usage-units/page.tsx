@@ -9,6 +9,7 @@ type UsageUnit = {
   name: string;
   is_active: boolean;
   show_in_usage_records: boolean;
+  suggested_values?: string[];
   created_at: string;
 };
 type UsageField = {
@@ -24,9 +25,26 @@ type FieldDraft = {
   name: string;
   key: string;
   field_type: UsageField["field_type"];
+  options_text?: string;
 };
 
 type IconProps = { className?: string };
+
+function normalizeOptions(raw: unknown) {
+  const list = Array.isArray(raw)
+    ? raw
+    : typeof raw === "string"
+      ? raw.split(",")
+      : (raw && typeof raw === "object" && Array.isArray((raw as { values?: unknown }).values))
+        ? (raw as { values: unknown[] }).values
+        : (raw && typeof raw === "object" && Array.isArray((raw as { options?: unknown }).options))
+          ? (raw as { options: unknown[] }).options
+          : [];
+  return list
+    .map((v) => String(v ?? "").trim())
+    .filter((v) => v.length > 0)
+    .filter((v, i, arr) => arr.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i);
+}
 
 function IconAdd({ className = "h-4 w-4" }: IconProps) {
   return (
@@ -94,10 +112,12 @@ export default function UsageUnitsPage() {
 
   const [fields, setFields] = useState<UsageField[]>([]);
   const [newUnitName, setNewUnitName] = useState("");
+  const [selectedSuggestedValuesDraft, setSelectedSuggestedValuesDraft] = useState("");
   const [editingUnitId, setEditingUnitId] = useState<string>("");
   const [editUnitName, setEditUnitName] = useState("");
   const [newFieldName, setNewFieldName] = useState("");
   const [newFieldType, setNewFieldType] = useState<UsageField["field_type"]>("text");
+  const [newFieldOptions, setNewFieldOptions] = useState("");
   const [editingFieldId, setEditingFieldId] = useState<string>("");
   const [fieldDraft, setFieldDraft] = useState<FieldDraft | null>(null);
 
@@ -114,6 +134,10 @@ export default function UsageUnitsPage() {
     else setFields([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
+
+  useEffect(() => {
+    setSelectedSuggestedValuesDraft((selected?.suggested_values ?? []).join(", "));
+  }, [selected?.id, selected?.suggested_values]);
 
   async function loadUnits() {
     setMsg("");
@@ -236,6 +260,39 @@ export default function UsageUnitsPage() {
     setBusy(false);
   }
 
+  async function saveSelectedSuggestedValues() {
+    if (!selectedId) return;
+    setBusy(true);
+    setMsg("");
+    const token = await getTokenOrRedirect(router);
+    if (!token) return;
+
+    const suggestedValues = selectedSuggestedValuesDraft
+      .split(",")
+      .map((v) => v.trim())
+      .filter((v, i, arr) => v && arr.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i);
+
+    const res = await fetch(`/api/usage-units?id=${encodeURIComponent(selectedId)}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ suggested_values: suggestedValues }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMsg(json.error || "No se pudieron guardar los valores sugeridos");
+      setBusy(false);
+      return;
+    }
+
+    setUnits((prev) =>
+      prev.map((u) => (u.id === selectedId ? { ...u, suggested_values: suggestedValues } : u))
+    );
+    setBusy(false);
+  }
+
   async function setUnitVisibility(unitId: string, showInUsageRecords: boolean) {
     setBusy(true);
     setMsg("");
@@ -293,6 +350,10 @@ export default function UsageUnitsPage() {
     if (!token) return;
 
     const name = newFieldName.trim();
+    const options = newFieldOptions
+      .split(",")
+      .map((v) => v.trim())
+      .filter((v, i, arr) => v && arr.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i);
     if (!name) {
       setMsg("Nombre de campo requerido");
       setBusy(false);
@@ -309,6 +370,7 @@ export default function UsageUnitsPage() {
         usage_unit_id: selectedId,
         name,
         field_type: newFieldType,
+        options: options.length > 0 ? options : null,
       }),
     });
     const json = await res.json().catch(() => ({}));
@@ -320,6 +382,7 @@ export default function UsageUnitsPage() {
 
     setNewFieldName("");
     setNewFieldType("text");
+    setNewFieldOptions("");
     await loadFields(selectedId);
     setBusy(false);
   }
@@ -330,6 +393,7 @@ export default function UsageUnitsPage() {
       name: field.name,
       key: field.key,
       field_type: field.field_type,
+      options_text: normalizeOptions(field.options).join(", "),
     });
   }
 
@@ -351,7 +415,13 @@ export default function UsageUnitsPage() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(fieldDraft),
+      body: JSON.stringify({
+        ...fieldDraft,
+        options: String(fieldDraft.options_text ?? "")
+          .split(",")
+          .map((v) => v.trim())
+          .filter((v, i, arr) => v && arr.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i),
+      }),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -559,6 +629,25 @@ export default function UsageUnitsPage() {
                           <div style={{ fontSize: 11, opacity: 0.7 }}>
                             {u.show_in_usage_records ? "Visible en registros" : "Oculta en registros"}
                           </div>
+                          {(u.suggested_values ?? []).length > 0 ? (
+                            <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                              {(u.suggested_values ?? []).map((sv) => (
+                                <span
+                                  key={`${u.id}-${sv}`}
+                                  style={{
+                                    border: "1px solid #cbd5e1",
+                                    borderRadius: 999,
+                                    padding: "2px 8px",
+                                    fontSize: 11,
+                                    color: "#334155",
+                                    background: "#f8fafc",
+                                  }}
+                                >
+                                  {sv}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                         </button>
                         <div style={{ display: "flex", gap: 6 }}>
                           <button
@@ -619,11 +708,44 @@ export default function UsageUnitsPage() {
               <div style={{ opacity: 0.8, marginBottom: 10 }}>
                 Unidad seleccionada: <strong>{selected.name}</strong>
               </div>
+              <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                <label style={{ fontSize: 12, opacity: 0.85 }}>
+                  Valores sugeridos (fijo por tipo de unidad, coma separados)
+                </label>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
+                  <input
+                    value={selectedSuggestedValuesDraft}
+                    onChange={(e) => setSelectedSuggestedValuesDraft(e.target.value)}
+                    placeholder="Ej: P, D, N/A"
+                    style={{ width: "100%", padding: 10 }}
+                    disabled={busy}
+                  />
+                  <button
+                    onClick={() => void saveSelectedSuggestedValues()}
+                    disabled={busy}
+                    title="Guardar sugeridos de esta unidad"
+                    aria-label="Guardar sugeridos de esta unidad"
+                    style={{
+                      height: 40,
+                      width: 40,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRadius: 10,
+                      border: "1px solid #86efac",
+                      background: "#dcfce7",
+                      color: "#166534",
+                    }}
+                  >
+                    <IconSave />
+                  </button>
+                </div>
+              </div>
 
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 180px 110px",
+                  gridTemplateColumns: "1fr 180px 1fr 110px",
                   gap: 8,
                 }}
               >
@@ -647,6 +769,13 @@ export default function UsageUnitsPage() {
                   <option value="boolean">boolean</option>
                   <option value="select">select</option>
                 </select>
+                <input
+                  value={newFieldOptions}
+                  onChange={(e) => setNewFieldOptions(e.target.value)}
+                  placeholder="Opciones sugeridas (ej: P, D, N/A)"
+                  style={{ padding: 10 }}
+                  disabled={busy}
+                />
 
                 <button
                   onClick={createField}
@@ -679,6 +808,7 @@ export default function UsageUnitsPage() {
                         <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Nombre</th>
                         <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Key</th>
                         <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Tipo</th>
+                        <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Opciones</th>
                         <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Acciones</th>
                       </tr>
                     </thead>
@@ -733,6 +863,25 @@ export default function UsageUnitsPage() {
                               </select>
                             ) : (
                               f.field_type
+                            )}
+                          </td>
+                          <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
+                            {editingFieldId === f.id ? (
+                              <input
+                                value={fieldDraft?.options_text ?? ""}
+                                onChange={(e) =>
+                                  setFieldDraft((prev) => (prev ? { ...prev, options_text: e.target.value } : prev))
+                                }
+                                style={{ width: "100%", padding: 8 }}
+                                disabled={busy}
+                                placeholder="Opciones (coma separadas)"
+                              />
+                            ) : (
+                              <div style={{ fontSize: 11, opacity: 0.75 }}>
+                                {normalizeOptions(f.options).length > 0
+                                  ? normalizeOptions(f.options).join(", ")
+                                  : "—"}
+                              </div>
                             )}
                           </td>
                           <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>

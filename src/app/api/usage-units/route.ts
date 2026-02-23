@@ -8,6 +8,14 @@ function getErrorMessage(error: unknown): string {
   return "error";
 }
 
+function parseSuggestedValues(input: unknown) {
+  if (!Array.isArray(input)) return [] as string[];
+  return input
+    .map((v) => String(v ?? "").trim())
+    .filter((v) => v.length > 0)
+    .filter((v, i, arr) => arr.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i);
+}
+
 export async function GET(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
@@ -21,17 +29,33 @@ export async function GET(req: Request) {
     }
 
     const onlyActive = new URL(req.url).searchParams.get("active") === "1";
-    let q = db
+    let qWithSuggested = db
+      .from("usage_units")
+      .select("id, name, is_active, show_in_usage_records, suggested_values, created_at")
+      .eq("organization_id", access.organizationId)
+      .order("created_at", { ascending: false });
+    if (onlyActive) qWithSuggested = qWithSuggested.eq("is_active", true);
+
+    const withSuggested = await qWithSuggested;
+    if (!withSuggested.error) {
+      return NextResponse.json({ usage_units: withSuggested.data ?? [] });
+    }
+
+    const errText = String((withSuggested.error as { message?: string })?.message ?? "").toLowerCase();
+    if (!errText.includes("suggested_values")) throw withSuggested.error;
+
+    let qLegacy = db
       .from("usage_units")
       .select("id, name, is_active, show_in_usage_records, created_at")
       .eq("organization_id", access.organizationId)
       .order("created_at", { ascending: false });
+    if (onlyActive) qLegacy = qLegacy.eq("is_active", true);
 
-    if (onlyActive) q = q.eq("is_active", true);
-
-    const { data, error } = await q;
-    if (error) throw error;
-    return NextResponse.json({ usage_units: data ?? [] });
+    const legacy = await qLegacy;
+    if (legacy.error) throw legacy.error;
+    return NextResponse.json({
+      usage_units: (legacy.data ?? []).map((u) => ({ ...u, suggested_values: [] })),
+    });
   } catch (error: unknown) {
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
@@ -52,6 +76,7 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const name = String(body?.name ?? "").trim();
     const showInUsageRecords = body?.show_in_usage_records == null ? true : Boolean(body.show_in_usage_records);
+    const suggestedValues = parseSuggestedValues(body?.suggested_values);
     if (!name) return NextResponse.json({ error: "name required", code: "BAD_REQUEST" }, { status: 400 });
 
     const { data, error } = await db
@@ -61,6 +86,7 @@ export async function POST(req: Request) {
         name,
         is_active: true,
         show_in_usage_records: showInUsageRecords,
+        suggested_values: suggestedValues,
       })
       .select("id")
       .single();
@@ -96,16 +122,28 @@ export async function PUT(req: Request) {
     }
     if (body?.is_active != null) patch.is_active = Boolean(body.is_active);
     if (body?.show_in_usage_records != null) patch.show_in_usage_records = Boolean(body.show_in_usage_records);
+    if (body?.suggested_values != null) patch.suggested_values = parseSuggestedValues(body.suggested_values);
 
     if (Object.keys(patch).length === 0) {
       return NextResponse.json({ error: "no fields to update", code: "BAD_REQUEST" }, { status: 400 });
     }
 
-    const { error } = await db
+    let { error } = await db
       .from("usage_units")
       .update(patch)
       .eq("organization_id", access.organizationId)
       .eq("id", id);
+    const errText = String((error as { message?: string } | null)?.message ?? "").toLowerCase();
+    if (error && errText.includes("suggested_values")) {
+      const patchWithoutSuggested = { ...patch };
+      delete patchWithoutSuggested.suggested_values;
+      const fallback = await db
+        .from("usage_units")
+        .update(patchWithoutSuggested)
+        .eq("organization_id", access.organizationId)
+        .eq("id", id);
+      error = fallback.error;
+    }
     if (error) throw error;
 
     return NextResponse.json({ ok: true });

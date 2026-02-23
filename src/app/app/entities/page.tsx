@@ -211,6 +211,12 @@ export default function EntitiesPage() {
   }, []);
 
   useEffect(() => {
+    if (!createTracksUsage) return;
+    if (createUsageUnitId) return;
+    if (usageUnits.length > 0) setCreateUsageUnitId(usageUnits[0].id);
+  }, [createTracksUsage, createUsageUnitId, usageUnits]);
+
+  useEffect(() => {
     if (!deletedSuccess) return;
     setFlashMsg("Entidad eliminada correctamente.");
     router.replace("/app/entities", { scroll: false });
@@ -705,7 +711,7 @@ export default function EntitiesPage() {
                 </div>
 
                 {createTracksUsage ? (
-                  <div className="grid gap-1 md:max-w-[320px]">
+                  <div className="grid gap-1 md:max-w-[360px]">
                     <label htmlFor="entity_usage_unit" className="text-[11px] font-medium text-slate-500">Unidad de uso</label>
                     <select
                       id="entity_usage_unit"
@@ -714,13 +720,18 @@ export default function EntitiesPage() {
                       disabled={usageUnits.length === 0}
                       className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-100"
                     >
-                      <option value="">Sin unidad</option>
+                      <option value="">{usageUnits.length === 0 ? "Sin unidades activas" : "Sin unidad"}</option>
                       {usageUnits.map((u) => (
                         <option key={u.id} value={u.id}>
                           {u.name}
                         </option>
                       ))}
                     </select>
+                    {usageUnits.length === 0 ? (
+                      <p className="text-[11px] text-amber-700">
+                        No hay unidades de uso activas para seleccionar.
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
 

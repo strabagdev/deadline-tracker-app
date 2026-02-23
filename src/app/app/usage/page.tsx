@@ -31,7 +31,7 @@ type EntityRow = {
 
 type LatestUsageByEntity = Record<string, { value: number; logged_at: string; logged_on?: string | null }>;
 type ExistingDaysByEntity = Record<string, string[]>;
-type UsageUnit = { id: string; name: string; is_active: boolean; show_in_usage_records?: boolean };
+type UsageUnit = { id: string; name: string; is_active: boolean; show_in_usage_records?: boolean; suggested_values?: string[] };
 type UsageField = {
   id: string;
   usage_unit_id: string;
@@ -168,6 +168,34 @@ export default function UsagePage() {
     const fields = usageFieldsByUnit[unitId] ?? [];
     if (fields.length === 0) return { unitName, showUnitName, reason: "Sin campos configurados para esta unidad." };
     return { unitName, showUnitName, reason: "" };
+  }
+
+  function getEntitySuggestedValues(entity: EntityRow) {
+    const unitId = String(entity.usage_unit_id ?? "").trim();
+    if (!unitId) return [] as string[];
+    const unit = usageUnits.find((u) => u.id === unitId) ?? null;
+    if (!Array.isArray(unit?.suggested_values)) return [] as string[];
+    return unit.suggested_values
+      .map((v) => String(v ?? "").trim())
+      .filter((v) => v.length > 0)
+      .filter((v, i, arr) => arr.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i);
+  }
+
+  function getFieldOptions(field: UsageField) {
+    const raw = field.options;
+    const list = Array.isArray(raw)
+      ? raw
+      : typeof raw === "string"
+        ? raw.split(",")
+        : (raw && typeof raw === "object" && Array.isArray((raw as { values?: unknown }).values))
+          ? (raw as { values: unknown[] }).values
+          : (raw && typeof raw === "object" && Array.isArray((raw as { options?: unknown }).options))
+            ? (raw as { options: unknown[] }).options
+            : [];
+    return list
+      .map((v) => String(v ?? "").trim())
+      .filter((v) => v.length > 0)
+      .filter((v, i, arr) => arr.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i);
   }
 
   async function saveUsage(entityId: string) {
@@ -397,6 +425,7 @@ export default function UsagePage() {
                 const alreadyLogged = isAlreadyLoggedForDay(e.id, loggedAtDate);
                 const dynamicFields = getEntityUsageFields(e);
                 const usageMeta = getEntityUsageMeta(e);
+                const suggestedMainValues = getEntitySuggestedValues(e);
                 return (
                   <div key={e.id} className="grid min-w-[760px] grid-cols-[1.3fr_0.9fr_0.9fr_1fr] items-center gap-2 border-b px-3 py-2">
                     <div className="min-w-0">
@@ -409,13 +438,43 @@ export default function UsagePage() {
                     </div>
                     <div className="grid gap-2">
                       <div className="flex items-center gap-2">
-                        <Input
-                          value={draftByEntity[e.id] ?? ""}
-                          onChange={(ev) => setDraftByEntity((prev) => ({ ...prev, [e.id]: ev.target.value }))}
-                          placeholder="Ej: 1245 o Estado OK"
-                          className="h-9"
-                          disabled={saving || alreadyLogged}
-                        />
+                        {suggestedMainValues.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {suggestedMainValues.map((opt) => {
+                              const current = String(draftByEntity[e.id] ?? "").trim();
+                              const active = current === opt;
+                              return (
+                                <button
+                                  key={`${e.id}-suggested-${opt}`}
+                                  type="button"
+                                  onClick={() =>
+                                    setDraftByEntity((prev) => ({
+                                      ...prev,
+                                      [e.id]: current === opt ? "" : opt,
+                                    }))
+                                  }
+                                  disabled={saving || alreadyLogged}
+                                  className={[
+                                    "rounded-full border px-2 py-1 text-[10px] transition",
+                                    active
+                                      ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                      : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                                  ].join(" ")}
+                                >
+                                  {opt}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <Input
+                            value={draftByEntity[e.id] ?? ""}
+                            onChange={(ev) => setDraftByEntity((prev) => ({ ...prev, [e.id]: ev.target.value }))}
+                            placeholder="Ej: 1245 o Estado OK"
+                            className="h-9"
+                            disabled={saving || alreadyLogged}
+                          />
+                        )}
                         <Button
                           size="sm"
                           onClick={() => void saveUsage(e.id)}
@@ -437,13 +496,41 @@ export default function UsagePage() {
                         <div className="grid gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2">
                           {dynamicFields.map((f) => {
                             const current = fieldDraftByEntity[e.id]?.[f.id] ?? "";
-                            const selectOptions = Array.isArray(f.options)
-                              ? f.options.map((x) => String(x))
-                              : [];
+                            const selectOptions = getFieldOptions(f);
                             return (
                               <div key={f.id} className="grid gap-1">
                                 <label className="text-[11px] font-medium text-slate-600">{f.name}</label>
-                                {f.field_type === "boolean" ? (
+                                {selectOptions.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {selectOptions.map((opt) => {
+                                      const active = current === opt;
+                                      return (
+                                        <button
+                                          key={`${f.id}-${opt}`}
+                                          type="button"
+                                          onClick={() =>
+                                            setFieldDraftByEntity((prev) => ({
+                                              ...prev,
+                                              [e.id]: {
+                                                ...(prev[e.id] ?? {}),
+                                                [f.id]: current === opt ? "" : opt,
+                                              },
+                                            }))
+                                          }
+                                          disabled={saving || alreadyLogged}
+                                          className={[
+                                            "rounded-full border px-2 py-1 text-[10px] transition",
+                                            active
+                                              ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                              : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                                          ].join(" ")}
+                                        >
+                                          {opt}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                ) : f.field_type === "boolean" ? (
                                   <select
                                     value={current}
                                     onChange={(ev) =>
@@ -458,25 +545,6 @@ export default function UsagePage() {
                                     <option value="">Sin dato</option>
                                     <option value="true">Sí</option>
                                     <option value="false">No</option>
-                                  </select>
-                                ) : f.field_type === "select" && selectOptions.length > 0 ? (
-                                  <select
-                                    value={current}
-                                    onChange={(ev) =>
-                                      setFieldDraftByEntity((prev) => ({
-                                        ...prev,
-                                        [e.id]: { ...(prev[e.id] ?? {}), [f.id]: ev.target.value },
-                                      }))
-                                    }
-                                    disabled={saving || alreadyLogged}
-                                    className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-sm"
-                                  >
-                                    <option value="">Selecciona...</option>
-                                    {selectOptions.map((opt) => (
-                                      <option key={opt} value={opt}>
-                                        {opt}
-                                      </option>
-                                    ))}
                                   </select>
                                 ) : (
                                   <Input

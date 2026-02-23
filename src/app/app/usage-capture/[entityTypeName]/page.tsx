@@ -10,13 +10,14 @@ import { Input } from "@/components/ui/input";
 import { Loader } from "@/components/ui/loader";
 import { MarkedDatePicker } from "@/components/marked-date-picker";
 
-type Field = { id: string; name: string; key: string; field_type: "text" | "number" | "date" | "boolean" | "select" };
+type Field = { id: string; name: string; key: string; field_type: "text" | "number" | "date" | "boolean" | "select"; options?: unknown };
 type Entity = {
   id: string;
   name: string;
   usage_unit_id: string | null;
   usage_unit_name: string;
   usage_unit_visible: boolean;
+  usage_unit_suggested_values?: string[];
   fields: Field[];
   logged_days?: string[];
 };
@@ -25,6 +26,23 @@ function todayDateInput() {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function fieldOptions(field: Field) {
+  const raw = field.options;
+  const list = Array.isArray(raw)
+    ? raw
+    : typeof raw === "string"
+      ? raw.split(",")
+      : (raw && typeof raw === "object" && Array.isArray((raw as { values?: unknown }).values))
+        ? (raw as { values: unknown[] }).values
+        : (raw && typeof raw === "object" && Array.isArray((raw as { options?: unknown }).options))
+          ? (raw as { options: unknown[] }).options
+          : [];
+  return list
+    .map((v) => String(v ?? "").trim())
+    .filter((v) => v.length > 0)
+    .filter((v, i, arr) => arr.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i);
 }
 
 export default function FocusedUsageCapturePage() {
@@ -59,6 +77,29 @@ export default function FocusedUsageCapturePage() {
     () => filteredEntities.filter((e) => !Boolean(e.logged_days?.includes(loggedOn))),
     [filteredEntities, loggedOn]
   );
+  const pendingFieldColumns = useMemo(() => {
+    const map = new Map<string, Field>();
+    for (const e of pendingEntities) {
+      for (const f of e.fields ?? []) {
+        if (!map.has(f.id)) map.set(f.id, f);
+      }
+    }
+    return Array.from(map.values());
+  }, [pendingEntities]);
+  const fullyLoggedDates = useMemo(() => {
+    if (entities.length === 0) return [];
+    const counts = new Map<string, number>();
+    for (const e of entities) {
+      const uniqueDays = new Set((e.logged_days ?? []).map((d) => String(d)));
+      for (const day of uniqueDays) {
+        counts.set(day, (counts.get(day) ?? 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .filter(([, count]) => count === entities.length)
+      .map(([day]) => day)
+      .sort((a, b) => b.localeCompare(a));
+  }, [entities]);
 
   async function getTokenOrRedirect() {
     const { data } = await supabaseAuth.auth.getSession();
@@ -306,7 +347,7 @@ export default function FocusedUsageCapturePage() {
   }
 
   return (
-    <main className="mx-auto max-w-[840px] space-y-4 px-4 py-6">
+    <main className="mx-auto max-w-[1320px] space-y-4 px-4 py-6">
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-2">
@@ -358,8 +399,8 @@ export default function FocusedUsageCapturePage() {
                 <MarkedDatePicker
                   value={loggedOn}
                   onChange={setLoggedOn}
-                  highlightedDates={selected?.logged_days ?? []}
-                  disabledDates={selected?.logged_days ?? []}
+                  highlightedDates={fullyLoggedDates}
+                  disabledDates={[]}
                   label="Fecha de registro"
                   disabled={busy}
                 />
@@ -377,25 +418,67 @@ export default function FocusedUsageCapturePage() {
 
               {viewMode === "single" ? (
                 <>
-                  <div className="grid gap-2 md:grid-cols-[minmax(240px,1fr)_220px]">
-                    <select
-                      value={entityId}
-                      onChange={(e) => setEntityId(e.target.value)}
-                      className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
-                      disabled={busy}
-                    >
-                      {filteredEntities.map((e) => (
-                        <option key={e.id} value={e.id}>{e.name}</option>
-                      ))}
-                    </select>
+                  {(() => {
+                    const mainSuggestions = selected?.usage_unit_suggested_values ?? [];
+                    if (mainSuggestions.length > 0) {
+                      return (
+                        <div className="grid gap-2 md:grid-cols-[minmax(240px,1fr)_220px]">
+                          <select
+                            value={entityId}
+                            onChange={(e) => setEntityId(e.target.value)}
+                            className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                            disabled={busy}
+                          >
+                            {filteredEntities.map((e) => (
+                              <option key={e.id} value={e.id}>{e.name}</option>
+                            ))}
+                          </select>
+                          <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap pb-1">
+                            {mainSuggestions.map((opt) => {
+                              const active = value.trim() === opt;
+                              return (
+                                <button
+                                  key={`main-${opt}`}
+                                  type="button"
+                                  disabled={busy || alreadyLoggedForDay}
+                                  onClick={() => setValue((prev) => (prev.trim() === opt ? "" : opt))}
+                                  className={[
+                                    "shrink-0 rounded-full border px-2 py-1 text-xs transition",
+                                    active
+                                      ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                      : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                                  ].join(" ")}
+                                >
+                                  {opt}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="grid gap-2 md:grid-cols-[minmax(240px,1fr)_220px]">
+                        <select
+                          value={entityId}
+                          onChange={(e) => setEntityId(e.target.value)}
+                          className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                          disabled={busy}
+                        >
+                          {filteredEntities.map((e) => (
+                            <option key={e.id} value={e.id}>{e.name}</option>
+                          ))}
+                        </select>
 
-                    <Input
-                      value={value}
-                      onChange={(e) => setValue(e.target.value)}
-                      placeholder={selected?.usage_unit_visible && selected?.usage_unit_name ? `Valor (${selected.usage_unit_name})` : "Valor"}
-                      disabled={busy || alreadyLoggedForDay}
-                    />
-                  </div>
+                        <Input
+                          value={value}
+                          onChange={(e) => setValue(e.target.value)}
+                          placeholder={selected?.usage_unit_visible && selected?.usage_unit_name ? `Valor (${selected.usage_unit_name})` : "Valor"}
+                          disabled={busy || alreadyLoggedForDay}
+                        />
+                      </div>
+                    );
+                  })()}
 
                   {(selected?.fields ?? []).length > 0 ? (
                     <div className="grid gap-2 rounded-xl border p-3">
@@ -404,7 +487,35 @@ export default function FocusedUsageCapturePage() {
                         {selected?.fields.map((f) => (
                           <div key={f.id} className="grid gap-1">
                             <label className="truncate text-xs text-slate-600" title={f.name}>{f.name}</label>
-                            {f.field_type === "boolean" ? (
+                            {fieldOptions(f).length > 0 ? (
+                              <div className="flex gap-1 overflow-x-auto whitespace-nowrap pb-1">
+                                {fieldOptions(f).map((opt) => {
+                                  const current = String(fieldDraft[f.id] ?? "");
+                                  const active = current === opt;
+                                  return (
+                                    <button
+                                      key={`${f.id}-${opt}`}
+                                      type="button"
+                                      disabled={busy || alreadyLoggedForDay}
+                                      onClick={() =>
+                                        setFieldDraft((p) => ({
+                                          ...p,
+                                          [f.id]: current === opt ? "" : opt,
+                                        }))
+                                      }
+                                      className={[
+                                        "shrink-0 rounded-full border px-2 py-1 text-[10px] transition",
+                                        active
+                                          ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                          : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                                      ].join(" ")}
+                                    >
+                                      {opt}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : f.field_type === "boolean" ? (
                               <select
                                 value={fieldDraft[f.id] ?? ""}
                                 onChange={(e) => setFieldDraft((p) => ({ ...p, [f.id]: e.target.value }))}
@@ -450,34 +561,116 @@ export default function FocusedUsageCapturePage() {
                     <p className="text-sm text-slate-500">No hay pendientes para la fecha seleccionada.</p>
                   ) : (
                     <div className="grid gap-2">
-                      <div className="grid grid-cols-[minmax(180px,1fr)_160px_minmax(220px,1fr)] gap-2 rounded-lg border bg-slate-50 px-2 py-1 text-[11px] text-slate-500">
+                      <div className="grid grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] gap-2 rounded-lg border bg-slate-50 px-2 py-1 text-[11px] text-slate-500">
                         <div>Entidad</div>
                         <div>Valor</div>
-                        <div>Campos dinámicos</div>
+                        <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-4">
+                          {pendingFieldColumns.length > 0 ? (
+                            pendingFieldColumns.map((f) => (
+                              <div key={`head-${f.id}`} className="flex h-9 items-center text-[10px] text-slate-600">
+                                {f.name}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="flex h-9 items-center text-[10px] text-slate-400">—</div>
+                          )}
+                        </div>
                       </div>
                       {pendingEntities.map((e) => (
-                        <div key={e.id} className="grid grid-cols-[minmax(180px,1fr)_160px_minmax(220px,1fr)] items-center gap-2">
+                        <div key={e.id} className="grid grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] items-center gap-2">
                           <div className="truncate text-sm text-slate-800" title={e.name}>{e.name}</div>
-                          <Input
-                            value={bulkDraftByEntity[e.id] ?? ""}
-                            onChange={(ev) =>
-                              setBulkDraftByEntity((prev) => ({
-                                ...prev,
-                                [e.id]: ev.target.value,
-                              }))
-                            }
-                            placeholder={e.usage_unit_visible && e.usage_unit_name ? `Valor (${e.usage_unit_name})` : "Valor"}
-                            disabled={busy}
-                          />
+                          {(e.usage_unit_suggested_values ?? []).length > 0 ? (
+                            <div className="flex gap-1 overflow-x-auto whitespace-nowrap pb-1">
+                              {(e.usage_unit_suggested_values ?? []).map((opt) => {
+                                const current = String(bulkDraftByEntity[e.id] ?? "").trim();
+                                const active = current === opt;
+                                return (
+                                  <button
+                                    key={`${e.id}-main-${opt}`}
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() =>
+                                      setBulkDraftByEntity((prev) => ({
+                                        ...prev,
+                                        [e.id]: current === opt ? "" : opt,
+                                      }))
+                                    }
+                                    className={[
+                                      "shrink-0 rounded-full border px-2 py-1 text-[10px] transition",
+                                      active
+                                        ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                        : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                                    ].join(" ")}
+                                  >
+                                    {opt}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <Input
+                              value={bulkDraftByEntity[e.id] ?? ""}
+                              onChange={(ev) =>
+                                setBulkDraftByEntity((prev) => ({
+                                  ...prev,
+                                  [e.id]: ev.target.value,
+                                }))
+                              }
+                              placeholder={e.usage_unit_visible && e.usage_unit_name ? `Valor (${e.usage_unit_name})` : "Valor"}
+                              disabled={busy}
+                            />
+                          )}
                           {(e.fields ?? []).length === 0 ? (
                             <span className="text-xs text-slate-400">—</span>
                           ) : (
                             <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-4">
-                              {e.fields.map((f) => (
-                                <div key={f.id} className="grid gap-1">
-                                  <label className="truncate text-[10px] text-slate-500" title={f.name}>{f.name}</label>
-                                  {f.field_type === "boolean" ? (
+                              {pendingFieldColumns.map((columnField) => {
+                                const f = (e.fields ?? []).find((x) => x.id === columnField.id) ?? null;
+                                if (!f) {
+                                  return (
+                                    <div key={`${e.id}-missing-${columnField.id}`} className="text-xs text-slate-400">
+                                      —
+                                    </div>
+                                  );
+                                }
+                                if (fieldOptions(f).length > 0) {
+                                  return (
+                                    <div key={f.id} className="flex gap-1 overflow-x-auto whitespace-nowrap pb-1">
+                                      {fieldOptions(f).map((opt) => {
+                                        const current = String(bulkFieldDraftByEntity[e.id]?.[f.id] ?? "");
+                                        const active = current === opt;
+                                        return (
+                                          <button
+                                            key={`${e.id}-${f.id}-${opt}`}
+                                            type="button"
+                                            disabled={busy}
+                                            onClick={() =>
+                                              setBulkFieldDraftByEntity((prev) => ({
+                                                ...prev,
+                                                [e.id]: {
+                                                  ...(prev[e.id] ?? {}),
+                                                  [f.id]: current === opt ? "" : opt,
+                                                },
+                                              }))
+                                            }
+                                            className={[
+                                              "shrink-0 rounded-full border px-2 py-1 text-[10px] transition",
+                                              active
+                                                ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                                : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                                            ].join(" ")}
+                                          >
+                                            {opt}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  );
+                                }
+                                if (f.field_type === "boolean") {
+                                  return (
                                     <select
+                                      key={f.id}
                                       value={bulkFieldDraftByEntity[e.id]?.[f.id] ?? ""}
                                       onChange={(ev) =>
                                         setBulkFieldDraftByEntity((prev) => ({
@@ -492,22 +685,24 @@ export default function FocusedUsageCapturePage() {
                                       <option value="true">Sí</option>
                                       <option value="false">No</option>
                                     </select>
-                                  ) : (
-                                    <Input
-                                      type={f.field_type === "number" ? "number" : f.field_type === "date" ? "date" : "text"}
-                                      value={bulkFieldDraftByEntity[e.id]?.[f.id] ?? ""}
-                                      onChange={(ev) =>
-                                        setBulkFieldDraftByEntity((prev) => ({
-                                          ...prev,
-                                          [e.id]: { ...(prev[e.id] ?? {}), [f.id]: ev.target.value },
-                                        }))
-                                      }
-                                      disabled={busy}
-                                      className="h-9 text-xs"
-                                    />
-                                  )}
-                                </div>
-                              ))}
+                                  );
+                                }
+                                return (
+                                  <Input
+                                    key={f.id}
+                                    type={f.field_type === "number" ? "number" : f.field_type === "date" ? "date" : "text"}
+                                    value={bulkFieldDraftByEntity[e.id]?.[f.id] ?? ""}
+                                    onChange={(ev) =>
+                                      setBulkFieldDraftByEntity((prev) => ({
+                                        ...prev,
+                                        [e.id]: { ...(prev[e.id] ?? {}), [f.id]: ev.target.value },
+                                      }))
+                                    }
+                                    disabled={busy}
+                                    className="h-9 text-xs"
+                                  />
+                                );
+                              })}
                             </div>
                           )}
                         </div>
