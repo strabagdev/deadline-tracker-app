@@ -74,29 +74,38 @@ export default function SuperAdminPage() {
   async function validateAccess() {
     setLoading(true);
     setError("");
+    try {
+      const token = await getTokenOrRedirect();
+      if (!token) return;
 
-    const token = await getTokenOrRedirect();
-    if (!token) return;
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 10000);
+      const res = await fetch("/api/platform/super-admin/status", {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      }).finally(() => window.clearTimeout(timeoutId));
 
-    const res = await fetch("/api/platform/super-admin/status", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+      const json = (await res.json().catch(() => ({}))) as StatusResponse;
+      if (!res.ok) {
+        setError(json.error || "No se pudo validar permisos.");
+        return;
+      }
 
-    const json = (await res.json().catch(() => ({}))) as StatusResponse;
-    if (!res.ok) {
-      setError(json.error || "No se pudo validar permisos.");
+      if (!json.is_super_admin) {
+        router.replace("/app");
+        return;
+      }
+
+      await Promise.all([loadOrganizations(token), loadPlatformBranding(token)]);
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        setError("Tiempo de espera agotado validando permisos de super admin.");
+      } else {
+        setError("Error validando permisos de super admin.");
+      }
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (!json.is_super_admin) {
-      router.replace("/app");
-      return;
-    }
-
-    await loadOrganizations(token);
-    await loadPlatformBranding(token);
-    setLoading(false);
   }
 
   async function loadPlatformBranding(providedToken?: string) {

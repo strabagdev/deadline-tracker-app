@@ -17,6 +17,13 @@ function getErrorMessage(error: unknown): string {
   return "error";
 }
 
+function isUsagePerDayUniqueViolation(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const maybe = error as { code?: string; message?: string; details?: string };
+  const text = `${maybe.message ?? ""} ${maybe.details ?? ""}`.toLowerCase();
+  return maybe.code === "23505" && (text.includes("usage_logs_org_entity_logged_on_uidx") || text.includes("organization_id, entity_id, logged_on"));
+}
+
 async function requireEntityInOrg(db: DataClient, orgId: string, entityId: string) {
   const { data, error } = await db
     .from("entities")
@@ -200,6 +207,12 @@ export async function GET(req: Request) {
     const response = await handleUsageLogsGet(access.organizationId, req.url, makeRepo(db));
     return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
+    if (isUsagePerDayUniqueViolation(error)) {
+      return NextResponse.json(
+        { error: "Ya existe un registro para esta entidad en esa fecha.", code: "USAGE_ALREADY_EXISTS_FOR_DAY" },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

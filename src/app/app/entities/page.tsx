@@ -888,7 +888,7 @@ export default function EntitiesPage() {
                     title={s.title}
                   >
                     <IconStatus status={s.key} />
-                    <span>{s.title}</span>
+                    <span className="hidden sm:inline">{s.title}</span>
                     <span>{countByStatus(s.key)}</span>
                   </Button>
                 ))}

@@ -94,10 +94,8 @@ export default function UsageUnitsPage() {
 
   const [fields, setFields] = useState<UsageField[]>([]);
   const [newUnitName, setNewUnitName] = useState("");
-  const [newUnitShowInUsageRecords, setNewUnitShowInUsageRecords] = useState(true);
   const [editingUnitId, setEditingUnitId] = useState<string>("");
   const [editUnitName, setEditUnitName] = useState("");
-  const [editUnitShowInUsageRecords, setEditUnitShowInUsageRecords] = useState(true);
   const [newFieldName, setNewFieldName] = useState("");
   const [newFieldType, setNewFieldType] = useState<UsageField["field_type"]>("text");
   const [editingFieldId, setEditingFieldId] = useState<string>("");
@@ -154,7 +152,7 @@ export default function UsageUnitsPage() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ name, show_in_usage_records: newUnitShowInUsageRecords }),
+      body: JSON.stringify({ name }),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -164,7 +162,6 @@ export default function UsageUnitsPage() {
     }
 
     setNewUnitName("");
-    setNewUnitShowInUsageRecords(true);
     await loadUnits();
     setBusy(false);
   }
@@ -197,14 +194,12 @@ export default function UsageUnitsPage() {
   function startEditUnit(unit: UsageUnit) {
     setEditingUnitId(unit.id);
     setEditUnitName(unit.name);
-    setEditUnitShowInUsageRecords(unit.show_in_usage_records !== false);
     setMsg("");
   }
 
   function cancelEditUnit() {
     setEditingUnitId("");
     setEditUnitName("");
-    setEditUnitShowInUsageRecords(true);
     setMsg("");
   }
 
@@ -227,7 +222,7 @@ export default function UsageUnitsPage() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ name, show_in_usage_records: editUnitShowInUsageRecords }),
+      body: JSON.stringify({ name }),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -238,6 +233,35 @@ export default function UsageUnitsPage() {
 
     cancelEditUnit();
     await loadUnits();
+    setBusy(false);
+  }
+
+  async function setUnitVisibility(unitId: string, showInUsageRecords: boolean) {
+    setBusy(true);
+    setMsg("");
+    const token = await getTokenOrRedirect(router);
+    if (!token) return;
+
+    const res = await fetch(`/api/usage-units?id=${encodeURIComponent(unitId)}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ show_in_usage_records: showInUsageRecords }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMsg(json.error || "No se pudo actualizar visibilidad de la unidad");
+      setBusy(false);
+      return;
+    }
+
+    setUnits((prev) =>
+      prev.map((u) =>
+        u.id === unitId ? { ...u, show_in_usage_records: showInUsageRecords } : u
+      )
+    );
     setBusy(false);
   }
 
@@ -422,15 +446,6 @@ export default function UsageUnitsPage() {
               <IconAdd />
             </button>
           </div>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12 }}>
-            <input
-              type="checkbox"
-              checked={newUnitShowInUsageRecords}
-              onChange={(e) => setNewUnitShowInUsageRecords(e.target.checked)}
-              disabled={busy}
-            />
-            Mostrar nombre de unidad en registros de uso
-          </label>
 
           <div style={{ marginTop: 12 }}>
             {units.length === 0 ? (
@@ -448,15 +463,6 @@ export default function UsageUnitsPage() {
                             style={{ width: "100%", padding: 10 }}
                             disabled={busy}
                           />
-                          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                            <input
-                              type="checkbox"
-                              checked={editUnitShowInUsageRecords}
-                              onChange={(e) => setEditUnitShowInUsageRecords(e.target.checked)}
-                              disabled={busy}
-                            />
-                            Mostrar unidad en registros
-                          </label>
                           <div style={{ display: "flex", gap: 8 }}>
                             <button
                               onClick={() => void saveUnit()}
@@ -532,6 +538,24 @@ export default function UsageUnitsPage() {
                           }}
                         >
                           <strong>{u.name}</strong>
+                          <label
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              marginTop: 6,
+                              fontSize: 11,
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={u.show_in_usage_records !== false}
+                              onChange={(e) => void setUnitVisibility(u.id, e.target.checked)}
+                              disabled={busy}
+                            />
+                            Mostrar en registros (por unidad)
+                          </label>
                           <div style={{ fontSize: 11, opacity: 0.7 }}>
                             {u.show_in_usage_records ? "Visible en registros" : "Oculta en registros"}
                           </div>

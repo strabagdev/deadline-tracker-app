@@ -9,14 +9,26 @@ import { Button } from "@/components/ui/button";
 import { Loader } from "@/components/ui/loader";
 import { cn } from "@/lib/utils";
 
-function IconPlus({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
-      <path d="M12 5v14" />
-      <path d="M5 12h14" />
-    </svg>
-  );
-}
+type ModuleKey =
+  | "dashboard"
+  | "forecast"
+  | "alerts"
+  | "entities"
+  | "usage"
+  | "reports_usage"
+  | "semaphore"
+  | "entity_types"
+  | "deadline_types"
+  | "usage_units"
+  | "usage_capture"
+  | "users";
+
+type NavItem = {
+  href: string;
+  label: string;
+  moduleKey: ModuleKey;
+  icon: React.ReactNode;
+};
 
 function IconTraffic({ className = "h-4 w-4" }: { className?: string }) {
   return (
@@ -36,16 +48,6 @@ function IconRefresh({ className = "h-4 w-4" }: { className?: string }) {
       <path d="M21 3v5h-5" />
       <path d="M21 12a9 9 0 0 1-15.5 6.36L3 16" />
       <path d="M8 16H3v5" />
-    </svg>
-  );
-}
-
-function IconMenu({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
-      <path d="M3 6h18" />
-      <path d="M3 12h18" />
-      <path d="M3 18h18" />
     </svg>
   );
 }
@@ -166,6 +168,52 @@ function NavLink({ href, label, icon }: { href: string; label: string; icon: Rea
   );
 }
 
+const NAV_ITEMS: NavItem[] = [
+  { href: "/app", label: "Dashboard", moduleKey: "dashboard", icon: <IconHome /> },
+  { href: "/app/forecast", label: "Forecast", moduleKey: "forecast", icon: <IconForecast /> },
+  { href: "/app/alerts", label: "Alertas", moduleKey: "alerts", icon: <IconAlert /> },
+  { href: "/app/entities", label: "Entidades", moduleKey: "entities", icon: <IconEntities /> },
+  { href: "/app/usage", label: "Registro uso", moduleKey: "usage", icon: <IconUsage /> },
+  { href: "/app/usage-capture", label: "Captura uso", moduleKey: "usage_capture", icon: <IconUsage /> },
+  { href: "/app/reports/usage", label: "Reportes uso", moduleKey: "reports_usage", icon: <IconReport /> },
+  { href: "/app/settings/semaphore", label: "Semáforo", moduleKey: "semaphore", icon: <IconTraffic /> },
+  { href: "/app/entity-types", label: "Tipos entidad", moduleKey: "entity_types", icon: <IconTag /> },
+  { href: "/app/deadline-types", label: "Tipos vencimiento", moduleKey: "deadline_types", icon: <IconTag /> },
+  { href: "/app/usage-units", label: "Unidades uso", moduleKey: "usage_units", icon: <IconTag /> },
+  { href: "/app/users", label: "Usuarios", moduleKey: "users", icon: <IconUsers /> },
+];
+
+function getModuleByPath(pathname: string): ModuleKey | null {
+  if (pathname === "/app") return "dashboard";
+  if (pathname.startsWith("/app/forecast")) return "forecast";
+  if (pathname.startsWith("/app/alerts")) return "alerts";
+  if (pathname.startsWith("/app/entities")) return "entities";
+  if (pathname.startsWith("/app/usage-capture")) return "usage_capture";
+  if (pathname.startsWith("/app/usage")) return "usage";
+  if (pathname.startsWith("/app/reports/usage")) return "reports_usage";
+  if (pathname.startsWith("/app/settings/semaphore")) return "semaphore";
+  if (pathname.startsWith("/app/entity-types")) return "entity_types";
+  if (pathname.startsWith("/app/deadline-types")) return "deadline_types";
+  if (pathname.startsWith("/app/usage-units")) return "usage_units";
+  if (pathname.startsWith("/app/users")) return "users";
+  return null;
+}
+
+function getRouteByModule(moduleKey: ModuleKey): string {
+  if (moduleKey === "dashboard") return "/app";
+  if (moduleKey === "forecast") return "/app/forecast";
+  if (moduleKey === "alerts") return "/app/alerts";
+  if (moduleKey === "entities") return "/app/entities";
+  if (moduleKey === "usage_capture") return "/app/usage-capture";
+  if (moduleKey === "usage") return "/app/usage";
+  if (moduleKey === "reports_usage") return "/app/reports/usage";
+  if (moduleKey === "semaphore") return "/app/settings/semaphore";
+  if (moduleKey === "entity_types") return "/app/entity-types";
+  if (moduleKey === "deadline_types") return "/app/deadline-types";
+  if (moduleKey === "usage_units") return "/app/usage-units";
+  return "/app/users";
+}
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -174,6 +222,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [platformLogoUrl, setPlatformLogoUrl] = React.useState("");
   const [activeOrgName, setActiveOrgName] = React.useState("");
   const [activeOrgLogoUrl, setActiveOrgLogoUrl] = React.useState("");
+  const [allowedModules, setAllowedModules] = React.useState<Set<string> | null>(null);
+  const [moduleAccessLoaded, setModuleAccessLoaded] = React.useState(false);
   const isSuperAdminArea = pathname.startsWith("/app/super-admin");
   const isSuperAdminLockedOutRoute = isSuperAdmin && !isSuperAdminArea;
 
@@ -203,16 +253,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         setPlatformLogoUrl(platformJson?.platform?.logo_url ?? "");
         setIsSuperAdmin(currentIsSuperAdmin);
         if (!currentIsSuperAdmin) {
-          const orgRes = await fetch("/api/orgs/active", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          setModuleAccessLoaded(false);
+          const [orgRes, accessRes] = await Promise.all([
+            fetch("/api/orgs/active", {
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+            fetch("/api/me/module-access", {
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+          ]);
           const orgJson = await orgRes.json().catch(() => ({}));
+          const accessJson = await accessRes.json().catch(() => ({}));
           if (cancelled) return;
           setActiveOrgName(orgJson?.organization?.name ?? "");
           setActiveOrgLogoUrl(orgJson?.organization?.logo_url ?? "");
+          if (accessRes.ok && Array.isArray(accessJson?.allowed_modules)) {
+            setAllowedModules(new Set(accessJson.allowed_modules.map((v: unknown) => String(v))));
+          } else {
+            setAllowedModules(null);
+          }
+          setModuleAccessLoaded(true);
         } else {
           setActiveOrgName("");
           setActiveOrgLogoUrl("");
+          setAllowedModules(null);
+          setModuleAccessLoaded(true);
         }
         if (currentIsSuperAdmin && pathname && !pathname.startsWith("/app/super-admin")) {
           router.replace("/app/super-admin");
@@ -224,6 +289,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
   }, [pathname, router]);
+
+  React.useEffect(() => {
+    if (isSuperAdmin || !allowedModules) return;
+    const routeModule = getModuleByPath(pathname);
+    if (routeModule && !allowedModules.has(routeModule)) {
+      const nextItem = NAV_ITEMS.find((item) => allowedModules.has(item.moduleKey));
+      if (!nextItem) {
+        router.replace("/select-org");
+        return;
+      }
+      router.replace(getRouteByModule(nextItem.moduleKey));
+    }
+  }, [allowedModules, isSuperAdmin, pathname, router]);
+
+  const visibleNavItems = React.useMemo(() => {
+    if (!moduleAccessLoaded && !isSuperAdmin) return [];
+    if (!allowedModules) return NAV_ITEMS;
+    return NAV_ITEMS.filter((item) => allowedModules.has(item.moduleKey));
+  }, [allowedModules, isSuperAdmin, moduleAccessLoaded]);
+
 
   async function logout() {
     await supabaseAuth.auth.signOut();
@@ -317,41 +402,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             ) : (
               <div className="flex w-full min-w-0 flex-col gap-2 lg:flex-1 lg:flex-row lg:items-center lg:gap-2">
                 <nav className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto p-1 lg:flex-1 lg:overflow-visible">
-                  <NavLink href="/app" label="Dashboard" icon={<IconHome />} />
-                  <NavLink href="/app/forecast" label="Forecast" icon={<IconForecast />} />
-                  <NavLink href="/app/alerts" label="Alertas" icon={<IconAlert />} />
-                  <NavLink href="/app/entities" label="Entidades" icon={<IconEntities />} />
-                  <NavLink href="/app/usage" label="Registro uso" icon={<IconUsage />} />
-                  <NavLink href="/app/reports/usage" label="Reportes uso" icon={<IconReport />} />
-                  <NavLink href="/app/settings/semaphore" label="Semáforo" icon={<IconTraffic />} />
-                  <NavLink href="/app/entity-types" label="Tipos entidad" icon={<IconTag />} />
-                  <NavLink href="/app/deadline-types" label="Tipos vencimiento" icon={<IconTag />} />
-                  <NavLink href="/app/usage-units" label="Unidades uso" icon={<IconTag />} />
-                  <NavLink href="/app/users" label="Usuarios" icon={<IconUsers />} />
+                  {visibleNavItems.map((item) => (
+                    <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} />
+                  ))}
                 </nav>
                 <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end lg:flex-nowrap">
-                  <Link href="/app/entities?new=1" className="block">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-11 w-full bg-transparent sm:h-10 sm:w-10"
-                      title="Nueva entidad"
-                      aria-label="Nueva entidad"
-                    >
-                      <IconPlus />
-                    </Button>
-                  </Link>
-                  <Link href="/app/settings/semaphore" className="block">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-11 w-full bg-transparent sm:h-10 sm:w-10"
-                      title="Semáforo"
-                      aria-label="Semáforo"
-                    >
-                      <IconTraffic />
-                    </Button>
-                  </Link>
                   <Button
                     onClick={refreshApp}
                     variant="outline"
@@ -362,11 +417,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   >
                     <IconRefresh />
                   </Button>
-                  <Link href="/app/entities" className="block">
-                    <Button variant="outline" size="icon" className="h-11 w-full bg-transparent sm:h-10 sm:w-10" title="Menú" aria-label="Menú">
-                      <IconMenu />
-                    </Button>
-                  </Link>
                   <Link href="/app/profile" className="block">
                     <Button variant="outline" size="icon" className="h-11 w-full bg-transparent sm:h-10 sm:w-10" title="Perfil" aria-label="Perfil">
                       <IconUser />
@@ -395,6 +445,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {isSuperAdminLockedOutRoute ? (
           <div className="flex justify-center p-4">
             <Loader label="Redirigiendo al panel global..." />
+          </div>
+        ) : !isSuperAdmin && !moduleAccessLoaded ? (
+          <div className="flex justify-center p-4">
+            <Loader label="Cargando permisos..." />
           </div>
         ) : (
           children

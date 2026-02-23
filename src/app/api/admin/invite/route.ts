@@ -8,8 +8,10 @@ import { findAuthUserIdByEmail } from "@/lib/server/authAdmin";
 type MemberListRow = {
   user_id: string;
   role: string;
+  member_type_id?: string | null;
   created_at: string;
-  profiles: { email: string | null } | null;
+  profiles: { email: string | null } | { email: string | null }[] | null;
+  organization_member_types?: { name: string | null } | { name: string | null }[] | null;
 };
 
 /*
@@ -35,7 +37,7 @@ export async function GET(req: Request) {
 
     const { data: rows, error: listErr } = await db
       .from("organization_members")
-      .select("user_id, role, created_at, profiles:profiles(email)")
+      .select("user_id, role, member_type_id, created_at, profiles:profiles(email), organization_member_types(name)")
       .eq("organization_id", organizationId)
       .order("created_at", { ascending: true });
 
@@ -44,8 +46,12 @@ export async function GET(req: Request) {
     const members = (rows as MemberListRow[] | null | undefined)?.map((r) => ({
       user_id: r.user_id,
       role: r.role,
+      member_type_id: r.member_type_id ?? null,
+      member_type_name: Array.isArray(r.organization_member_types)
+        ? r.organization_member_types[0]?.name ?? null
+        : r.organization_member_types?.name ?? null,
       created_at: r.created_at,
-      email: r.profiles?.email ?? "",
+      email: Array.isArray(r.profiles) ? r.profiles[0]?.email ?? "" : r.profiles?.email ?? "",
     })) ?? [];
 
     return NextResponse.json({ organization_id: organizationId, members });
@@ -72,13 +78,36 @@ export async function POST(req: Request) {
     const body = await req.json();
     const email = String(body.email || "").trim().toLowerCase();
     const role = String(body.role || "member");
+    const memberTypeId = body.member_type_id ? String(body.member_type_id).trim() : "";
 
     if (!email) {
       return NextResponse.json({ error: "email required", code: "BAD_REQUEST" }, { status: 400 });
     }
 
-    if (!["member", "admin", "viewer"].includes(role)) {
+    if (!["member", "admin", "viewer", "owner"].includes(role)) {
       return NextResponse.json({ error: "invalid role", code: "BAD_REQUEST" }, { status: 400 });
+    }
+
+    let effectiveRole = role;
+    let effectiveMemberTypeId: string | null = memberTypeId || null;
+    if (memberTypeId) {
+      const { data: mt, error: mtErr } = await db
+        .from("organization_member_types")
+        .select("id, name, is_active")
+        .eq("organization_id", organizationId)
+        .eq("id", memberTypeId)
+        .maybeSingle();
+      if (mtErr) throw mtErr;
+      if (!mt || !mt.is_active) {
+        return NextResponse.json({ error: "invalid member_type_id", code: "BAD_REQUEST" }, { status: 400 });
+      }
+      const name = String(mt.name ?? "").trim().toLowerCase();
+      if (["owner", "admin", "member", "viewer"].includes(name)) {
+        effectiveRole = name;
+      } else {
+        effectiveRole = "member";
+      }
+      effectiveMemberTypeId = String(mt.id);
     }
 
     const supabaseAuthAdmin = createClient(
@@ -125,7 +154,8 @@ export async function POST(req: Request) {
       {
         organization_id: organizationId,
         user_id: invitedUserId,
-        role,
+        role: effectiveRole,
+        member_type_id: effectiveMemberTypeId,
       },
       { onConflict: "organization_id,user_id" }
     );

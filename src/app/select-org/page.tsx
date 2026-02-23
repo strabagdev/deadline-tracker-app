@@ -29,11 +29,26 @@ export default function SelectOrgPage() {
 
   async function getTokenOrRedirect(): Promise<string | null> {
     const { data } = await supabaseAuth.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) {
+    if (!data.session?.access_token) {
       router.replace("/login");
       return null;
     }
+
+    const { data: userData, error: userError } = await supabaseAuth.auth.getUser();
+    if (userError || !userData.user) {
+      await supabaseAuth.auth.signOut();
+      router.replace("/login");
+      return null;
+    }
+
+    const { data: refreshed } = await supabaseAuth.auth.getSession();
+    const token = refreshed.session?.access_token;
+    if (!token) {
+      await supabaseAuth.auth.signOut();
+      router.replace("/login");
+      return null;
+    }
+
     return token;
   }
 
@@ -59,11 +74,21 @@ export default function SelectOrgPage() {
       return;
     }
 
-    const res = await fetch("/api/orgs", {
+    let res = await fetch("/api/orgs", {
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    const json = await res.json().catch(() => ({}));
+    let json = await res.json().catch(() => ({}));
+    if (!res.ok && String(json?.error || "").toLowerCase().includes("invalid session")) {
+      await supabaseAuth.auth.refreshSession();
+      const refreshedToken = await getTokenOrRedirect();
+      if (!refreshedToken) return;
+      res = await fetch("/api/orgs", {
+        headers: { Authorization: `Bearer ${refreshedToken}` },
+      });
+      json = await res.json().catch(() => ({}));
+    }
+
     if (!res.ok) {
       setError(json.error || "Error cargando organizaciones");
       setLoading(false);
@@ -153,7 +178,7 @@ export default function SelectOrgPage() {
         </p>
       )}
 
-      {orgs.length === 0 ? (
+      {orgs.length === 0 && !error ? (
         <div style={{ marginTop: 14 }}>
           <p>No tienes acceso a ninguna organización en esta plataforma.</p>
           {isSuperAdmin ? (

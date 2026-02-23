@@ -6,7 +6,9 @@ import { getAdminOrgAccess, getErrorMessage } from "@/lib/server/adminOrgAccess"
 type MemberRow = {
   user_id: string;
   role: string;
+  member_type_id?: string | null;
   created_at: string;
+  organization_member_types?: { name: string | null } | { name: string | null }[] | null;
 };
 
 type ProfileRow = {
@@ -28,7 +30,7 @@ export async function GET(req: Request) {
 
     const { data: members, error: memErr } = await db
       .from("organization_members")
-      .select("user_id, role, created_at")
+      .select("user_id, role, member_type_id, created_at, organization_member_types(name)")
       .eq("organization_id", organizationId)
       .order("created_at", { ascending: true });
 
@@ -54,6 +56,9 @@ export async function GET(req: Request) {
     const enriched = list.map((m) => ({
       ...m,
       email: profilesMap.get(m.user_id) ?? "",
+      member_type_name: Array.isArray(m.organization_member_types)
+        ? m.organization_member_types[0]?.name ?? null
+        : m.organization_member_types?.name ?? null,
     }));
 
     return NextResponse.json({ organization_id: organizationId, members: enriched });

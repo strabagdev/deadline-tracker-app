@@ -8,6 +8,7 @@ import { Loader } from "@/components/ui/loader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MarkedDatePicker } from "@/components/marked-date-picker";
 
 type EntityType = {
   id: string;
@@ -29,6 +30,7 @@ type EntityRow = {
 };
 
 type LatestUsageByEntity = Record<string, { value: number; logged_at: string; logged_on?: string | null }>;
+type ExistingDaysByEntity = Record<string, string[]>;
 type UsageUnit = { id: string; name: string; is_active: boolean; show_in_usage_records?: boolean };
 type UsageField = {
   id: string;
@@ -54,6 +56,7 @@ export default function UsagePage() {
 
   const [entities, setEntities] = useState<EntityRow[]>([]);
   const [usage, setUsage] = useState<LatestUsageByEntity>({});
+  const [existingDaysByEntity, setExistingDaysByEntity] = useState<ExistingDaysByEntity>({});
   const [usageUnits, setUsageUnits] = useState<UsageUnit[]>([]);
   const [usageFieldsByUnit, setUsageFieldsByUnit] = useState<Record<string, UsageField[]>>({});
 
@@ -102,6 +105,21 @@ export default function UsagePage() {
     setEntities(tracked);
     setUsage((json.latest_usage_by_entity ?? {}) as LatestUsageByEntity);
 
+    if (tracked.length > 0) {
+      const ids = tracked.map((e) => e.id).join(",");
+      const daysRes = await fetch(`/api/usage-logs/days?entity_ids=${encodeURIComponent(ids)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const daysJson = await daysRes.json().catch(() => ({}));
+      if (daysRes.ok) {
+        setExistingDaysByEntity((daysJson.by_entity ?? {}) as ExistingDaysByEntity);
+      } else {
+        setExistingDaysByEntity({});
+      }
+    } else {
+      setExistingDaysByEntity({});
+    }
+
     const unitsRes = await fetch("/api/usage-units?active=1", { headers: { Authorization: `Bearer ${token}` } });
     const unitsJson = await unitsRes.json().catch(() => ({}));
     if (unitsRes.ok) {
@@ -127,6 +145,11 @@ export default function UsagePage() {
       setUsageFieldsByUnit({});
     }
     setLoading(false);
+  }
+
+  function isAlreadyLoggedForDay(entityId: string, day: string) {
+    const list = existingDaysByEntity[entityId] ?? [];
+    return list.includes(String(day ?? "").trim());
   }
 
   function getEntityUsageFields(entity: EntityRow) {
@@ -189,6 +212,11 @@ export default function UsagePage() {
 
     const token = await getTokenOrRedirect();
     if (!token) return;
+
+    if (loggedAtDate && isAlreadyLoggedForDay(entityId, loggedAtDate)) {
+      setErrorMsg("Ya existe un registro para esta entidad en la fecha seleccionada.");
+      return;
+    }
 
     setSavingByEntity((prev) => ({ ...prev, [entityId]: true }));
     try {
@@ -254,7 +282,6 @@ export default function UsagePage() {
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * pageSize;
   const pagedRows = rows.slice(pageStart, pageStart + pageSize);
-
   return (
     <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
       <Card>
@@ -324,11 +351,11 @@ export default function UsagePage() {
         </CardHeader>
         <CardContent className="pt-0">
           <div className="grid gap-2 md:grid-cols-[220px_120px_minmax(220px,1fr)]">
-            <Input
-              type="date"
+            <MarkedDatePicker
               value={loggedAtDate}
-              onChange={(e) => setLoggedAtDate(e.target.value)}
-              title="Fecha de registro"
+              onChange={setLoggedAtDate}
+              label="Fecha de registro"
+              showLegend={false}
             />
             <Button
               variant="outline"
@@ -367,6 +394,7 @@ export default function UsagePage() {
               {pagedRows.map((e) => {
                 const latest = usage[e.id];
                 const saving = Boolean(savingByEntity[e.id]);
+                const alreadyLogged = isAlreadyLoggedForDay(e.id, loggedAtDate);
                 const dynamicFields = getEntityUsageFields(e);
                 const usageMeta = getEntityUsageMeta(e);
                 return (
@@ -386,16 +414,24 @@ export default function UsagePage() {
                           onChange={(ev) => setDraftByEntity((prev) => ({ ...prev, [e.id]: ev.target.value }))}
                           placeholder="Ej: 1245 o Estado OK"
                           className="h-9"
-                          disabled={saving}
+                          disabled={saving || alreadyLogged}
                         />
                         <Button
                           size="sm"
                           onClick={() => void saveUsage(e.id)}
-                          disabled={saving}
+                          disabled={saving || alreadyLogged}
                           className="h-9"
                         >
-                          {saving ? "..." : "Guardar"}
+                          {saving ? "..." : alreadyLogged ? "Ya ingresado" : "Guardar"}
                         </Button>
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        {alreadyLogged
+                          ? `Ya existe registro para ${loggedAtDate}.`
+                          : (() => {
+                              const days = (existingDaysByEntity[e.id] ?? []).slice(0, 5);
+                              return days.length > 0 ? `Días con registro: ${days.join(", ")}` : "Sin registros previos.";
+                            })()}
                       </div>
                       {dynamicFields.length > 0 ? (
                         <div className="grid gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2">
@@ -416,7 +452,7 @@ export default function UsagePage() {
                                         [e.id]: { ...(prev[e.id] ?? {}), [f.id]: ev.target.value },
                                       }))
                                     }
-                                    disabled={saving}
+                                    disabled={saving || alreadyLogged}
                                     className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-sm"
                                   >
                                     <option value="">Sin dato</option>
@@ -432,7 +468,7 @@ export default function UsagePage() {
                                         [e.id]: { ...(prev[e.id] ?? {}), [f.id]: ev.target.value },
                                       }))
                                     }
-                                    disabled={saving}
+                                    disabled={saving || alreadyLogged}
                                     className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-sm"
                                   >
                                     <option value="">Selecciona...</option>
@@ -455,7 +491,7 @@ export default function UsagePage() {
                                     inputMode={f.field_type === "number" ? "decimal" : "text"}
                                     placeholder={f.field_type === "number" ? "Ej: 10.5" : ""}
                                     className="h-9"
-                                    disabled={saving}
+                                    disabled={saving || alreadyLogged}
                                   />
                                 )}
                               </div>

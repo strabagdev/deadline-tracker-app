@@ -17,6 +17,7 @@ type Row = {
   entity_type_id: string | null;
   entity_type_name: string;
   usage_unit_name: string;
+  usage_unit_visible?: boolean;
   logged_on: string;
   logged_at: string;
   value: number | null;
@@ -54,6 +55,7 @@ function escapeHtml(v: string) {
 }
 
 function buildPrintHtml(rows: Row[], dynamicColumns: string[], title: string, subtitle: string) {
+  const hasUnitColumn = rows.some((r) => r.usage_unit_visible !== false);
   const dynamicHead = dynamicColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join("");
   const tableRows = rows
     .map((r) => {
@@ -61,12 +63,15 @@ function buildPrintHtml(rows: Row[], dynamicColumns: string[], title: string, su
       const dynamicCells = dynamicColumns
         .map((c) => `<td>${escapeHtml(byName.get(c) ?? "—")}</td>`)
         .join("");
+      const unitCell = hasUnitColumn
+        ? `<td>${escapeHtml(r.usage_unit_visible === false ? "" : (r.usage_unit_name || "—"))}</td>`
+        : "";
       return `<tr>
         <td>${escapeHtml(r.entity_name)}</td>
         <td>${escapeHtml(r.entity_type_name)}</td>
         <td>${escapeHtml(formatBusinessDate(r.logged_on))}</td>
         <td>${escapeHtml(r.value_display)}</td>
-        <td>${escapeHtml(r.usage_unit_name || "—")}</td>
+        ${unitCell}
         ${dynamicCells}
       </tr>`;
     })
@@ -96,7 +101,7 @@ function buildPrintHtml(rows: Row[], dynamicColumns: string[], title: string, su
           <th>Tipo</th>
           <th>Fecha</th>
           <th>Valor</th>
-          <th>Unidad</th>
+          ${hasUnitColumn ? "<th>Unidad</th>" : ""}
           ${dynamicHead}
         </tr>
       </thead>
@@ -107,19 +112,25 @@ function buildPrintHtml(rows: Row[], dynamicColumns: string[], title: string, su
 }
 
 export default function UsageReportsPage() {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
 
   const [rows, setRows] = useState<Row[]>([]);
   const [typeOptions, setTypeOptions] = useState<TypeOption[]>([]);
 
-  const [dateMode, setDateMode] = useState<"range" | "single">("range");
+  const [dateMode, setDateMode] = useState<"range" | "single">("single");
   const [dateFrom, setDateFrom] = useState(defaultFromInput());
   const [dateTo, setDateTo] = useState(todayInput());
-  const [singleDate, setSingleDate] = useState(todayInput());
+  const [singleDate, setSingleDate] = useState("");
   const [entityTypeId, setEntityTypeId] = useState("all");
   const [q, setQ] = useState("");
+
+  function hasValidServerFilters() {
+    if (dateMode === "single") return Boolean(singleDate);
+    return Boolean(dateFrom || dateTo);
+  }
 
   async function getTokenOrRedirect() {
     const { data } = await supabaseAuth.auth.getSession();
@@ -131,7 +142,30 @@ export default function UsageReportsPage() {
     return token;
   }
 
+  async function loadTypeOptions() {
+    setErrorMsg("");
+    const token = await getTokenOrRedirect();
+    if (!token) return;
+
+    const res = await fetch("/api/entity-types", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setTypeOptions([]);
+      return;
+    }
+    setTypeOptions((json.entity_types ?? []) as TypeOption[]);
+  }
+
   async function load() {
+    if (!hasValidServerFilters()) {
+      setRows([]);
+      setHasSearched(false);
+      setErrorMsg("");
+      return;
+    }
+
     setLoading(true);
     setErrorMsg("");
     const token = await getTokenOrRedirect();
@@ -157,17 +191,28 @@ export default function UsageReportsPage() {
     if (!res.ok) {
       setErrorMsg(json.error || "No se pudo cargar el reporte.");
       setRows([]);
+      setHasSearched(false);
       setLoading(false);
       return;
     }
 
     setRows((json.rows ?? []) as Row[]);
-    const opts = (json.entity_type_options ?? []) as TypeOption[];
-    setTypeOptions(opts);
+    setHasSearched(true);
     setLoading(false);
   }
 
   useEffect(() => {
+    void loadTypeOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!hasValidServerFilters()) {
+      setHasSearched(false);
+      setRows([]);
+      setErrorMsg("");
+      return;
+    }
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateMode, dateFrom, dateTo, singleDate, entityTypeId]);
@@ -196,18 +241,22 @@ export default function UsageReportsPage() {
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
   }, [filteredRows]);
+  const hasUnitColumn = useMemo(
+    () => filteredRows.some((r) => r.usage_unit_visible !== false),
+    [filteredRows]
+  );
 
   async function exportExcel() {
     setBusy(true);
     try {
       const csvRows = [
-        ["Entidad", "Tipo entidad", "Fecha", "Valor", "Unidad", ...dynamicColumns],
+        ["Entidad", "Tipo entidad", "Fecha", "Valor", ...(hasUnitColumn ? ["Unidad"] : []), ...dynamicColumns],
         ...filteredRows.map((r) => [
           r.entity_name,
           r.entity_type_name,
           formatBusinessDate(r.logged_on),
           r.value_display,
-          r.usage_unit_name || "",
+          ...(hasUnitColumn ? [r.usage_unit_visible === false ? "" : (r.usage_unit_name || "")] : []),
           ...dynamicColumns.map((col) => {
             const found = r.field_values.find((fv) => fv.name === col);
             return found?.value ?? "";
@@ -333,6 +382,8 @@ export default function UsageReportsPage() {
             <div className="flex justify-center py-6">
               <Loader label="Cargando reporte..." />
             </div>
+          ) : !hasSearched ? (
+            <p className="text-sm text-slate-500">Selecciona fecha exacta o rango para cargar resultados automáticamente.</p>
           ) : filteredRows.length === 0 ? (
             <p className="text-sm text-slate-500">No hay registros para los filtros seleccionados.</p>
           ) : (
@@ -344,7 +395,9 @@ export default function UsageReportsPage() {
                     <th className="px-3 py-2 text-left font-medium">Tipo</th>
                     <th className="px-3 py-2 text-left font-medium">Fecha</th>
                     <th className="px-3 py-2 text-left font-medium">Valor</th>
-                    <th className="px-3 py-2 text-left font-medium">Unidad</th>
+                    {hasUnitColumn ? (
+                      <th className="px-3 py-2 text-left font-medium">Unidad</th>
+                    ) : null}
                     {dynamicColumns.map((col) => (
                       <th key={col} className="px-3 py-2 text-left font-medium">
                         {col}
@@ -361,7 +414,11 @@ export default function UsageReportsPage() {
                         <td className="px-3 py-2 text-slate-700">{r.entity_type_name}</td>
                         <td className="px-3 py-2 text-slate-700">{formatBusinessDate(r.logged_on)}</td>
                         <td className="px-3 py-2 text-slate-800">{r.value_display}</td>
-                        <td className="px-3 py-2 text-slate-600">{r.usage_unit_name || "—"}</td>
+                        {hasUnitColumn ? (
+                          <td className="px-3 py-2 text-slate-600">
+                            {r.usage_unit_visible === false ? "" : (r.usage_unit_name || "—")}
+                          </td>
+                        ) : null}
                         {dynamicColumns.map((col) => (
                           <td key={`${r.id}-${col}`} className="px-3 py-2 text-slate-600">
                             {byName.get(col) ?? "—"}

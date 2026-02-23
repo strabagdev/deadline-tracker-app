@@ -269,14 +269,34 @@ export default function AppDashboard() {
     });
   }, [entities, usage, semaphore.label_green, semaphore.label_orange, semaphore.label_red, semaphore.label_yellow]);
 
-  const countsAll = useMemo(() => {
+  const rowsForStatusCounts = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return computedAll.filter((r) => {
+      if (filterEntityType !== "all" && r.entity.entity_type_id !== filterEntityType) return false;
+      if (filterSecondary !== "all") {
+        const hasSecondary = (r.entity.card_fields ?? []).some(
+          (f) => String(f.value_text ?? "").trim() === filterSecondary
+        );
+        if (!hasSecondary) return false;
+      }
+      if (needle) {
+        const name = r.entity.name.toLowerCase();
+        const typeName = (r.entity.entity_types?.name ?? "").toLowerCase();
+        const nearestName = (r.nearest?.typeName ?? "").toLowerCase();
+        if (!name.includes(needle) && !typeName.includes(needle) && !nearestName.includes(needle)) return false;
+      }
+      return true;
+    });
+  }, [computedAll, filterEntityType, filterSecondary, q]);
+
+  const statusCounts = useMemo(() => {
     let red = 0,
       orange = 0,
       yellow = 0,
       green = 0,
       none = 0;
 
-    for (const r of computedAll) {
+    for (const r of rowsForStatusCounts) {
       if (r.status === "red") red++;
       else if (r.status === "orange") orange++;
       else if (r.status === "yellow") yellow++;
@@ -284,8 +304,8 @@ export default function AppDashboard() {
       else none++;
     }
 
-    return { red, orange, yellow, green, none, total: computedAll.length };
-  }, [computedAll]);
+    return { red, orange, yellow, green, none, total: rowsForStatusCounts.length };
+  }, [rowsForStatusCounts]);
 
   const secondaryFilterOptions = useMemo(() => {
     const counts = new Map<string, number>();
@@ -367,12 +387,12 @@ export default function AppDashboard() {
     q.trim().length > 0 || filterEntityType !== "all" || filterStatus !== "all" || filterSecondary !== "all";
 
   function countByStatus(s: Status | "all") {
-    if (s === "all") return countsAll.total;
-    if (s === "red") return countsAll.red;
-    if (s === "orange") return countsAll.orange;
-    if (s === "yellow") return countsAll.yellow;
-    if (s === "green") return countsAll.green;
-    return countsAll.none;
+    if (s === "all") return statusCounts.total;
+    if (s === "red") return statusCounts.red;
+    if (s === "orange") return statusCounts.orange;
+    if (s === "yellow") return statusCounts.yellow;
+    if (s === "green") return statusCounts.green;
+    return statusCounts.none;
   }
 
   function statusChipClasses(s: Status | "all", active: boolean) {
@@ -477,7 +497,7 @@ export default function AppDashboard() {
             <CardTitle className="shrink-0">Dashboard</CardTitle>
 
             <div className="min-w-0 lg:flex-1">
-              <div className="flex flex-wrap items-center gap-2 pr-2 lg:w-max lg:flex-nowrap lg:pb-0">
+              <div className="flex w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 pr-2 lg:w-max lg:pb-0">
                 {statusFilterMeta.map((s) => (
                   <Button
                     key={s.key}
@@ -489,31 +509,10 @@ export default function AppDashboard() {
                   >
                     <IconStatus status={s.key} />
                     {filterStatus === s.key ? <span>✓</span> : null}
-                    <span>{s.title}</span>
+                    <span className="hidden sm:inline">{s.title}</span>
                     <span className="font-semibold">{countByStatus(s.key)}</span>
                   </Button>
                 ))}
-                <span className="mx-1 h-5 w-px bg-slate-200" aria-hidden />
-                <Button
-                  size="sm"
-                  variant={viewMode === "cards" ? "secondary" : "outline"}
-                  onClick={() => setViewMode("cards")}
-                  className="min-h-10 min-w-10 lg:min-h-9"
-                  title="Vista tarjetas"
-                  aria-label="Vista tarjetas"
-                >
-                  <IconGrid />
-                </Button>
-                <Button
-                  size="sm"
-                  variant={viewMode === "list" ? "secondary" : "outline"}
-                  onClick={() => setViewMode("list")}
-                  className="min-h-10 min-w-10 lg:min-h-9"
-                  title="Vista lista"
-                  aria-label="Vista lista"
-                >
-                  <IconList />
-                </Button>
               </div>
               {renderSecondaryFilter("mt-2 md:hidden")}
             </div>
@@ -535,7 +534,7 @@ export default function AppDashboard() {
         <CardContent className="py-3">
           {!dashboardPanelCollapsed ? (
             <div className="mt-3 rounded-xl border bg-slate-50/80 px-3 py-2">
-              <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_180px_150px_auto]">
+              <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_150px_auto]">
                 <Input
                   id="dashboard_search"
                   value={q}
@@ -543,20 +542,6 @@ export default function AppDashboard() {
                   placeholder="Buscar por nombre, tipo o vencimiento..."
                   className="h-10"
                 />
-                <select
-                  id="dashboard_type"
-                  aria-label="Filtrar por tipo"
-                  value={filterEntityType}
-                  onChange={(e) => setFilterEntityType(e.target.value)}
-                  className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
-                >
-                  <option value="all">Todos los tipos</option>
-                  {entityTypeOptions.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.name}
-                    </option>
-                  ))}
-                </select>
                 <select
                   id="dashboard_page_size"
                   aria-label="Filas por página"
@@ -590,6 +575,42 @@ export default function AppDashboard() {
       {errorMsg ? <p className="whitespace-pre-wrap text-sm text-rose-600">{errorMsg}</p> : null}
 
       <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <select
+            id="dashboard_type_quick"
+            aria-label="Filtrar por tipo"
+            value={filterEntityType}
+            onChange={(e) => setFilterEntityType(e.target.value)}
+            className="h-10 min-w-[170px] rounded-xl border border-slate-300 bg-white px-3 text-sm lg:h-9"
+          >
+            <option value="all">Todos los tipos</option>
+            {entityTypeOptions.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            variant={viewMode === "cards" ? "secondary" : "outline"}
+            onClick={() => setViewMode("cards")}
+            className="min-h-10 min-w-10 lg:min-h-9"
+            title="Vista tarjetas"
+            aria-label="Vista tarjetas"
+          >
+            <IconGrid />
+          </Button>
+          <Button
+            size="sm"
+            variant={viewMode === "list" ? "secondary" : "outline"}
+            onClick={() => setViewMode("list")}
+            className="min-h-10 min-w-10 lg:min-h-9"
+            title="Vista lista"
+            aria-label="Vista lista"
+          >
+            <IconList />
+          </Button>
+        </div>
         {loading ? (
           <div className="flex justify-center py-6">
             <Loader label="Cargando dashboard..." />

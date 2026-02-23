@@ -50,7 +50,6 @@ export default function SemaphoreSettingsPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [okMsg, setOkMsg] = useState("");
 
-  const [orgId, setOrgId] = useState<string>("");
   const [role, setRole] = useState<string>("");
 
   const [t, setT] = useState<UnifiedThresholds>({
@@ -112,7 +111,6 @@ export default function SemaphoreSettingsPage() {
       return;
     }
 
-    setOrgId(String(json.organization_id || ""));
     setRole(String(json.role || ""));
 
     const s = json.settings || {};
@@ -208,8 +206,6 @@ export default function SemaphoreSettingsPage() {
       <Card>
         <CardHeader className="pb-2">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">Org activa: {orgId || "—"}</Badge>
-            <Badge variant="outline">Rol: {role || "—"}</Badge>
             {!canEdit ? <Badge variant="outline" className="border-amber-300 bg-amber-100 text-amber-800">Solo owner/admin puede editar</Badge> : null}
           </div>
         </CardHeader>
@@ -258,7 +254,7 @@ export default function SemaphoreSettingsPage() {
                   </label>
                 </div>
 
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div className="mt-3 grid gap-3 md:grid-cols-4">
                   <label className="grid gap-1.5 text-xs text-slate-600">
                     Nombre estado verde
                     <Input

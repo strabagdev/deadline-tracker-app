@@ -140,7 +140,7 @@ export async function GET(req: Request) {
       const entity = pickOne(r.entities);
       const entityType = pickOne(entity?.entity_types ?? null);
       const unit = pickOne(entity?.usage_units ?? null);
-      const showUnit = unit?.show_in_usage_records !== false;
+      const showUnit = Boolean(unit?.id) && unit?.show_in_usage_records !== false;
       const mainValueText = String(r.value_text ?? "").trim();
       const mainValueNumber = r.value != null && Number.isFinite(Number(r.value)) ? Number(r.value) : null;
       const mainValue = mainValueText || (mainValueNumber != null ? String(mainValueNumber) : "—");
@@ -159,6 +159,7 @@ export async function GET(req: Request) {
         entity_type_id: entity?.entity_type_id ? String(entity.entity_type_id) : null,
         entity_type_name: String(entityType?.name ?? "Sin tipo"),
         usage_unit_name: showUnit ? String(unit?.name ?? "") : "",
+        usage_unit_visible: showUnit,
         logged_on: String(r.logged_on),
         logged_at: String(r.logged_at),
         value: mainValueNumber,

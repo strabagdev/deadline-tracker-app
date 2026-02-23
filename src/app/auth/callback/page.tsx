@@ -9,6 +9,7 @@ export default function AuthCallbackPage() {
   const router = useRouter();
   const [msg, setMsg] = useState("Finalizando inicio de sesión...");
   const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [mustLoginAgain, setMustLoginAgain] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -70,7 +71,28 @@ export default function AuthCallbackPage() {
       }
 
       if (tempPasswordJson.created && tempPasswordJson.temporary_password) {
-        setTemporaryPassword(String(tempPasswordJson.temporary_password));
+        const generatedPassword = String(tempPasswordJson.temporary_password);
+        const userEmail = data.session.user.email?.trim().toLowerCase() ?? "";
+
+        // Al actualizar password por Admin API, la sesión del magic link puede invalidarse.
+        // Reautenticamos inmediatamente con la contraseña provisoria para evitar "Invalid session".
+        if (userEmail) {
+          await supabaseAuth.auth.signOut();
+          const { error: signInErr } = await supabaseAuth.auth.signInWithPassword({
+            email: userEmail,
+            password: generatedPassword,
+          });
+          if (signInErr) {
+            setTemporaryPassword(generatedPassword);
+            setMustLoginAgain(true);
+            setMsg(
+              "Tu acceso fue activado, pero debes iniciar sesión de nuevo con la contraseña provisoria."
+            );
+            return;
+          }
+        }
+
+        setTemporaryPassword(generatedPassword);
         setMsg("Tu acceso fue activado. Guarda esta contraseña provisoria y luego cámbiala en tu perfil.");
         return;
       }
@@ -102,7 +124,7 @@ export default function AuthCallbackPage() {
           <p>
             <b>Contraseña provisoria:</b> <code>{temporaryPassword}</code>
           </p>
-          <button onClick={() => router.replace("/select-org")} style={{ padding: 10 }}>
+          <button onClick={() => router.replace(mustLoginAgain ? "/login" : "/select-org")} style={{ padding: 10 }}>
             Continuar
           </button>
         </>
