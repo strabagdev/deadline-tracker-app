@@ -119,6 +119,7 @@ export async function syncForecastAndAlertsForEntity(db: DataClient, orgId: stri
     )
     .eq("organization_id", orgId)
     .eq("entity_id", entityId)
+    .eq("is_current", true)
     .eq("deadline_types.is_active", true);
   if (deadlinesErr) throw deadlinesErr;
 

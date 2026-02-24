@@ -100,6 +100,7 @@ export async function POST(req: Request) {
       `
       )
       .eq("organization_id", orgId)
+      .eq("is_current", true)
       .eq("deadline_types.is_active", true);
 
     if (deadlinesErr) throw deadlinesErr;

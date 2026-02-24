@@ -48,12 +48,85 @@ type DeadlineRow = {
   measure_by?: MeasureBy | null;
 };
 
+type DeadlineSnapshot = {
+  id: string;
+  entity_id: string;
+  deadline_type_id: string;
+  title: string | null;
+  measure_by: MeasureBy | null;
+  last_done_date: string | null;
+  next_due_date: string | null;
+  last_done_usage: number | null;
+  frequency: number | null;
+  frequency_unit: string | null;
+  usage_daily_average: number | null;
+  usage_daily_average_mode: string | null;
+  version_group_id: string | null;
+  version_no: number | null;
+};
+
+type DeadlineEventAction = "create" | "update" | "delete";
+type DeadlineSnapshot = {
+  id: string;
+  entity_id: string;
+  deadline_type_id: string;
+  title: string | null;
+  measure_by: MeasureBy | null;
+  last_done_date: string | null;
+  next_due_date: string | null;
+  last_done_usage: number | null;
+  frequency: number | null;
+  frequency_unit: string | null;
+  usage_daily_average: number | null;
+  usage_daily_average_mode: string | null;
+};
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "error";
 }
 
+async function getDeadlineSnapshot(db: DataClient, orgId: string, id: string): Promise<DeadlineSnapshot | null> {
+  const { data, error } = await db
+    .from("deadlines")
+    .select(
+      "id, entity_id, deadline_type_id, title, measure_by, last_done_date, next_due_date, last_done_usage, frequency, frequency_unit, usage_daily_average, usage_daily_average_mode, version_group_id, version_no"
+    )
+    .eq("organization_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data ?? null) as DeadlineSnapshot | null;
+}
+
+async function safeLogDeadlineChangeEvent(
+  db: DataClient,
+  input: {
+    organizationId: string;
+    deadlineId: string | null;
+    entityId: string;
+    action: DeadlineEventAction;
+    actorUserId: string;
+    reason?: string;
+    payload: Record<string, unknown>;
+  }
+) {
+  try {
+    const { error } = await db.from("deadline_change_events").insert({
+      organization_id: input.organizationId,
+      deadline_id: input.deadlineId,
+      entity_id: input.entityId,
+      action: input.action,
+      actor_user_id: input.actorUserId,
+      reason: input.reason ?? null,
+      payload: input.payload,
+    });
+    if (error) throw error;
+  } catch {
+    // No bloquear operaciones críticas por fallas del historial.
+  }
+}
 
 async function getDeadlineType(db: DataClient, orgId: string, deadlineTypeId: string): Promise<DeadlineTypeRow | null> {
   const { data, error } = await db
@@ -202,7 +275,7 @@ async function attachComputed(db: DataClient, orgId: string, entityId: string, d
   };
 }
 
-function makeDeadlinesRepo(db: DataClient): DeadlinesRepo {
+function makeDeadlinesRepo(db: DataClient, actorUserId: string): DeadlinesRepo {
   return {
     getDeadlineById: async (orgId, id) => {
       const { data, error } = await db
@@ -217,6 +290,7 @@ function makeDeadlinesRepo(db: DataClient): DeadlinesRepo {
         `
         )
         .eq("organization_id", orgId)
+        .eq("is_current", true)
         .eq("id", id)
         .maybeSingle();
       if (error) throw error;
@@ -238,6 +312,7 @@ function makeDeadlinesRepo(db: DataClient): DeadlinesRepo {
       return { id: dt.id, name: dt.name, measure_by: dt.measure_by, is_active: dt.is_active };
     },
     createDateDeadline: async (orgId, input) => {
+      const versionGroupId = crypto.randomUUID();
       const { data, error } = await db
         .from("deadlines")
         .insert({
@@ -248,13 +323,43 @@ function makeDeadlinesRepo(db: DataClient): DeadlinesRepo {
           measure_by: input.legacyMeasureBy,
           last_done_date: input.lastDoneDate,
           next_due_date: input.nextDueDate,
+          version_group_id: versionGroupId,
+          version_no: 1,
+          is_current: true,
         })
         .select("id")
         .single();
       if (error) throw error;
-      return { id: String(data?.id ?? "") };
+      const createdId = String(data?.id ?? "");
+      await safeLogDeadlineChangeEvent(db, {
+        organizationId: orgId,
+        deadlineId: createdId,
+        entityId: input.entityId,
+        action: "create",
+        actorUserId,
+        payload: {
+          source: "api/deadlines",
+          mode: "date",
+          after: {
+            id: createdId,
+            entity_id: input.entityId,
+            deadline_type_id: input.deadlineTypeId,
+            title: input.legacyTitle,
+            measure_by: input.legacyMeasureBy,
+            last_done_date: input.lastDoneDate,
+            next_due_date: input.nextDueDate,
+            last_done_usage: null,
+            frequency: null,
+            frequency_unit: null,
+            usage_daily_average: null,
+            usage_daily_average_mode: "manual",
+          },
+        },
+      });
+      return { id: createdId };
     },
     createUsageDeadline: async (orgId, input) => {
+      const versionGroupId = crypto.randomUUID();
       const { data, error } = await db
         .from("deadlines")
         .insert({
@@ -269,19 +374,119 @@ function makeDeadlinesRepo(db: DataClient): DeadlinesRepo {
           frequency_unit: input.frequencyUnit,
           usage_daily_average_mode: input.mode,
           usage_daily_average: input.usageDailyAverage,
+          version_group_id: versionGroupId,
+          version_no: 1,
+          is_current: true,
         })
         .select("id")
         .single();
       if (error) throw error;
-      return { id: String(data?.id ?? "") };
+      const createdId = String(data?.id ?? "");
+      await safeLogDeadlineChangeEvent(db, {
+        organizationId: orgId,
+        deadlineId: createdId,
+        entityId: input.entityId,
+        action: "create",
+        actorUserId,
+        payload: {
+          source: "api/deadlines",
+          mode: "usage",
+          after: {
+            id: createdId,
+            entity_id: input.entityId,
+            deadline_type_id: input.deadlineTypeId,
+            title: input.legacyTitle,
+            measure_by: input.legacyMeasureBy,
+            last_done_date: input.lastDoneDate,
+            next_due_date: null,
+            last_done_usage: input.lastDoneUsage,
+            frequency: input.frequency,
+            frequency_unit: input.frequencyUnit,
+            usage_daily_average: input.usageDailyAverage,
+            usage_daily_average_mode: input.mode,
+          },
+        },
+      });
+      return { id: createdId };
     },
     updateDeadline: async (orgId, id, patch) => {
-      const { error } = await db.from("deadlines").update(patch).eq("organization_id", orgId).eq("id", id);
+      const before = await getDeadlineSnapshot(db, orgId, id);
+      if (!before) throw new Error("deadline not found");
+
+      const nextVersionNo = Math.max(1, Number(before.version_no ?? 1)) + 1;
+      const versionGroupId = String(before.version_group_id ?? before.id);
+      const insertPayload = {
+        organization_id: orgId,
+        entity_id: before.entity_id,
+        deadline_type_id: before.deadline_type_id,
+        title: before.title,
+        measure_by: before.measure_by,
+        last_done_date: before.last_done_date,
+        next_due_date: before.next_due_date,
+        last_done_usage: before.last_done_usage,
+        frequency: before.frequency,
+        frequency_unit: before.frequency_unit,
+        usage_daily_average: before.usage_daily_average,
+        usage_daily_average_mode: before.usage_daily_average_mode,
+        version_group_id: versionGroupId,
+        version_no: nextVersionNo,
+        is_current: true,
+        ...(patch as Record<string, unknown>),
+      };
+      const { data: created, error: createErr } = await db
+        .from("deadlines")
+        .insert(insertPayload)
+        .select("id")
+        .single();
+      if (createErr) throw createErr;
+      const newId = String(created?.id ?? "");
+
+      const { error } = await db
+        .from("deadlines")
+        .update({
+          is_current: false,
+          superseded_at: new Date().toISOString(),
+          superseded_by_deadline_id: newId,
+        })
+        .eq("organization_id", orgId)
+        .eq("id", id);
       if (error) throw error;
+
+      const after = await getDeadlineSnapshot(db, orgId, newId);
+      if (after) {
+        await safeLogDeadlineChangeEvent(db, {
+          organizationId: orgId,
+          deadlineId: newId,
+          entityId: after.entity_id,
+          action: "update",
+          actorUserId,
+          payload: {
+            source: "api/deadlines",
+            patch,
+            before,
+            after,
+            supersedes_deadline_id: id,
+          },
+        });
+      }
     },
     deleteDeadline: async (orgId, id) => {
+      const before = await getDeadlineSnapshot(db, orgId, id);
       const { error } = await db.from("deadlines").delete().eq("organization_id", orgId).eq("id", id);
       if (error) throw error;
+      if (before) {
+        await safeLogDeadlineChangeEvent(db, {
+          organizationId: orgId,
+          deadlineId: id,
+          entityId: before.entity_id,
+          action: "delete",
+          actorUserId,
+          payload: {
+            source: "api/deadlines",
+            before,
+          },
+        });
+      }
     },
   };
 }
@@ -329,6 +534,7 @@ export async function GET(req: Request) {
       `
       )
       .eq("organization_id", orgId)
+      .eq("is_current", true)
       .eq("entity_id", entityId)
       .order("created_at", { ascending: false });
 
@@ -354,7 +560,7 @@ export async function POST(req: Request) {
       );
     }
     const body = await req.json().catch(() => ({}));
-    const response = await handleDeadlinesPost(access.organizationId, body, makeDeadlinesRepo(db));
+    const response = await handleDeadlinesPost(access.organizationId, body, makeDeadlinesRepo(db, user.id));
     const entityId = typeof response.body?.entity_id === "string" ? response.body.entity_id : "";
     if (response.status < 400 && entityId) {
       try {
@@ -387,7 +593,7 @@ export async function PUT(req: Request) {
       );
     }
     const body = await req.json().catch(() => ({}));
-    const response = await handleDeadlinesPut(access.organizationId, body, makeDeadlinesRepo(db));
+    const response = await handleDeadlinesPut(access.organizationId, body, makeDeadlinesRepo(db, user.id));
     const entityId = typeof response.body?.entity_id === "string" ? response.body.entity_id : "";
     if (response.status < 400 && entityId) {
       try {
@@ -421,7 +627,7 @@ export async function DELETE(req: Request) {
     }
     const url = new URL(req.url);
     const id = String(url.searchParams.get("id") ?? "").trim();
-    const response = await handleDeadlinesDelete(access.organizationId, id, makeDeadlinesRepo(db));
+    const response = await handleDeadlinesDelete(access.organizationId, id, makeDeadlinesRepo(db, user.id));
     const entityId = typeof response.body?.entity_id === "string" ? response.body.entity_id : "";
     if (response.status < 400 && entityId) {
       try {

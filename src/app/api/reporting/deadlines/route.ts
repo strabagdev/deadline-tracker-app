@@ -189,7 +189,8 @@ export async function GET(req: Request) {
         deadline_types(id, name, measure_by)
       `
       )
-      .eq("organization_id", orgId);
+      .eq("organization_id", orgId)
+      .eq("is_current", true);
     if (deadlinesErr) throw deadlinesErr;
 
     const deadlines = (deadlineData ?? []) as DeadlineJoinRow[];
