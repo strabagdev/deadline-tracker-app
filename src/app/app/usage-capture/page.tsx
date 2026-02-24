@@ -98,7 +98,7 @@ export default function UsageCapturePage() {
               <p className="mt-1 text-sm text-slate-500">Selecciona un tipo de entidad para ingresar usos en flujo acotado.</p>
             </div>
             <div className="flex items-center gap-2">
-              <Link href="/app/usage"><Button variant="outline" size="sm">Registro uso</Button></Link>
+              <Link href="/app/reports/usage"><Button variant="outline" size="sm">Reportes uso</Button></Link>
               <Button onClick={() => void load()} variant="outline" size="sm" disabled={loading}>Refrescar</Button>
             </div>
           </div>

@@ -7,6 +7,7 @@ import { Loader } from "@/components/ui/loader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MarkedDatePicker } from "@/components/marked-date-picker";
 import { toCsv } from "@/lib/csv/simpleCsv";
 import { csvToSpreadsheetXml } from "@/lib/csv/spreadsheetXml";
 
@@ -23,6 +24,7 @@ type Row = {
   value: number | null;
   value_text: string | null;
   value_display: string;
+  entity_profile_values: Array<{ entity_field_id?: string; name: string; value: string }>;
   field_values: Array<{ usage_field_id: string; name: string; value: string }>;
 };
 
@@ -54,11 +56,22 @@ function escapeHtml(v: string) {
     .replaceAll("'", "&#39;");
 }
 
-function buildPrintHtml(rows: Row[], dynamicColumns: string[], title: string, subtitle: string) {
+function buildPrintHtml(
+  rows: Row[],
+  entityProfileColumns: string[],
+  dynamicColumns: string[],
+  title: string,
+  subtitle: string
+) {
   const hasUnitColumn = rows.some((r) => r.usage_unit_visible !== false);
+  const entityProfileHead = entityProfileColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join("");
   const dynamicHead = dynamicColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join("");
   const tableRows = rows
     .map((r) => {
+      const profileByName = new Map(r.entity_profile_values.map((fv) => [fv.name, fv.value]));
+      const profileCells = entityProfileColumns
+        .map((c) => `<td>${escapeHtml(profileByName.get(c) ?? "—")}</td>`)
+        .join("");
       const byName = new Map(r.field_values.map((fv) => [fv.name, fv.value]));
       const dynamicCells = dynamicColumns
         .map((c) => `<td>${escapeHtml(byName.get(c) ?? "—")}</td>`)
@@ -68,7 +81,7 @@ function buildPrintHtml(rows: Row[], dynamicColumns: string[], title: string, su
         : "";
       return `<tr>
         <td>${escapeHtml(r.entity_name)}</td>
-        <td>${escapeHtml(r.entity_type_name)}</td>
+        ${profileCells}
         <td>${escapeHtml(formatBusinessDate(r.logged_on))}</td>
         <td>${escapeHtml(r.value_display)}</td>
         ${unitCell}
@@ -98,7 +111,7 @@ function buildPrintHtml(rows: Row[], dynamicColumns: string[], title: string, su
       <thead>
         <tr>
           <th>Entidad</th>
-          <th>Tipo</th>
+          ${entityProfileHead}
           <th>Fecha</th>
           <th>Valor</th>
           ${hasUnitColumn ? "<th>Unidad</th>" : ""}
@@ -119,6 +132,8 @@ export default function UsageReportsPage() {
 
   const [rows, setRows] = useState<Row[]>([]);
   const [typeOptions, setTypeOptions] = useState<TypeOption[]>([]);
+  const [orderedEntityProfileColumns, setOrderedEntityProfileColumns] = useState<string[]>([]);
+  const [orderedUsageFieldColumns, setOrderedUsageFieldColumns] = useState<string[]>([]);
 
   const [dateMode, setDateMode] = useState<"range" | "single">("single");
   const [dateFrom, setDateFrom] = useState(defaultFromInput());
@@ -197,6 +212,18 @@ export default function UsageReportsPage() {
     }
 
     setRows((json.rows ?? []) as Row[]);
+    const orderedEntity = Array.isArray(json?.column_order?.entity_profile_columns)
+      ? (json.column_order.entity_profile_columns as Array<{ name?: unknown }>)
+          .map((c) => String(c?.name ?? "").trim())
+          .filter((v) => v.length > 0)
+      : [];
+    const orderedUsage = Array.isArray(json?.column_order?.usage_field_columns)
+      ? (json.column_order.usage_field_columns as Array<{ name?: unknown }>)
+          .map((c) => String(c?.name ?? "").trim())
+          .filter((v) => v.length > 0)
+      : [];
+    setOrderedEntityProfileColumns(orderedEntity);
+    setOrderedUsageFieldColumns(orderedUsage);
     setHasSearched(true);
     setLoading(false);
   }
@@ -222,25 +249,54 @@ export default function UsageReportsPage() {
     if (!needle) return rows;
     return rows.filter((r) => {
       const fields = r.field_values.map((f) => `${f.name} ${f.value}`).join(" ").toLowerCase();
+      const profile = r.entity_profile_values.map((f) => `${f.name} ${f.value}`).join(" ").toLowerCase();
       return (
         r.entity_name.toLowerCase().includes(needle) ||
         r.entity_type_name.toLowerCase().includes(needle) ||
         r.value_display.toLowerCase().includes(needle) ||
-        fields.includes(needle)
+        fields.includes(needle) ||
+        profile.includes(needle)
       );
     });
   }, [q, rows]);
 
+  const entityProfileColumns = useMemo(() => {
+    const set = new Set<string>(orderedEntityProfileColumns);
+    for (const r of filteredRows) {
+      for (const fv of r.entity_profile_values) {
+        const name = String(fv.name ?? "").trim();
+        if (name) set.add(name);
+      }
+    }
+    const values = Array.from(set);
+    return values.sort((a, b) => {
+      const ai = orderedEntityProfileColumns.indexOf(a);
+      const bi = orderedEntityProfileColumns.indexOf(b);
+      if (ai >= 0 && bi >= 0) return ai - bi;
+      if (ai >= 0) return -1;
+      if (bi >= 0) return 1;
+      return a.localeCompare(b, "es", { sensitivity: "base" });
+    });
+  }, [filteredRows, orderedEntityProfileColumns]);
+
   const dynamicColumns = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(orderedUsageFieldColumns);
     for (const r of filteredRows) {
       for (const fv of r.field_values) {
         const name = String(fv.name ?? "").trim();
         if (name) set.add(name);
       }
     }
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
-  }, [filteredRows]);
+    const values = Array.from(set);
+    return values.sort((a, b) => {
+      const ai = orderedUsageFieldColumns.indexOf(a);
+      const bi = orderedUsageFieldColumns.indexOf(b);
+      if (ai >= 0 && bi >= 0) return ai - bi;
+      if (ai >= 0) return -1;
+      if (bi >= 0) return 1;
+      return a.localeCompare(b, "es", { sensitivity: "base" });
+    });
+  }, [filteredRows, orderedUsageFieldColumns]);
   const hasUnitColumn = useMemo(
     () => filteredRows.some((r) => r.usage_unit_visible !== false),
     [filteredRows]
@@ -250,10 +306,22 @@ export default function UsageReportsPage() {
     setBusy(true);
     try {
       const csvRows = [
-        ["Entidad", "Tipo entidad", "Fecha", "Valor", ...(hasUnitColumn ? ["Unidad"] : []), ...dynamicColumns],
-        ...filteredRows.map((r) => [
+        [
+          "Entidad",
+          ...entityProfileColumns,
+          "Fecha",
+          "Valor",
+          ...(hasUnitColumn ? ["Unidad"] : []),
+          ...dynamicColumns,
+        ],
+      ];
+      for (const r of filteredRows) {
+        csvRows.push([
           r.entity_name,
-          r.entity_type_name,
+          ...entityProfileColumns.map((col) => {
+            const found = r.entity_profile_values.find((fv) => fv.name === col);
+            return found?.value ?? "";
+          }),
           formatBusinessDate(r.logged_on),
           r.value_display,
           ...(hasUnitColumn ? [r.usage_unit_visible === false ? "" : (r.usage_unit_name || "")] : []),
@@ -261,8 +329,8 @@ export default function UsageReportsPage() {
             const found = r.field_values.find((fv) => fv.name === col);
             return found?.value ?? "";
           }),
-        ]),
-      ];
+        ]);
+      }
       const csv = toCsv(csvRows);
       const xml = csvToSpreadsheetXml(csv, "ReporteUso");
       const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8;" });
@@ -284,7 +352,7 @@ export default function UsageReportsPage() {
       const subtitle = `Filtro: ${entityTypeId === "all" ? "Todos los tipos" : "Tipo específico"} · Fecha: ${
         dateMode === "single" ? (singleDate || "—") : `${dateFrom || "—"} a ${dateTo || "—"}`
       } · Registros: ${filteredRows.length}`;
-      const html = buildPrintHtml(filteredRows, dynamicColumns, "Reporte de Valores de Uso", subtitle);
+      const html = buildPrintHtml(filteredRows, entityProfileColumns, dynamicColumns, "Reporte de Valores de Uso", subtitle);
       const win = window.open("", "_blank");
       if (!win) {
         setErrorMsg("No se pudo abrir la ventana de impresión. Revisa el bloqueo de popups.");
@@ -310,8 +378,8 @@ export default function UsageReportsPage() {
               <p className="mt-1 text-sm text-slate-500">Consulta histórica de registros de uso con filtros y exportación.</p>
             </div>
             <div className="flex items-center gap-2">
-              <Link href="/app/usage">
-                <Button variant="outline" size="sm">Registro uso</Button>
+              <Link href="/app/usage-capture">
+                <Button variant="outline" size="sm">Captura uso</Button>
               </Link>
               <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading || busy}>
                 Refrescar
@@ -328,25 +396,7 @@ export default function UsageReportsPage() {
           <CardTitle className="text-base">Filtros</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="grid gap-2 md:grid-cols-[170px_170px_170px_220px_minmax(220px,1fr)]">
-            <select
-              value={dateMode}
-              onChange={(e) => setDateMode(e.target.value as "range" | "single")}
-              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
-            >
-              <option value="range">Rango de fechas</option>
-              <option value="single">Fecha exacta</option>
-            </select>
-            {dateMode === "single" ? (
-              <Input type="date" value={singleDate} onChange={(e) => setSingleDate(e.target.value)} />
-            ) : (
-              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-            )}
-            {dateMode === "single" ? (
-              <div className="h-10" />
-            ) : (
-              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-            )}
+          <div className="grid gap-2 md:grid-cols-[220px_170px_170px_170px_minmax(220px,1fr)]">
             <select
               value={entityTypeId}
               onChange={(e) => setEntityTypeId(e.target.value)}
@@ -359,6 +409,24 @@ export default function UsageReportsPage() {
                 </option>
               ))}
             </select>
+            <select
+              value={dateMode}
+              onChange={(e) => setDateMode(e.target.value as "range" | "single")}
+              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+            >
+              <option value="range">Rango de fechas</option>
+              <option value="single">Fecha exacta</option>
+            </select>
+            {dateMode === "single" ? (
+              <Input type="date" value={singleDate} onChange={(e) => setSingleDate(e.target.value)} />
+            ) : (
+              <MarkedDatePicker value={dateFrom} onChange={setDateFrom} label="Desde" />
+            )}
+            {dateMode === "single" ? (
+              <div className="h-10" />
+            ) : (
+              <MarkedDatePicker value={dateTo} onChange={setDateTo} label="Hasta" />
+            )}
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por entidad, valor o campo..." />
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -392,7 +460,6 @@ export default function UsageReportsPage() {
                 <thead>
                   <tr className="border-b bg-slate-50 text-[11px] text-slate-500">
                     <th className="px-3 py-2 text-left font-medium">Entidad</th>
-                    <th className="px-3 py-2 text-left font-medium">Tipo</th>
                     <th className="px-3 py-2 text-left font-medium">Fecha</th>
                     <th className="px-3 py-2 text-left font-medium">Valor</th>
                     {hasUnitColumn ? (
@@ -411,7 +478,6 @@ export default function UsageReportsPage() {
                     return (
                       <tr key={r.id} className="border-b">
                         <td className="px-3 py-2 font-medium text-slate-800">{r.entity_name}</td>
-                        <td className="px-3 py-2 text-slate-700">{r.entity_type_name}</td>
                         <td className="px-3 py-2 text-slate-700">{formatBusinessDate(r.logged_on)}</td>
                         <td className="px-3 py-2 text-slate-800">{r.value_display}</td>
                         {hasUnitColumn ? (

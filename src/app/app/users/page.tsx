@@ -36,7 +36,6 @@ const MODULE_KEYS = [
   "forecast",
   "alerts",
   "entities",
-  "usage",
   "reports_usage",
   "semaphore",
   "entity_types",

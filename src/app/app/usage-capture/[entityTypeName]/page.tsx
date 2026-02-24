@@ -52,13 +52,14 @@ export default function FocusedUsageCapturePage() {
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [loadingExisting, setLoadingExisting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [okMsg, setOkMsg] = useState("");
 
   const [typeLabel, setTypeLabel] = useState("");
   const [entities, setEntities] = useState<Entity[]>([]);
   const [entityId, setEntityId] = useState("");
-  const [viewMode, setViewMode] = useState<"single" | "pending">("single");
+  const [viewMode, setViewMode] = useState<"single" | "pending">("pending");
   const [entitySearch, setEntitySearch] = useState("");
   const [value, setValue] = useState("");
   const [bulkDraftByEntity, setBulkDraftByEntity] = useState<Record<string, string>>({});
@@ -163,6 +164,64 @@ export default function FocusedUsageCapturePage() {
   }, [entityId]);
 
   useEffect(() => {
+    if (viewMode !== "single") return;
+    if (!entityId || !loggedOn || !entityTypeName) return;
+
+    let cancelled = false;
+    async function loadExistingForDay() {
+      setLoadingExisting(true);
+      const token = await getTokenOrRedirect();
+      if (!token || cancelled) return;
+
+      const qs = new URLSearchParams();
+      qs.set("entity_type", entityTypeName);
+      qs.set("entity_id", entityId);
+      qs.set("logged_on", loggedOn);
+      const res = await fetch(`/api/usage-capture/log?${qs.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (cancelled) return;
+      if (!res.ok) {
+        setLoadingExisting(false);
+        setErrorMsg(json.error || "No se pudo cargar el registro del día.");
+        return;
+      }
+
+      if (!json.exists || !json.usage_log) {
+        setValue("");
+        setFieldDraft({});
+        setLoadingExisting(false);
+        return;
+      }
+
+      const usageLog = json.usage_log as {
+        value?: number | null;
+        value_text?: string | null;
+        field_values?: Array<{ usage_field_id?: string; value?: string | null }>;
+      };
+      const main = usageLog.value_text != null && String(usageLog.value_text).trim().length > 0
+        ? String(usageLog.value_text)
+        : (usageLog.value != null ? String(usageLog.value) : "");
+      const nextFieldDraft: Record<string, string> = {};
+      for (const row of usageLog.field_values ?? []) {
+        const id = String(row.usage_field_id ?? "").trim();
+        if (!id) continue;
+        nextFieldDraft[id] = String(row.value ?? "");
+      }
+      setValue(main);
+      setFieldDraft(nextFieldDraft);
+      setLoadingExisting(false);
+    }
+
+    void loadExistingForDay();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, entityId, loggedOn, entityTypeName]);
+
+  useEffect(() => {
     if (filteredEntities.length === 0) {
       setEntityId("");
       return;
@@ -187,12 +246,6 @@ export default function FocusedUsageCapturePage() {
       setBusy(false);
       return;
     }
-    if (loggedOn && alreadyLoggedForDay) {
-      setErrorMsg("Ya existe un registro para esta entidad en la fecha seleccionada.");
-      setBusy(false);
-      return;
-    }
-
     const rawValue = value.trim();
 
     const dynamic = (selected?.fields ?? [])
@@ -228,7 +281,7 @@ export default function FocusedUsageCapturePage() {
     }
 
     const res = await fetch("/api/usage-capture/log", {
-      method: "POST",
+      method: alreadyLoggedForDay ? "PUT" : "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(payload),
     });
@@ -239,8 +292,10 @@ export default function FocusedUsageCapturePage() {
       return;
     }
 
-    setValue("");
-    setFieldDraft({});
+    if (!alreadyLoggedForDay) {
+      setValue("");
+      setFieldDraft({});
+    }
     setEntities((prev) =>
       prev.map((e) => {
         if (e.id !== entityId) return e;
@@ -249,7 +304,7 @@ export default function FocusedUsageCapturePage() {
         return { ...e, logged_days: Array.from(nextDays).sort((a, b) => b.localeCompare(a)) };
       })
     );
-    setOkMsg("Registro guardado correctamente.");
+    setOkMsg(alreadyLoggedForDay ? "Registro actualizado correctamente." : "Registro guardado correctamente.");
     setBusy(false);
   }
 
@@ -377,21 +432,21 @@ export default function FocusedUsageCapturePage() {
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
-                  variant={viewMode === "single" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setViewMode("single")}
-                  disabled={busy}
-                >
-                  Individual
-                </Button>
-                <Button
-                  type="button"
                   variant={viewMode === "pending" ? "default" : "outline"}
                   size="sm"
                   onClick={() => setViewMode("pending")}
                   disabled={busy}
                 >
                   Pendientes del día ({pendingEntities.length})
+                </Button>
+                <Button
+                  type="button"
+                  variant={viewMode === "single" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setViewMode("single")}
+                  disabled={busy}
+                >
+                  Individual
                 </Button>
               </div>
 
@@ -437,12 +492,12 @@ export default function FocusedUsageCapturePage() {
                             {mainSuggestions.map((opt) => {
                               const active = value.trim() === opt;
                               return (
-                                <button
-                                  key={`main-${opt}`}
-                                  type="button"
-                                  disabled={busy || alreadyLoggedForDay}
-                                  onClick={() => setValue((prev) => (prev.trim() === opt ? "" : opt))}
-                                  className={[
+                                  <button
+                                    key={`main-${opt}`}
+                                    type="button"
+                                    disabled={busy || loadingExisting}
+                                    onClick={() => setValue((prev) => (prev.trim() === opt ? "" : opt))}
+                                    className={[
                                     "shrink-0 rounded-full border px-2 py-1 text-xs transition",
                                     active
                                       ? "border-emerald-600 bg-emerald-50 text-emerald-700"
@@ -474,7 +529,7 @@ export default function FocusedUsageCapturePage() {
                           value={value}
                           onChange={(e) => setValue(e.target.value)}
                           placeholder={selected?.usage_unit_visible && selected?.usage_unit_name ? `Valor (${selected.usage_unit_name})` : "Valor"}
-                          disabled={busy || alreadyLoggedForDay}
+                          disabled={busy || loadingExisting}
                         />
                       </div>
                     );
@@ -496,7 +551,7 @@ export default function FocusedUsageCapturePage() {
                                     <button
                                       key={`${f.id}-${opt}`}
                                       type="button"
-                                      disabled={busy || alreadyLoggedForDay}
+                                      disabled={busy || loadingExisting}
                                       onClick={() =>
                                         setFieldDraft((p) => ({
                                           ...p,
@@ -520,7 +575,7 @@ export default function FocusedUsageCapturePage() {
                                 value={fieldDraft[f.id] ?? ""}
                                 onChange={(e) => setFieldDraft((p) => ({ ...p, [f.id]: e.target.value }))}
                                 className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
-                                disabled={busy || alreadyLoggedForDay}
+                                disabled={busy || loadingExisting}
                               >
                                 <option value="">(vacío)</option>
                                 <option value="true">Sí</option>
@@ -531,7 +586,7 @@ export default function FocusedUsageCapturePage() {
                                 type={f.field_type === "number" ? "number" : f.field_type === "date" ? "date" : "text"}
                                 value={fieldDraft[f.id] ?? ""}
                                 onChange={(e) => setFieldDraft((p) => ({ ...p, [f.id]: e.target.value }))}
-                                disabled={busy || alreadyLoggedForDay}
+                                disabled={busy || loadingExisting}
                               />
                             )}
                           </div>
@@ -541,15 +596,17 @@ export default function FocusedUsageCapturePage() {
                   ) : null}
 
                   <div className="text-[11px] text-slate-500">
-                    {alreadyLoggedForDay
-                      ? `Ya existe registro para ${loggedOn}.`
+                    {loadingExisting
+                      ? "Cargando registro del día..."
+                      : alreadyLoggedForDay
+                      ? `Ya existe registro para ${loggedOn}. Puedes editarlo y guardar cambios.`
                       : ((selected?.logged_days ?? []).slice(0, 5).length > 0
                         ? `Días con registro: ${(selected?.logged_days ?? []).slice(0, 5).join(", ")}`
                         : "Sin registros previos.")}
                   </div>
 
-                  <Button onClick={() => void save()} disabled={busy || alreadyLoggedForDay} className="w-auto justify-self-start">
-                    {busy ? "Guardando..." : alreadyLoggedForDay ? "Ya ingresado" : "Guardar registro"}
+                  <Button onClick={() => void save()} disabled={busy || loadingExisting} className="w-auto justify-self-start">
+                    {busy ? "Guardando..." : alreadyLoggedForDay ? "Guardar cambios" : "Guardar registro"}
                   </Button>
                 </>
               ) : (

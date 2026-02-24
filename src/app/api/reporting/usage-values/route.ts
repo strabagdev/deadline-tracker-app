@@ -10,8 +10,8 @@ type UsageFieldValueJoin = {
   value_date: string | null;
   value_boolean: boolean | null;
   usage_fields?:
-    | { name: string | null; key: string | null; field_type: string | null }
-    | { name: string | null; key: string | null; field_type: string | null }[]
+    | { id: string; name: string | null; key: string | null; field_type: string | null; created_at: string | null }
+    | { id: string; name: string | null; key: string | null; field_type: string | null; created_at: string | null }[]
     | null;
 };
 
@@ -47,6 +47,16 @@ type UsageLogJoin = {
       }[]
     | null;
   usage_log_field_values?: UsageFieldValueJoin[] | null;
+};
+
+type EntityFieldValueJoin = {
+  entity_id: string;
+  entity_field_id: string;
+  value_text: string | null;
+  entity_fields?:
+    | { id: string; name: string | null; key: string | null; created_at: string | null }
+    | { id: string; name: string | null; key: string | null; created_at: string | null }[]
+    | null;
 };
 
 function getErrorMessage(error: unknown): string {
@@ -110,7 +120,7 @@ export async function GET(req: Request) {
           value_number,
           value_date,
           value_boolean,
-          usage_fields(name, key, field_type)
+          usage_fields(id, name, key, field_type, created_at)
         )
       `
       )
@@ -127,6 +137,44 @@ export async function GET(req: Request) {
     if (error) throw error;
 
     const rowsRaw = (data ?? []) as UsageLogJoin[];
+    const entityIds = Array.from(
+      new Set(
+        rowsRaw
+          .map((r) => {
+            const entity = pickOne(r.entities);
+            return entity?.id ? String(entity.id) : "";
+          })
+          .filter((id) => id.length > 0)
+      )
+    );
+    const entityProfileByEntityId: Record<string, Array<{ entity_field_id: string; name: string; value: string }>> = {};
+    const entityFieldMetaById = new Map<string, { name: string; created_at: string }>();
+    if (entityIds.length > 0) {
+      const { data: entityFieldValues, error: entityFieldValuesErr } = await db
+        .from("entity_field_values")
+        .select("entity_id, entity_field_id, value_text, entity_fields(id, name, key, created_at)")
+        .eq("organization_id", orgId)
+        .in("entity_id", entityIds);
+      if (entityFieldValuesErr) throw entityFieldValuesErr;
+
+      for (const row of (entityFieldValues ?? []) as EntityFieldValueJoin[]) {
+        const value = String(row.value_text ?? "").trim();
+        if (!value) continue;
+        const field = pickOne(row.entity_fields);
+        const name = String(field?.name ?? field?.key ?? "").trim();
+        if (!name) continue;
+        const entityFieldId = String(row.entity_field_id ?? "").trim();
+        if (!entityFieldId) continue;
+        const createdAt = String(field?.created_at ?? "");
+        entityFieldMetaById.set(entityFieldId, { name, created_at: createdAt });
+        const entityId = String(row.entity_id ?? "").trim();
+        if (!entityId) continue;
+        if (!entityProfileByEntityId[entityId]) entityProfileByEntityId[entityId] = [];
+        entityProfileByEntityId[entityId].push({ entity_field_id: entityFieldId, name, value });
+      }
+    }
+    const usageFieldMetaById = new Map<string, { name: string; created_at: string }>();
+
     const rows = rowsRaw
       .filter((r) => {
         const entity = pickOne(r.entities);
@@ -146,9 +194,15 @@ export async function GET(req: Request) {
       const mainValue = mainValueText || (mainValueNumber != null ? String(mainValueNumber) : "—");
       const fieldValues = (r.usage_log_field_values ?? []).map((fv) => {
         const f = pickOne(fv.usage_fields);
+        const usageFieldId = String(fv.usage_field_id);
+        const fieldName = String(f?.name ?? f?.key ?? "Campo");
+        usageFieldMetaById.set(usageFieldId, {
+          name: fieldName,
+          created_at: String(f?.created_at ?? ""),
+        });
         return {
-          usage_field_id: String(fv.usage_field_id),
-          name: String(f?.name ?? f?.key ?? "Campo"),
+          usage_field_id: usageFieldId,
+          name: fieldName,
           value: renderFieldValue(fv),
         };
       });
@@ -165,6 +219,7 @@ export async function GET(req: Request) {
         value: mainValueNumber,
         value_text: mainValueText || null,
         value_display: mainValue,
+        entity_profile_values: entityProfileByEntityId[String(r.entity_id)] ?? [],
         field_values: fieldValues,
       };
       });
@@ -191,6 +246,24 @@ export async function GET(req: Request) {
         date_to: dateTo || null,
       },
       entity_type_options: entityTypeOptions,
+      column_order: {
+        entity_profile_columns: Array.from(entityFieldMetaById.entries())
+          .map(([id, meta]) => ({ id, name: meta.name, created_at: meta.created_at }))
+          .sort((a, b) => {
+            const ad = Date.parse(a.created_at || "");
+            const bd = Date.parse(b.created_at || "");
+            if (Number.isFinite(ad) && Number.isFinite(bd) && ad !== bd) return ad - bd;
+            return a.name.localeCompare(b.name, "es", { sensitivity: "base" });
+          }),
+        usage_field_columns: Array.from(usageFieldMetaById.entries())
+          .map(([id, meta]) => ({ id, name: meta.name, created_at: meta.created_at }))
+          .sort((a, b) => {
+            const ad = Date.parse(a.created_at || "");
+            const bd = Date.parse(b.created_at || "");
+            if (Number.isFinite(ad) && Number.isFinite(bd) && ad !== bd) return ad - bd;
+            return a.name.localeCompare(b.name, "es", { sensitivity: "base" });
+          }),
+      },
       rows,
     });
   } catch (error: unknown) {
