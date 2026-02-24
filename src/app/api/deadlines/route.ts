@@ -44,7 +44,7 @@ type DeadlineRow = {
   usage_daily_average: number | null;
   usage_daily_average_mode: string | null;
   created_at: string;
-  deadline_types?: DeadlineTypeRow | null;
+  deadline_types?: DeadlineTypeRow | DeadlineTypeRow[] | null;
   measure_by?: MeasureBy | null;
 };
 
@@ -66,20 +66,6 @@ type DeadlineSnapshot = {
 };
 
 type DeadlineEventAction = "create" | "update" | "delete";
-type DeadlineSnapshot = {
-  id: string;
-  entity_id: string;
-  deadline_type_id: string;
-  title: string | null;
-  measure_by: MeasureBy | null;
-  last_done_date: string | null;
-  next_due_date: string | null;
-  last_done_usage: number | null;
-  frequency: number | null;
-  frequency_unit: string | null;
-  usage_daily_average: number | null;
-  usage_daily_average_mode: string | null;
-};
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -221,7 +207,10 @@ async function computeAutoDailyAverage(db: DataClient, orgId: string, entityId: 
 
 
 async function attachComputed(db: DataClient, orgId: string, entityId: string, deadline: DeadlineRow) {
-  const measureBy = (deadline?.deadline_types?.measure_by ?? deadline?.measure_by) as MeasureBy | undefined;
+  const deadlineType = Array.isArray(deadline?.deadline_types)
+    ? deadline.deadline_types[0] ?? null
+    : deadline?.deadline_types ?? null;
+  const measureBy = (deadlineType?.measure_by ?? deadline?.measure_by) as MeasureBy | undefined;
   if (!measureBy) return { ...deadline, computed: { status: "incomplete", reason: "missing_measure_by" } };
 
   if (measureBy === "date") {

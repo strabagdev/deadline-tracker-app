@@ -7,6 +7,7 @@ function repo(overrides?: Partial<DashboardRepo>): DashboardRepo {
     listEntitiesWithDeadlines: async () => [],
     getLatestUsageByEntity: async () => ({}),
     getRecentUsageLogsByEntity: async () => ({}),
+    getCardFieldsByEntity: async () => ({}),
     ...overrides,
   };
 }

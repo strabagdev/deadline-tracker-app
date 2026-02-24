@@ -104,7 +104,7 @@ async function getAccess(req: Request): Promise<{ error: NextResponse } | { ok: 
       db,
       organizationId: access.organizationId,
       role: access.role,
-      memberTypeId: access.memberTypeId,
+      memberTypeId: access.memberTypeId ?? null,
     },
   };
 }
@@ -319,12 +319,14 @@ export async function POST(req: Request) {
     if ("error" in scope) return scope.error;
     const entity = scope.entity;
 
-    const incomingFieldValues = Array.isArray(body?.field_values) ? body.field_values : [];
+    const incomingFieldValues: Array<{ usage_field_id?: unknown }> = Array.isArray(body?.field_values)
+      ? (body.field_values as Array<{ usage_field_id?: unknown }>)
+      : [];
     const usageFieldIds = Array.from(
       new Set(
         incomingFieldValues
-          .map((f) => String((f as { usage_field_id?: unknown })?.usage_field_id ?? "").trim())
-          .filter((id) => id.length > 0)
+          .map((f: { usage_field_id?: unknown }) => String(f?.usage_field_id ?? "").trim())
+          .filter((id: string) => id.length > 0)
       )
     );
     if (usageFieldIds.length > 0) {

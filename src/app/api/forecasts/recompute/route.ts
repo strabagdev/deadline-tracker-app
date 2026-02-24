@@ -15,12 +15,21 @@ type DeadlineRow = {
     name: string;
     measure_by: "date" | "usage";
     is_active: boolean;
-  } | null;
+  } | {
+    id: string;
+    name: string;
+    measure_by: "date" | "usage";
+    is_active: boolean;
+  }[] | null;
   entities?: {
     id: string;
     name: string;
     tracks_usage: boolean;
-  } | null;
+  } | {
+    id: string;
+    name: string;
+    tracks_usage: boolean;
+  }[] | null;
 };
 
 type RiskLevel = "green" | "yellow" | "orange" | "red" | "none";
@@ -30,6 +39,11 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return "error";
+}
+
+function pickOne<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
 }
 
 function startOfLocalDay(d: Date) {
@@ -141,9 +155,11 @@ export async function POST(req: Request) {
     }> = [];
 
     for (const d of deadlines) {
-      const measureBy = d.deadline_types?.measure_by;
-      const entityName = d.entities?.name ?? "Entidad";
-      const deadlineName = d.deadline_types?.name ?? "Vencimiento";
+      const deadlineType = pickOne(d.deadline_types);
+      const entity = pickOne(d.entities);
+      const measureBy = deadlineType?.measure_by;
+      const entityName = entity?.name ?? "Entidad";
+      const deadlineName = deadlineType?.name ?? "Vencimiento";
 
       let forecastDueDate: Date | null = null;
       let daysRemaining: number | null = null;
@@ -162,7 +178,7 @@ export async function POST(req: Request) {
         const avg = Number(d.usage_daily_average ?? 0);
         const freq = Number(d.frequency ?? NaN);
         const lastDoneUsage = Number(d.last_done_usage ?? NaN);
-        const tracksUsage = Boolean(d.entities?.tracks_usage);
+        const tracksUsage = Boolean(entity?.tracks_usage);
 
         if (
           tracksUsage &&

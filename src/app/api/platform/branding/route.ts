@@ -98,6 +98,9 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const rawFile = form.get("file");
     const file = rawFile instanceof File ? rawFile : null;
+    if (!file) {
+      return NextResponse.json({ error: "Debes seleccionar un archivo de imagen", code: "BAD_REQUEST" }, { status: 400 });
+    }
     const fileValidation = validateLogoFile(file, {
       maxBytes: MAX_LOGO_SIZE_BYTES,
       allowedMimeTypes: ALLOWED_MIME_TYPES,

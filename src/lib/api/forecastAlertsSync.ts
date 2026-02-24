@@ -14,11 +14,18 @@ type DeadlineRow = {
     name: string | null;
     measure_by: "date" | "usage";
     is_active: boolean;
-  } | null;
+  } | {
+    name: string | null;
+    measure_by: "date" | "usage";
+    is_active: boolean;
+  }[] | null;
   entities?: {
     name: string | null;
     tracks_usage: boolean;
-  } | null;
+  } | {
+    name: string | null;
+    tracks_usage: boolean;
+  }[] | null;
 };
 
 type ForecastRow = {
@@ -150,7 +157,9 @@ export async function syncForecastAndAlertsForEntity(db: DataClient, orgId: stri
   }> = [];
 
   for (const d of deadlines) {
-    const measureBy = d.deadline_types?.measure_by;
+    const deadlineType = pickOne(d.deadline_types);
+    const entity = pickOne(d.entities);
+    const measureBy = deadlineType?.measure_by;
     let forecastDueDate: Date | null = null;
     let daysRemaining: number | null = null;
 
@@ -167,7 +176,7 @@ export async function syncForecastAndAlertsForEntity(db: DataClient, orgId: stri
       const avg = Number(d.usage_daily_average ?? 0);
       const freq = Number(d.frequency ?? NaN);
       const lastDoneUsage = Number(d.last_done_usage ?? NaN);
-      const tracksUsage = Boolean(d.entities?.tracks_usage);
+      const tracksUsage = Boolean(entity?.tracks_usage);
 
       if (
         tracksUsage &&

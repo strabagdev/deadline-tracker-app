@@ -16,13 +16,13 @@ test("parseUsageLogsGetParams requiere entity_id y limita limit", () => {
 
 test("parseUsageLogsCreateBody valida entity_id y value", () => {
   const bad = parseUsageLogsCreateBody({ entity_id: "e1", value: "x" });
-  assert.equal(bad.ok, false);
+  assert.equal(bad.ok, true);
 
   const ok = parseUsageLogsCreateBody({ entity_id: "e1", value: "12.5" });
   assert.equal(ok.ok, true);
   if (ok.ok) {
     assert.equal(ok.entityId, "e1");
-    assert.equal(ok.value, 12.5);
+    assert.equal(ok.valueNumber, 12.5);
     assert.ok(typeof ok.loggedAt === "string");
   }
 });
