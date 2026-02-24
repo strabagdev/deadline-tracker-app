@@ -10,8 +10,8 @@ type MemberListRow = {
   role: string;
   member_type_id?: string | null;
   created_at: string;
-  profiles: { email: string | null } | { email: string | null }[] | null;
-  organization_member_types?: { name: string | null } | { name: string | null }[] | null;
+  profiles?: { email?: string | null } | { email?: string | null }[] | null;
+  organization_member_types?: { name?: string | null } | { name?: string | null }[] | null;
 };
 
 /*
@@ -43,7 +43,8 @@ export async function GET(req: Request) {
 
     if (listErr) throw listErr;
 
-    const members = (rows as MemberListRow[] | null | undefined)?.map((r) => ({
+    const safeRows: MemberListRow[] = Array.isArray(rows) ? (rows as MemberListRow[]) : [];
+    const members = safeRows.map((r) => ({
       user_id: r.user_id,
       role: r.role,
       member_type_id: r.member_type_id ?? null,
@@ -52,7 +53,7 @@ export async function GET(req: Request) {
         : r.organization_member_types?.name ?? null,
       created_at: r.created_at,
       email: Array.isArray(r.profiles) ? r.profiles[0]?.email ?? "" : r.profiles?.email ?? "",
-    })) ?? [];
+    }));
 
     return NextResponse.json({ organization_id: organizationId, members });
   } catch (error: unknown) {

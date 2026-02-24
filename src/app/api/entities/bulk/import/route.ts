@@ -9,7 +9,10 @@ type ParsedRow = {
   entityId: string | null;
   name: string;
   entityTypeName: string;
-  tracksUsage: boolean;
+  tracksUsage: boolean | null;
+  tracksUsageProvided: boolean;
+  usageUnitId: string | null;
+  usageUnitProvided: boolean;
   fields: Record<string, string>;
 };
 
@@ -75,6 +78,8 @@ export async function POST(req: Request) {
     const nameIdx = indexByHeader.get("entity_name") ?? -1;
     const typeIdx = indexByHeader.get("entity_type") ?? -1;
     const tracksUsageIdx = indexByHeader.get("tracks_usage") ?? -1;
+    const usageUnitNameIdx = indexByHeader.get("usage_unit") ?? -1;
+    const usageUnitIdIdx = indexByHeader.get("usage_unit_id") ?? -1;
 
     const fieldColumns = headers
       .map((h, i) => ({ h, i }))
@@ -82,15 +87,22 @@ export async function POST(req: Request) {
       .map(({ h, i }) => ({ key: h.slice("field:".length).trim(), index: i }))
       .filter((v) => v.key.length > 0);
 
-    const [{ data: types, error: typeErr }, { data: fields, error: fieldErr }, { data: entities, error: entErr }] =
+    const [
+      { data: types, error: typeErr },
+      { data: fields, error: fieldErr },
+      { data: entities, error: entErr },
+      { data: usageUnits, error: usageUnitsErr },
+    ] =
       await Promise.all([
         db.from("entity_types").select("id, name").eq("organization_id", orgId),
         db.from("entity_fields").select("id, entity_type_id, key").eq("organization_id", orgId),
         db.from("entities").select("id, entity_type_id").eq("organization_id", orgId),
+        db.from("usage_units").select("id, name").eq("organization_id", orgId).eq("is_active", true),
       ]);
     if (typeErr) throw typeErr;
     if (fieldErr) throw fieldErr;
     if (entErr) throw entErr;
+    if (usageUnitsErr) throw usageUnitsErr;
 
     const typeByName = new Map<string, { id: string; name: string }>();
     for (const t of (types ?? []) as Array<{ id: string; name: string }>) {
@@ -113,6 +125,12 @@ export async function POST(req: Request) {
     for (const e of (entities ?? []) as Array<{ id: string; entity_type_id: string }>) {
       entityTypeById.set(e.id, e.entity_type_id);
     }
+    const usageUnitById = new Map<string, { id: string; name: string }>();
+    const usageUnitByName = new Map<string, { id: string; name: string }>();
+    for (const u of (usageUnits ?? []) as Array<{ id: string; name: string }>) {
+      usageUnitById.set(u.id, u);
+      usageUnitByName.set(String(u.name ?? "").trim().toLowerCase(), u);
+    }
 
     const errors: Array<{ line: number; message: string }> = [];
     const parsed: ParsedRow[] = [];
@@ -126,14 +144,18 @@ export async function POST(req: Request) {
       const typeNameRaw = typeIdx >= 0 ? String(row[typeIdx] ?? "").trim() : "";
       const typeName = typeNameRaw || selectedType?.name || "";
       const tracksRaw = tracksUsageIdx >= 0 ? String(row[tracksUsageIdx] ?? "").trim() : "";
+      const usageUnitNameRaw = usageUnitNameIdx >= 0 ? String(row[usageUnitNameIdx] ?? "").trim() : "";
+      const usageUnitIdRaw = usageUnitIdIdx >= 0 ? String(row[usageUnitIdIdx] ?? "").trim() : "";
 
       if (!name) errors.push({ line: lineNo, message: "entity_name requerido" });
       if (!typeName) errors.push({ line: lineNo, message: "entity_type requerido" });
 
-      const parsedTracks = parseBool(tracksRaw);
-      if (tracksRaw && parsedTracks === null) {
+      const tracksUsageProvided = tracksUsageIdx >= 0 && tracksRaw.length > 0;
+      const parsedTracks = tracksUsageProvided ? parseBool(tracksRaw) : null;
+      if (tracksUsageProvided && parsedTracks === null) {
         errors.push({ line: lineNo, message: `tracks_usage inválido: ${tracksRaw}` });
       }
+      const tracksUsage = parsedTracks;
 
       const type = typeByName.get(typeName.toLowerCase());
       if (!type) {
@@ -149,6 +171,30 @@ export async function POST(req: Request) {
           errors.push({ line: lineNo, message: `entity_id no existe en la organización: ${entityId}` });
         } else if (type && entityTypeById.get(entityId) !== type.id) {
           errors.push({ line: lineNo, message: "No se permite cambiar entity_type de una entidad existente por importación" });
+        }
+      }
+
+      const usageUnitProvided = usageUnitIdRaw.length > 0 || usageUnitNameRaw.length > 0;
+      let resolvedUsageUnitId: string | null = null;
+      if (tracksUsage === true || (!tracksUsageProvided && usageUnitProvided)) {
+        if (usageUnitIdRaw) {
+          if (!isUuid(usageUnitIdRaw)) {
+            errors.push({ line: lineNo, message: `usage_unit_id inválido: ${usageUnitIdRaw}` });
+          } else {
+            const unit = usageUnitById.get(usageUnitIdRaw);
+            if (!unit) {
+              errors.push({ line: lineNo, message: `usage_unit_id no existe o está inactivo: ${usageUnitIdRaw}` });
+            } else {
+              resolvedUsageUnitId = unit.id;
+            }
+          }
+        } else if (usageUnitNameRaw) {
+          const unit = usageUnitByName.get(usageUnitNameRaw.toLowerCase());
+          if (!unit) {
+            errors.push({ line: lineNo, message: `usage_unit no existe o está inactivo: ${usageUnitNameRaw}` });
+          } else {
+            resolvedUsageUnitId = unit.id;
+          }
         }
       }
 
@@ -171,7 +217,10 @@ export async function POST(req: Request) {
         entityId: entityId || null,
         name,
         entityTypeName: typeName,
-        tracksUsage: parsedTracks ?? false,
+        tracksUsage,
+        tracksUsageProvided,
+        usageUnitId: resolvedUsageUnitId,
+        usageUnitProvided,
         fields: fieldMap,
       });
     }
@@ -215,21 +264,35 @@ export async function POST(req: Request) {
       try {
         let entityId = row.entityId;
         if (entityId) {
+          const patch: Record<string, unknown> = { name: row.name };
+          if (row.tracksUsageProvided) {
+            patch.tracks_usage = row.tracksUsage === true;
+            if (row.tracksUsage === false) {
+              patch.usage_unit_id = null;
+            } else if (row.usageUnitProvided) {
+              patch.usage_unit_id = row.usageUnitId;
+            }
+          } else if (row.usageUnitProvided) {
+            patch.usage_unit_id = row.usageUnitId;
+          }
+
           const { error: updErr } = await db
             .from("entities")
-            .update({ name: row.name, tracks_usage: row.tracksUsage })
+            .update(patch)
             .eq("organization_id", orgId)
             .eq("id", entityId);
           if (updErr) throw updErr;
           updated++;
         } else {
+          const createTracksUsage = row.tracksUsage === true;
           const { data: ins, error: insErr } = await db
             .from("entities")
             .insert({
               organization_id: orgId,
               name: row.name,
               entity_type_id: type.id,
-              tracks_usage: row.tracksUsage,
+              tracks_usage: createTracksUsage,
+              usage_unit_id: createTracksUsage ? row.usageUnitId : null,
             })
             .select("id")
             .single();

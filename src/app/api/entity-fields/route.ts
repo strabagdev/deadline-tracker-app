@@ -176,3 +176,43 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const { user } = await requireAuthUser(req);
+    const db = createDataServerClient();
+    const access = await getAdminOrgAccess(db, user.id);
+    if ("error" in access) {
+      const status = access.error === "no active organization" ? 400 : 403;
+      const error = access.error === "forbidden" ? "admin required" : access.error;
+      const code = access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN";
+      return NextResponse.json({ error, code }, { status });
+    }
+
+    const url = new URL(req.url);
+    const id = String(url.searchParams.get("id") ?? "").trim();
+    if (!id) return NextResponse.json({ error: "id required", code: "BAD_REQUEST" }, { status: 400 });
+
+    const { data: existing, error: existingErr } = await db
+      .from("entity_fields")
+      .select("id")
+      .eq("organization_id", access.organizationId)
+      .eq("id", id)
+      .maybeSingle();
+    if (existingErr) throw existingErr;
+    if (!existing?.id) {
+      return NextResponse.json({ error: "field not found", code: "ENTITY_FIELD_NOT_FOUND" }, { status: 404 });
+    }
+
+    const { error } = await db
+      .from("entity_fields")
+      .delete()
+      .eq("organization_id", access.organizationId)
+      .eq("id", id);
+    if (error) throw error;
+
+    return NextResponse.json({ ok: true });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
+  }
+}

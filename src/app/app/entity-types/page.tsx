@@ -226,6 +226,31 @@ export default function EntityTypesPage() {
     setBusy(false);
   }
 
+  async function deleteField(fieldId: string, fieldName: string) {
+    const ok = confirm(`¿Eliminar campo "${fieldName}"? Esta acción no se puede deshacer.`);
+    if (!ok) return;
+
+    setBusy(true);
+    setMsg("");
+    const token = await getTokenOrRedirect(router);
+    if (!token) return;
+
+    const res = await fetch(`/api/entity-fields?id=${encodeURIComponent(fieldId)}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMsg(json.error || "No se pudo eliminar el campo");
+      setBusy(false);
+      return;
+    }
+
+    if (editingFieldId === fieldId) cancelEditField();
+    if (selectedId) await loadFields(selectedId);
+    setBusy(false);
+  }
+
   return (
     <main style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
       <h2>Tipos de entidad</h2>
@@ -464,13 +489,22 @@ export default function EntityTypesPage() {
                                 </button>
                               </div>
                             ) : (
-                              <button
-                                onClick={() => startEditField(f)}
-                                disabled={busy}
-                                style={{ padding: "6px 10px" }}
-                              >
-                                Editar
-                              </button>
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <button
+                                  onClick={() => startEditField(f)}
+                                  disabled={busy}
+                                  style={{ padding: "6px 10px" }}
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  onClick={() => void deleteField(f.id, f.name)}
+                                  disabled={busy}
+                                  style={{ padding: "6px 10px", color: "crimson" }}
+                                >
+                                  Eliminar
+                                </button>
+                              </div>
                             )}
                           </td>
                         </tr>

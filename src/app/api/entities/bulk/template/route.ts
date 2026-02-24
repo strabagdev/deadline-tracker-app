@@ -47,12 +47,17 @@ export async function GET(req: Request) {
       new Set(filteredFields.map((f) => String(f.key ?? "").trim()).filter(Boolean))
     ).sort((a, b) => a.localeCompare(b));
 
-    const header = ["entity_id", "entity_name", "entity_type", "tracks_usage", ...fieldKeys.map((k) => `field:${k}`)];
+    const header = [
+      "entity_id",
+      "entity_name",
+      "entity_type",
+      "tracks_usage",
+      "usage_unit",
+      "usage_unit_id",
+      ...fieldKeys.map((k) => `field:${k}`),
+    ];
 
-    const firstTypeName = effectiveType?.name ?? typeList[0]?.name ?? "Tipo existente";
-    const sample = ["", "Ejemplo entidad", firstTypeName, "false", ...fieldKeys.map(() => "")];
-
-    const csv = toCsv([header, sample]);
+    const csv = toCsv([header]);
 
     return new NextResponse(csv, {
       status: 200,
