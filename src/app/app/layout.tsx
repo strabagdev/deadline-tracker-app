@@ -268,7 +268,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           setActiveOrgName(orgJson?.organization?.name ?? "");
           setActiveOrgLogoUrl(orgJson?.organization?.logo_url ?? "");
           if (accessRes.ok && Array.isArray(accessJson?.allowed_modules)) {
-            const modules = new Set(accessJson.allowed_modules.map((v: unknown) => String(v)));
+            const modules = new Set<string>(accessJson.allowed_modules.map((v: unknown) => String(v)));
             if (modules.has("dashboard")) {
               modules.add("analytics_dashboard");
               modules.add("operations_dashboard");
