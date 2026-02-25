@@ -4,6 +4,7 @@ import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { canViewModule, getOrgAccess } from "@/lib/server/orgAccess";
 
 type DataClient = ReturnType<typeof createDataServerClient>;
+type Status = "green" | "yellow" | "orange" | "red" | "none";
 
 type EntityRow = {
   id: string;
@@ -35,6 +36,21 @@ function getErrorMessage(error: unknown): string {
 function pickOne<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
   return value ?? null;
+}
+
+function statusPriority(s: Status) {
+  if (s === "red") return 0;
+  if (s === "orange") return 1;
+  if (s === "yellow") return 2;
+  if (s === "green") return 3;
+  return 4;
+}
+
+function riskFromDays(daysRemaining: number, thresholds: { yellow: number; orange: number; red: number }): Status {
+  if (daysRemaining <= thresholds.red) return "red";
+  if (daysRemaining <= thresholds.orange) return "orange";
+  if (daysRemaining <= thresholds.yellow) return "yellow";
+  return "green";
 }
 
 async function getLatestUsageByEntity(db: DataClient, orgId: string, entityIds: string[]) {
@@ -155,6 +171,22 @@ export async function GET(req: Request) {
     const orgId = access.organizationId;
     const url = new URL(req.url);
     const mode = String(url.searchParams.get("mode") ?? "analytics").toLowerCase();
+    const statusRaw = String(url.searchParams.get("status") ?? "").trim();
+    const statuses = Array.from(
+      new Set(
+        statusRaw
+          .split(",")
+          .map((s) => s.trim().toLowerCase())
+          .filter((s): s is Status => ["red", "orange", "yellow", "green", "none"].includes(s))
+      )
+    );
+    const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
+    const pageSizeRaw = url.searchParams.get("page_size");
+    const pageSizeParsed = pageSizeRaw == null ? 0 : Number(pageSizeRaw);
+    const pageSize =
+      Number.isFinite(pageSizeParsed) && pageSizeParsed > 0
+        ? Math.min(200, Math.trunc(pageSizeParsed))
+        : 0;
 
     const [canAnalytics, canOperations, canEntities] = await Promise.all([
       canViewModule(db, orgId, access.role, access.memberTypeId, "analytics_dashboard"),
@@ -186,6 +218,18 @@ export async function GET(req: Request) {
     ]);
 
     const nearestForecastByEntity = new Map<
+      string,
+      {
+        deadline_id: string;
+        deadline_name: string;
+        measure_by: "date" | "usage" | "unknown";
+        forecast_due_date: string | null;
+        days_remaining: number | null;
+        risk_level: "green" | "yellow" | "orange" | "red" | "none";
+        risk_score: number;
+      }
+    >();
+    const fallbackNearestByEntity = new Map<
       string,
       {
         deadline_id: string;
@@ -229,6 +273,60 @@ export async function GET(req: Request) {
           });
         }
       }
+
+      const { data: settingsData, error: settingsErr } = await db
+        .from("organization_settings")
+        .select("yellow_days, orange_days, red_days")
+        .eq("organization_id", orgId)
+        .maybeSingle();
+      if (settingsErr) throw settingsErr;
+      const thresholds = {
+        yellow: Number(settingsData?.yellow_days ?? 60),
+        orange: Number(settingsData?.orange_days ?? 30),
+        red: Number(settingsData?.red_days ?? 15),
+      };
+
+      const { data: deadlinesData, error: deadlinesErr } = await db
+        .from("deadlines")
+        .select("id, entity_id, next_due_date, deadline_types(name, measure_by)")
+        .eq("organization_id", orgId)
+        .in("entity_id", entityIds)
+        .not("next_due_date", "is", null);
+      if (deadlinesErr) throw deadlinesErr;
+
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const todayTs = Date.parse(`${todayIso}T00:00:00Z`);
+      for (const row of (deadlinesData ?? []) as Array<{
+        id: string;
+        entity_id: string;
+        next_due_date: string | null;
+        deadline_types?: { name?: string | null; measure_by?: "date" | "usage" | null } | { name?: string | null; measure_by?: "date" | "usage" | null }[] | null;
+      }>) {
+        if (nearestForecastByEntity.has(row.entity_id)) continue;
+        if (!row.next_due_date) continue;
+        const dt = pickOne(row.deadline_types ?? null);
+        if (dt?.measure_by !== "date") continue;
+
+        const dueTs = Date.parse(`${String(row.next_due_date).slice(0, 10)}T00:00:00Z`);
+        if (Number.isNaN(dueTs)) continue;
+        const daysRemaining = Math.ceil((dueTs - todayTs) / (24 * 60 * 60 * 1000));
+        const risk = riskFromDays(daysRemaining, thresholds);
+        const riskScore = risk === "red" ? 100 : risk === "orange" ? 75 : risk === "yellow" ? 50 : 25;
+
+        const current = fallbackNearestByEntity.get(row.entity_id);
+        const currentDays = current?.days_remaining ?? Number.MAX_SAFE_INTEGER;
+        if (!current || daysRemaining < currentDays) {
+          fallbackNearestByEntity.set(row.entity_id, {
+            deadline_id: String(row.id),
+            deadline_name: String(dt?.name ?? "Vencimiento"),
+            measure_by: "date",
+            forecast_due_date: String(row.next_due_date),
+            days_remaining: daysRemaining,
+            risk_level: risk,
+            risk_score: riskScore,
+          });
+        }
+      }
     }
 
     const resultEntities = entities.map((e) => ({
@@ -240,13 +338,56 @@ export async function GET(req: Request) {
       usage_unit_id: e.usage_unit_id,
       entity_types: pickOne(e.entity_types),
       card_fields: cardFieldsByEntity[e.id] ?? [],
-      nearest_forecast: nearestForecastByEntity.get(e.id) ?? null,
+      nearest_forecast: nearestForecastByEntity.get(e.id) ?? fallbackNearestByEntity.get(e.id) ?? null,
     }));
 
+    const latestUsageOut: Record<string, { value: number; logged_at: string; logged_on: string | null }> = latestUsageByEntity;
+    let entitiesOut = resultEntities;
+    let filteredCount = resultEntities.length;
+
+    if (mode === "operations") {
+      let filtered = resultEntities;
+      if (statuses.length > 0) {
+        filtered = filtered.filter((e) => statuses.includes((e.nearest_forecast?.risk_level ?? "none") as Status));
+      }
+      filtered.sort((a, b) => {
+        const sa = (a.nearest_forecast?.risk_level ?? "none") as Status;
+        const sb = (b.nearest_forecast?.risk_level ?? "none") as Status;
+        const pa = statusPriority(sa);
+        const pb = statusPriority(sb);
+        if (pa !== pb) return pa - pb;
+        const da = a.nearest_forecast?.forecast_due_date ? new Date(a.nearest_forecast.forecast_due_date).getTime() : Number.MAX_SAFE_INTEGER;
+        const db = b.nearest_forecast?.forecast_due_date ? new Date(b.nearest_forecast.forecast_due_date).getTime() : Number.MAX_SAFE_INTEGER;
+        if (da !== db) return da - db;
+        return String(a.name ?? "").localeCompare(String(b.name ?? ""));
+      });
+
+      filteredCount = filtered.length;
+      if (pageSize > 0) {
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize;
+        filtered = filtered.slice(from, to);
+      }
+      entitiesOut = filtered;
+    }
+
+    const latestUsageFiltered = mode === "operations"
+      ? Object.fromEntries(
+          Object.entries(latestUsageOut).filter(([entityId]) => entitiesOut.some((e) => e.id === entityId))
+        )
+      : latestUsageOut;
+
     return NextResponse.json({
-      meta: { active_org_id: orgId, role: access.role, entity_count_in_org: entities.length },
-      entities: resultEntities,
-      latest_usage_by_entity: latestUsageByEntity,
+      meta: {
+        active_org_id: orgId,
+        role: access.role,
+        entity_count_in_org: entities.length,
+        filtered_count: filteredCount,
+        page: pageSize > 0 ? page : 1,
+        page_size: pageSize > 0 ? pageSize : null,
+      },
+      entities: entitiesOut,
+      latest_usage_by_entity: latestUsageFiltered,
     });
   } catch (e: unknown) {
     return NextResponse.json({ error: getErrorMessage(e), code: "INTERNAL_ERROR" }, { status: 500 });

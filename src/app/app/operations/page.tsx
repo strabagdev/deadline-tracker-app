@@ -146,7 +146,7 @@ export default function OperationsPage() {
   const [filterEntityType, setFilterEntityType] = useState<string>("all");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(25);
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [dashboardPanelCollapsed, setDashboardPanelCollapsed] = useState(true);
   const [secondaryMenuOpen, setSecondaryMenuOpen] = useState(false);
@@ -201,7 +201,7 @@ export default function OperationsPage() {
     const res = await fetch("/api/dashboard?mode=operations", { headers: { Authorization: `Bearer ${token}` } });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setErrorMsg(json.error || "No se pudo cargar el dashboard");
+      setErrorMsg(json.error || "No se pudo cargar operaciones");
       setEntities([]);
       setUsage({});
       setMeta(null);
@@ -363,7 +363,8 @@ export default function OperationsPage() {
     setPage(1);
   }, [filterEntityType, filterSecondary, filterStatus, q, pageSize]);
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const totalRowsForPagination = rows.length;
+  const totalPages = Math.max(1, Math.ceil(totalRowsForPagination / pageSize));
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * pageSize;
   const pagedRows = rows.slice(pageStart, pageStart + pageSize);
@@ -801,7 +802,7 @@ export default function OperationsPage() {
 
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2">
               <div className="text-xs text-slate-500">
-                Mostrando {rows.length === 0 ? 0 : pageStart + 1}-{Math.min(pageStart + pageSize, rows.length)} de {rows.length}
+                Mostrando {totalRowsForPagination === 0 ? 0 : pageStart + 1}-{Math.min(pageStart + pageSize, totalRowsForPagination)} de {totalRowsForPagination}
               </div>
               <div className="flex items-center gap-1.5">
                 <Button

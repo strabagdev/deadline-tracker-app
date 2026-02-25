@@ -140,7 +140,7 @@ export default function AnalyticsDashboardPage() {
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     const arr = Array.from(counts.entries()).map(([name, count]) => ({ name, count }));
-    return arr.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)).slice(0, 8);
+    return arr.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [filtered]);
 
   const dueTrend30 = useMemo(() => {
@@ -161,8 +161,7 @@ export default function AnalyticsDashboardPage() {
 
     return Array.from(buckets.entries())
       .map(([day, count]) => ({ day, count }))
-      .sort((a, b) => a.day.localeCompare(b.day))
-      .slice(0, 12);
+      .sort((a, b) => a.day.localeCompare(b.day));
   }, [filtered]);
 
   if (loading) {

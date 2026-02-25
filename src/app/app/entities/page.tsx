@@ -46,6 +46,16 @@ type EntityRow = {
   entity_type_id: string;
   usage_unit_id?: string | null;
   entity_types?: EntityType | null;
+  card_fields?: Array<{ name: string; value_text: string }>;
+  nearest_forecast?: {
+    deadline_id: string;
+    deadline_name: string;
+    measure_by: "date" | "usage" | "unknown";
+    forecast_due_date: string | null;
+    days_remaining: number | null;
+    risk_level: Status;
+    risk_score: number;
+  } | null;
   deadlines?: Deadline[] | null;
 };
 
@@ -487,16 +497,33 @@ export default function EntitiesPage() {
     return entities.map((e) => {
       const latest = usage[e.id]?.value ?? null;
       const latestAt = usage[e.id]?.logged_at ?? null;
-      const nearest = pickNearestDeadline(e.deadlines, latest, {
-        yellowDays: Number(semaphore.yellow_days ?? 60),
-        orangeDays: Number(semaphore.orange_days ?? 30),
-        redDays: Number(semaphore.red_days ?? 15),
-        labelGreen: semaphore.label_green,
-        labelYellow: semaphore.label_yellow,
-        labelOrange: semaphore.label_orange,
-        labelRed: semaphore.label_red,
-      });
-      const status: Status = (nearest?.status as Status) ?? "none";
+      const nf = e.nearest_forecast ?? null;
+      const nearest = nf
+        ? {
+            due: nf.forecast_due_date ? new Date(nf.forecast_due_date) : null,
+            label:
+              nf.risk_level === "red"
+                ? semaphore.label_red
+                : nf.risk_level === "orange"
+                  ? semaphore.label_orange
+                  : nf.risk_level === "yellow"
+                    ? semaphore.label_yellow
+                    : nf.risk_level === "green"
+                      ? semaphore.label_green
+                      : "Sin info",
+            typeName: nf.deadline_name ?? "Sin tipo",
+            measureBy: nf.measure_by,
+          }
+        : pickNearestDeadline(e.deadlines, latest, {
+            yellowDays: Number(semaphore.yellow_days ?? 60),
+            orangeDays: Number(semaphore.orange_days ?? 30),
+            redDays: Number(semaphore.red_days ?? 15),
+            labelGreen: semaphore.label_green,
+            labelYellow: semaphore.label_yellow,
+            labelOrange: semaphore.label_orange,
+            labelRed: semaphore.label_red,
+          });
+      const status: Status = nf?.risk_level ?? ((nearest?.status as Status) ?? "none");
       return { entity: e, nearest, status, latestUsage: latest, latestUsageAt: latestAt };
     });
   }, [entities, usage, semaphore]);
