@@ -498,6 +498,15 @@ export default function EntitiesPage() {
       const latest = usage[e.id]?.value ?? null;
       const latestAt = usage[e.id]?.logged_at ?? null;
       const nf = e.nearest_forecast ?? null;
+      const computedNearest = pickNearestDeadline(e.deadlines, latest, {
+        yellowDays: Number(semaphore.yellow_days ?? 60),
+        orangeDays: Number(semaphore.orange_days ?? 30),
+        redDays: Number(semaphore.red_days ?? 15),
+        labelGreen: semaphore.label_green,
+        labelYellow: semaphore.label_yellow,
+        labelOrange: semaphore.label_orange,
+        labelRed: semaphore.label_red,
+      });
       const nearest = nf
         ? {
             due: nf.forecast_due_date ? new Date(nf.forecast_due_date) : null,
@@ -514,16 +523,8 @@ export default function EntitiesPage() {
             typeName: nf.deadline_name ?? "Sin tipo",
             measureBy: nf.measure_by,
           }
-        : pickNearestDeadline(e.deadlines, latest, {
-            yellowDays: Number(semaphore.yellow_days ?? 60),
-            orangeDays: Number(semaphore.orange_days ?? 30),
-            redDays: Number(semaphore.red_days ?? 15),
-            labelGreen: semaphore.label_green,
-            labelYellow: semaphore.label_yellow,
-            labelOrange: semaphore.label_orange,
-            labelRed: semaphore.label_red,
-          });
-      const status: Status = nf?.risk_level ?? ((nearest?.status as Status) ?? "none");
+        : computedNearest;
+      const status: Status = nf?.risk_level ?? ((computedNearest?.status as Status) ?? "none");
       return { entity: e, nearest, status, latestUsage: latest, latestUsageAt: latestAt };
     });
   }, [entities, usage, semaphore]);
