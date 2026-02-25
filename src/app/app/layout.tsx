@@ -169,6 +169,7 @@ function NavLink({ href, label, icon }: { href: string; label: string; icon: Rea
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/app", label: "Dashboard", moduleKey: "dashboard", icon: <IconHome /> },
+  { href: "/app/operations", label: "Operaciones", moduleKey: "dashboard", icon: <IconEntities /> },
   { href: "/app/forecast", label: "Forecast", moduleKey: "forecast", icon: <IconForecast /> },
   { href: "/app/alerts", label: "Alertas", moduleKey: "alerts", icon: <IconAlert /> },
   { href: "/app/entities", label: "Entidades", moduleKey: "entities", icon: <IconEntities /> },
@@ -183,6 +184,7 @@ const NAV_ITEMS: NavItem[] = [
 
 function getModuleByPath(pathname: string): ModuleKey | null {
   if (pathname === "/app") return "dashboard";
+  if (pathname.startsWith("/app/operations")) return "dashboard";
   if (pathname.startsWith("/app/forecast")) return "forecast";
   if (pathname.startsWith("/app/alerts")) return "alerts";
   if (pathname.startsWith("/app/entities")) return "entities";
@@ -312,7 +314,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   function refreshApp() {
-    if (pathname === "/app" && typeof window !== "undefined") {
+    if ((pathname === "/app" || pathname.startsWith("/app/operations")) && typeof window !== "undefined") {
       window.dispatchEvent(new Event("dashboard-refresh"));
       return;
     }
