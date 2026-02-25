@@ -62,7 +62,7 @@ export default function AnalyticsDashboardPage() {
       return;
     }
 
-    const res = await fetch("/api/dashboard", { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch("/api/dashboard?mode=analytics", { headers: { Authorization: `Bearer ${token}` } });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
       setErrorMsg(json.error || "No se pudo cargar información analítica.");

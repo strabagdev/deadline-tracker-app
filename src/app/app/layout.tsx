@@ -462,7 +462,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       <footer className="border-t bg-white px-4 py-3">
         <div className={cn("mx-auto text-xs text-slate-500", isSuperAdmin ? "max-w-[1100px]" : "max-w-[1400px]")}>
-          v2 · Implementando una mejora en el sistema de registro de uso, para que sea dinámico entre unidades y estados
+          v2 · Dashboard analítico y Operaciones separadas, con control de acceso por módulo y captura de uso dinámica.
         </div>
       </footer>
     </div>

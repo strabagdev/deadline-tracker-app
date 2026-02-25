@@ -198,7 +198,7 @@ export default function OperationsPage() {
       return;
     }
 
-    const res = await fetch("/api/dashboard", { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch("/api/dashboard?mode=operations", { headers: { Authorization: `Bearer ${token}` } });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
       setErrorMsg(json.error || "No se pudo cargar el dashboard");

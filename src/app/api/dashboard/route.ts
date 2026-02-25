@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getOrgAccess } from "@/lib/server/orgAccess";
+import { canViewModule, getOrgAccess } from "@/lib/server/orgAccess";
 
 type DataClient = ReturnType<typeof createDataServerClient>;
 
@@ -153,6 +153,22 @@ export async function GET(req: Request) {
     }
 
     const orgId = access.organizationId;
+    const url = new URL(req.url);
+    const mode = String(url.searchParams.get("mode") ?? "analytics").toLowerCase();
+
+    const [canAnalytics, canOperations, canEntities] = await Promise.all([
+      canViewModule(db, orgId, access.role, access.memberTypeId, "analytics_dashboard"),
+      canViewModule(db, orgId, access.role, access.memberTypeId, "operations_dashboard"),
+      canViewModule(db, orgId, access.role, access.memberTypeId, "entities"),
+    ]);
+
+    const allowedByMode =
+      mode === "operations"
+        ? canOperations || canEntities
+        : canAnalytics || canEntities;
+    if (!allowedByMode) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
+    }
 
     const { data: entitiesData, error: entitiesErr } = await db
       .from("entities")
