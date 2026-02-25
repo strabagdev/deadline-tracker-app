@@ -479,7 +479,7 @@ export default function FocusedUsageCapturePage() {
   }
 
   return (
-    <main className="mx-auto max-w-[1320px] space-y-4 px-4 py-6">
+    <main className="mx-auto w-full max-w-[1400px] space-y-4 px-4 py-6">
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-2">
@@ -783,15 +783,16 @@ export default function FocusedUsageCapturePage() {
                         </div>
                       </div>
                       {pendingPagedEntities.map((e) => (
-                        <div key={e.id} className="grid gap-2 rounded-lg border border-slate-200 p-2 lg:grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] lg:items-center lg:gap-2 lg:border-0 lg:p-0">
-                          <div className="grid gap-1">
-                            <span className="text-[11px] text-slate-500 lg:hidden">Entidad</span>
-                            <div className="truncate text-sm text-slate-800" title={e.name}>{e.name}</div>
+                        <div
+                          key={e.id}
+                          className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 p-2 sm:grid-cols-2 lg:grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] lg:items-center lg:gap-2 lg:border-0 lg:p-0"
+                        >
+                          <div className="min-w-0 truncate text-sm text-slate-800" title={e.name}>
+                            {e.name}
                           </div>
-                          <div className="grid gap-1">
-                            <span className="text-[11px] text-slate-500 lg:hidden">Valor</span>
+                          <div className="min-w-0">
                             {(e.usage_unit_suggested_values ?? []).length > 0 ? (
-                              <div className="flex gap-1 overflow-x-auto whitespace-nowrap pb-1">
+                              <div className="flex flex-wrap gap-1">
                                 {(e.usage_unit_suggested_values ?? []).map((opt) => {
                                   const current = String(bulkDraftByEntity[e.id] ?? "").trim();
                                   const active = current === opt;
@@ -807,7 +808,7 @@ export default function FocusedUsageCapturePage() {
                                         }))
                                       }
                                       className={[
-                                        "shrink-0 rounded-full border px-2 py-1 text-[10px] transition",
+                                        "rounded-full border px-2 py-1 text-[10px] transition",
                                         active
                                           ? "border-emerald-600 bg-emerald-50 text-emerald-700"
                                           : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
@@ -833,24 +834,22 @@ export default function FocusedUsageCapturePage() {
                             )}
                           </div>
                           {(e.fields ?? []).length === 0 ? (
-                            <span className="text-xs text-slate-400">—</span>
+                            <span className="text-xs text-slate-400 sm:col-span-2 lg:col-auto">—</span>
                           ) : (
-                            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                            <div className="grid grid-cols-1 gap-2 sm:col-span-2 sm:grid-cols-2 lg:col-auto lg:gap-1 xl:grid-cols-4">
                               {pendingFieldColumns.map((columnField) => {
                                 const f = (e.fields ?? []).find((x) => x.id === columnField.id) ?? null;
                                 if (!f) {
                                   return (
-                                    <div key={`${e.id}-missing-${columnField.id}`} className="grid gap-1">
-                                      <span className="text-[11px] text-slate-500 lg:hidden">{columnField.name}</span>
-                                      <div className="text-xs text-slate-400">—</div>
+                                    <div key={`${e.id}-missing-${columnField.id}`} className="text-xs text-slate-400">
+                                      —
                                     </div>
                                   );
                                 }
                                 if (fieldOptions(f).length > 0) {
                                   return (
-                                    <div key={f.id} className="grid gap-1">
-                                      <span className="text-[11px] text-slate-500 lg:hidden">{f.name}</span>
-                                      <div className="flex gap-1 overflow-x-auto whitespace-nowrap pb-1">
+                                    <div key={f.id} className="min-w-0">
+                                      <div className="flex flex-wrap gap-1 pb-1">
                                         {fieldOptions(f).map((opt) => {
                                           const current = String(bulkFieldDraftByEntity[e.id]?.[f.id] ?? "");
                                           const active = current === opt;
@@ -869,7 +868,7 @@ export default function FocusedUsageCapturePage() {
                                                 }))
                                               }
                                               className={[
-                                                "shrink-0 rounded-full border px-2 py-1 text-[10px] transition",
+                                                "rounded-full border px-2 py-1 text-[10px] transition",
                                                 active
                                                   ? "border-emerald-600 bg-emerald-50 text-emerald-700"
                                                   : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
@@ -885,8 +884,7 @@ export default function FocusedUsageCapturePage() {
                                 }
                                 if (f.field_type === "boolean") {
                                   return (
-                                    <div key={f.id} className="grid gap-1">
-                                      <span className="text-[11px] text-slate-500 lg:hidden">{f.name}</span>
+                                    <div key={f.id} className="min-w-0">
                                       <select
                                         value={bulkFieldDraftByEntity[e.id]?.[f.id] ?? ""}
                                         onChange={(ev) =>
@@ -906,8 +904,7 @@ export default function FocusedUsageCapturePage() {
                                   );
                                 }
                                 return (
-                                  <div key={f.id} className="grid gap-1">
-                                    <span className="text-[11px] text-slate-500 lg:hidden">{f.name}</span>
+                                  <div key={f.id} className="min-w-0">
                                     <Input
                                       type={f.field_type === "number" ? "number" : f.field_type === "date" ? "date" : "text"}
                                       value={bulkFieldDraftByEntity[e.id]?.[f.id] ?? ""}

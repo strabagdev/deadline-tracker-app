@@ -158,7 +158,7 @@ function NavLink({ href, label, icon }: { href: string; label: string; icon: Rea
       title={label}
       aria-label={label}
       className={cn(
-        "inline-flex h-10 w-10 items-center justify-center rounded-xl border bg-transparent text-sm text-slate-700 transition-colors",
+        "inline-flex h-9 w-9 items-center justify-center rounded-xl border bg-transparent text-sm text-slate-700 transition-colors sm:h-10 sm:w-10",
         active ? "border-slate-300 text-slate-900" : "border-transparent hover:border-slate-300"
       )}
     >
@@ -368,7 +368,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-40 border-b bg-white/95 backdrop-blur">
         <div className={cn("mx-auto grid gap-2 px-4 py-2", isSuperAdmin ? "max-w-[1100px]" : "max-w-[1400px]")}>
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex min-w-0 items-center gap-2 whitespace-nowrap">
+            <div className="flex min-w-0 items-center gap-2">
               {platformLogoUrl ? (
                 <img
                   src={platformLogoUrl}
@@ -378,10 +378,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   className="h-11 w-11 rounded-lg object-cover sm:h-9 sm:w-9"
                 />
               ) : null}
-              <Link href={isSuperAdmin ? "/app/super-admin" : "/app"} className="truncate text-lg font-semibold text-slate-900 sm:text-base">
+              <Link href={isSuperAdmin ? "/app/super-admin" : "/app"} className="min-w-0 truncate text-lg font-semibold text-slate-900 sm:text-base">
                 OpsAhead
               </Link>
-              {isSuperAdmin ? <Badge variant="secondary">Global</Badge> : null}
+              {isSuperAdmin ? <Badge variant="secondary" className="shrink-0">Global</Badge> : null}
             </div>
 
             {isSuperAdmin ? (
@@ -402,19 +402,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} />
                   ))}
                 </nav>
-                <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end lg:flex-nowrap">
+                <div className="grid w-full min-w-0 grid-cols-3 gap-1.5 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-2 lg:flex-nowrap">
                   <Button
                     onClick={refreshApp}
                     variant="outline"
                     size="icon"
-                    className="h-11 w-full bg-transparent sm:h-10 sm:w-10"
+                    className="h-9 w-full bg-transparent sm:h-10 sm:w-10"
                     title="Refrescar"
                     aria-label="Refrescar"
                   >
                     <IconRefresh />
                   </Button>
                   <Link href="/app/profile" className="block">
-                    <Button variant="outline" size="icon" className="h-11 w-full bg-transparent sm:h-10 sm:w-10" title="Perfil" aria-label="Perfil">
+                    <Button variant="outline" size="icon" className="h-9 w-full bg-transparent sm:h-10 sm:w-10" title="Perfil" aria-label="Perfil">
                       <IconUser />
                     </Button>
                   </Link>
@@ -422,7 +422,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     onClick={logout}
                     variant="outline"
                     size="icon"
-                    className="h-11 w-full bg-transparent sm:h-10 sm:w-10"
+                    className="h-9 w-full bg-transparent sm:h-10 sm:w-10"
                     title="Salir"
                     aria-label="Salir"
                   >
@@ -452,7 +452,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       <footer className="border-t bg-white px-4 py-3">
-        <div className="mx-auto max-w-[1100px] text-xs text-slate-500">
+        <div className={cn("mx-auto text-xs text-slate-500", isSuperAdmin ? "max-w-[1100px]" : "max-w-[1400px]")}>
           v2 · Implementando una mejora en el sistema de registro de uso, para que sea dinámico entre unidades y estados
         </div>
       </footer>
