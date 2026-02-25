@@ -10,7 +10,8 @@ import { Loader } from "@/components/ui/loader";
 import { cn } from "@/lib/utils";
 
 type ModuleKey =
-  | "dashboard"
+  | "analytics_dashboard"
+  | "operations_dashboard"
   | "forecast"
   | "alerts"
   | "entities"
@@ -168,8 +169,8 @@ function NavLink({ href, label, icon }: { href: string; label: string; icon: Rea
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/app", label: "Dashboard", moduleKey: "dashboard", icon: <IconHome /> },
-  { href: "/app/operations", label: "Operaciones", moduleKey: "dashboard", icon: <IconEntities /> },
+  { href: "/app", label: "Dashboard", moduleKey: "analytics_dashboard", icon: <IconHome /> },
+  { href: "/app/operations", label: "Operaciones", moduleKey: "operations_dashboard", icon: <IconEntities /> },
   { href: "/app/forecast", label: "Forecast", moduleKey: "forecast", icon: <IconForecast /> },
   { href: "/app/alerts", label: "Alertas", moduleKey: "alerts", icon: <IconAlert /> },
   { href: "/app/entities", label: "Entidades", moduleKey: "entities", icon: <IconEntities /> },
@@ -183,8 +184,8 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 function getModuleByPath(pathname: string): ModuleKey | null {
-  if (pathname === "/app") return "dashboard";
-  if (pathname.startsWith("/app/operations")) return "dashboard";
+  if (pathname === "/app") return "analytics_dashboard";
+  if (pathname.startsWith("/app/operations")) return "operations_dashboard";
   if (pathname.startsWith("/app/forecast")) return "forecast";
   if (pathname.startsWith("/app/alerts")) return "alerts";
   if (pathname.startsWith("/app/entities")) return "entities";
@@ -199,7 +200,8 @@ function getModuleByPath(pathname: string): ModuleKey | null {
 }
 
 function getRouteByModule(moduleKey: ModuleKey): string {
-  if (moduleKey === "dashboard") return "/app";
+  if (moduleKey === "analytics_dashboard") return "/app";
+  if (moduleKey === "operations_dashboard") return "/app/operations";
   if (moduleKey === "forecast") return "/app/forecast";
   if (moduleKey === "alerts") return "/app/alerts";
   if (moduleKey === "entities") return "/app/entities";
@@ -266,7 +268,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           setActiveOrgName(orgJson?.organization?.name ?? "");
           setActiveOrgLogoUrl(orgJson?.organization?.logo_url ?? "");
           if (accessRes.ok && Array.isArray(accessJson?.allowed_modules)) {
-            setAllowedModules(new Set(accessJson.allowed_modules.map((v: unknown) => String(v))));
+            const modules = new Set(accessJson.allowed_modules.map((v: unknown) => String(v)));
+            if (modules.has("dashboard")) {
+              modules.add("analytics_dashboard");
+              modules.add("operations_dashboard");
+            }
+            setAllowedModules(modules);
           } else {
             setAllowedModules(null);
           }

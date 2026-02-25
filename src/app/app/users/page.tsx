@@ -32,7 +32,8 @@ type UsageCaptureSubmodule = {
 };
 
 const MODULE_KEYS = [
-  "dashboard",
+  "analytics_dashboard",
+  "operations_dashboard",
   "forecast",
   "alerts",
   "entities",
@@ -63,7 +64,7 @@ export default function UsersAdminPage() {
   const [usageCaptureSubmodules, setUsageCaptureSubmodules] = useState<UsageCaptureSubmodule[]>([]);
 
   const [newTypeName, setNewTypeName] = useState("");
-  const [newTypeModules, setNewTypeModules] = useState<string[]>(["dashboard", "forecast", "alerts", "reports_usage"]);
+  const [newTypeModules, setNewTypeModules] = useState<string[]>(["analytics_dashboard", "operations_dashboard", "forecast", "alerts", "reports_usage"]);
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
   const [editTypeName, setEditTypeName] = useState("");
   const [editTypeModules, setEditTypeModules] = useState<string[]>([]);
