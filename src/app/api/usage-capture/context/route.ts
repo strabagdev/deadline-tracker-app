@@ -9,6 +9,55 @@ function getErrorMessage(error: unknown): string {
   return "error";
 }
 
+async function getCardFieldsByEntity(
+  db: ReturnType<typeof createDataServerClient>,
+  orgId: string,
+  entityIds: string[]
+) {
+  const out: Record<string, Array<{ name: string; value_text: string }>> = {};
+  if (entityIds.length === 0) return out;
+
+  const { data: values, error: valuesErr } = await db
+    .from("entity_field_values")
+    .select("entity_id, entity_field_id, value_text")
+    .eq("organization_id", orgId)
+    .in("entity_id", entityIds);
+  if (valuesErr) throw valuesErr;
+
+  const fieldIds = Array.from(
+    new Set(
+      (values ?? [])
+        .map((row) => String(row.entity_field_id ?? "").trim())
+        .filter((id) => id.length > 0)
+    )
+  );
+  if (fieldIds.length === 0) return out;
+
+  const { data: fields, error: fieldsErr } = await db
+    .from("entity_fields")
+    .select("id, name, show_in_card")
+    .eq("organization_id", orgId)
+    .in("id", fieldIds)
+    .eq("show_in_card", true);
+  if (fieldsErr) throw fieldsErr;
+
+  const fieldMap = new Map((fields ?? []).map((f) => [String(f.id), String(f.name ?? "")]));
+
+  for (const row of values ?? []) {
+    const fieldId = String(row.entity_field_id ?? "").trim();
+    const fieldName = fieldMap.get(fieldId);
+    if (!fieldName) continue;
+    const valueText = String(row.value_text ?? "").trim();
+    if (!valueText) continue;
+    const entityId = String(row.entity_id ?? "").trim();
+    if (!entityId) continue;
+    if (!out[entityId]) out[entityId] = [];
+    out[entityId].push({ name: fieldName, value_text: valueText });
+  }
+
+  return out;
+}
+
 export async function GET(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
@@ -93,6 +142,7 @@ export async function GET(req: Request) {
 
     const unitIds = Array.from(new Set(entitiesSafe.map((e) => String(e.usage_unit_id ?? "")).filter(Boolean)));
     const entityIds = entitiesSafe.map((e) => String(e.id));
+    const cardFieldsByEntity = await getCardFieldsByEntity(db, access.organizationId, entityIds);
     const fieldsByUnit: Record<string, Array<{ id: string; name: string; key: string; field_type: string; options: unknown }>> = {};
     if (unitIds.length > 0) {
       const { data: fields, error: fieldsErr } = await db
@@ -147,6 +197,7 @@ export async function GET(req: Request) {
         usage_unit_suggested_values: Array.isArray(unit?.suggested_values)
           ? unit?.suggested_values.map((v) => String(v)).filter((v) => v.trim().length > 0)
           : [],
+        card_fields: cardFieldsByEntity[String(e.id)] ?? [],
         fields: unitId ? fieldsByUnit[unitId] ?? [] : [],
         logged_days: daysByEntity[String(e.id)] ?? [],
       };

@@ -11,8 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { toCsv } from "@/lib/csv/simpleCsv";
-import { csvToSpreadsheetXml } from "@/lib/csv/spreadsheetXml";
+import { parseCsv } from "@/lib/csv/simpleCsv";
 
 type DeadlineType = {
   id: string;
@@ -145,6 +144,11 @@ function statusBadgeClasses(status: Status) {
           : "border-slate-300 bg-slate-100 text-slate-700";
 }
 
+async function getXlsxModule() {
+  const mod = await import("xlsx");
+  return (mod as unknown as { default?: typeof mod }).default ?? mod;
+}
+
 export default function EntitiesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -164,10 +168,14 @@ export default function EntitiesPage() {
   const [creating, setCreating] = useState<boolean>(false);
   const [importOpen, setImportOpen] = useState<boolean>(false);
   const [importing, setImporting] = useState<boolean>(false);
-  const [importApply, setImportApply] = useState<boolean>(false);
   const [importCsvText, setImportCsvText] = useState<string>("");
   const [importResult, setImportResult] = useState<string>("");
-  const [bulkFormat, setBulkFormat] = useState<"csv" | "excel">("csv");
+  const [importCanApply, setImportCanApply] = useState<boolean>(false);
+  const [importProgress, setImportProgress] = useState<number>(0);
+  const [importStage, setImportStage] = useState<string>("");
+  const [importApplying, setImportApplying] = useState<boolean>(false);
+  const [importMode, setImportMode] = useState<"update" | "create">("update");
+  const [bulkPanel, setBulkPanel] = useState<"import" | "export">("import");
   const [bulkEntityTypeId, setBulkEntityTypeId] = useState<string>("all");
 
   const [entities, setEntities] = useState<EntityRow[]>([]);
@@ -204,6 +212,9 @@ export default function EntitiesPage() {
     ],
     [semaphore.label_green, semaphore.label_yellow, semaphore.label_orange, semaphore.label_red]
   );
+  const importProgressClamped = Math.max(0, Math.min(100, importProgress));
+  const importRingRadius = 46;
+  const importRingCircumference = 2 * Math.PI * importRingRadius;
 
   useEffect(() => {
     void loadEntityTypes();
@@ -361,72 +372,7 @@ export default function EntitiesPage() {
     setCreating(false);
   }
 
-  async function downloadCsv(path: string, fileName: string) {
-    setErrorMsg("");
-    const { data } = await supabaseAuth.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) {
-      router.replace("/login");
-      return;
-    }
-    const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) {
-      const json = await res.json().catch(() => ({}));
-      setErrorMsg(json.error || "No se pudo descargar CSV");
-      return;
-    }
-    const text = await res.text();
-    const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = fileName;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function parseSpreadsheetXmlToCsv(xmlText: string): string {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xmlText, "application/xml");
-
-    const rows = Array.from(doc.getElementsByTagNameNS("*", "Row"));
-    if (rows.length === 0) return "";
-
-    const out: string[][] = [];
-    let maxCols = 0;
-
-    for (const row of rows) {
-      const cells = Array.from(row.getElementsByTagNameNS("*", "Cell"));
-      const values: string[] = [];
-      let cursor = 0;
-
-      for (const cell of cells) {
-        const idxRaw = cell.getAttribute("ss:Index") ?? cell.getAttribute("Index");
-        if (idxRaw) {
-          const idx = Number(idxRaw);
-          if (Number.isFinite(idx) && idx > 0) {
-            while (cursor < idx - 1) {
-              values.push("");
-              cursor++;
-            }
-          }
-        }
-
-        const data = cell.getElementsByTagNameNS("*", "Data")[0];
-        values.push(String(data?.textContent ?? ""));
-        cursor++;
-      }
-      maxCols = Math.max(maxCols, values.length);
-      out.push(values);
-    }
-
-    for (const row of out) {
-      while (row.length < maxCols) row.push("");
-    }
-    return toCsv(out);
-  }
-
-  async function downloadExcelFromCsvEndpoint(path: string, fileName: string, sheetName: string) {
+  async function downloadExcelFromCsvEndpoint(path: string, fileName: string) {
     setErrorMsg("");
     const { data } = await supabaseAuth.auth.getSession();
     const token = data.session?.access_token;
@@ -441,24 +387,43 @@ export default function EntitiesPage() {
       return;
     }
     const csvText = await res.text();
-    const xml = csvToSpreadsheetXml(csvText, sheetName);
-    const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const rows = parseCsv(csvText);
+    const XLSX = await getXlsxModule();
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "Entidades");
+    const output = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const safeName = fileName.toLowerCase().endsWith(".xlsx") ? fileName : fileName.replace(/\.[^.]+$/u, ".xlsx");
+    const blob = new Blob([output], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = fileName;
+    link.download = safeName;
     link.click();
     URL.revokeObjectURL(url);
   }
 
-  async function runImport() {
+  async function runImport(applyNow = false, csvOverride?: string) {
+    const csvPayload = (csvOverride ?? importCsvText).trim();
+    if (!csvPayload) {
+      setImportResult("Selecciona un archivo válido para importar.");
+      setImportCanApply(false);
+      return;
+    }
+    setImportApplying(applyNow);
     setImporting(true);
     setImportResult("");
     setErrorMsg("");
+    setImportProgress(55);
+    setImportStage(applyNow ? "Aplicando cambios..." : "Validando archivo...");
 
     const { data } = await supabaseAuth.auth.getSession();
     const token = data.session?.access_token;
     if (!token) {
+      setImporting(false);
+      setImportApplying(false);
+      setImportProgress(0);
+      setImportStage("");
       router.replace("/login");
       return;
     }
@@ -467,18 +432,24 @@ export default function EntitiesPage() {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
-        csv: importCsvText,
-        apply: importApply,
+        csv: csvPayload,
+        apply: applyNow,
+        import_mode: importMode,
         entity_type_id: bulkEntityTypeId !== "all" ? bulkEntityTypeId : null,
       }),
     });
     const json = await res.json().catch(() => ({}));
+    setImportProgress(88);
     if (!res.ok) {
       const errs = Array.isArray(json?.errors)
         ? json.errors.slice(0, 8).map((e: { line: number; message: string }) => `L${e.line}: ${e.message}`).join("\n")
         : "";
       setImportResult(`${json.error || "Importación inválida"}${errs ? `\n${errs}` : ""}`);
+      setImportCanApply(false);
       setImporting(false);
+      setImportApplying(false);
+      setImportProgress(0);
+      setImportStage("");
       return;
     }
 
@@ -487,13 +458,20 @@ export default function EntitiesPage() {
       setImportResult(
         `Validación OK.\nFilas: ${summary.total_rows ?? 0}\nCrear: ${summary.to_create ?? 0}\nActualizar: ${summary.to_update ?? 0}`
       );
+      setImportCanApply(true);
+      setImportProgress(100);
+      setImportStage("Validación completada");
     } else {
       setImportResult(
         `Carga aplicada.\nFilas: ${summary.total_rows ?? 0}\nCreadas: ${summary.created ?? 0}\nActualizadas: ${summary.updated ?? 0}\nErrores: ${summary.errors ?? 0}`
       );
+      setImportCanApply(false);
       await load();
+      setImportProgress(100);
+      setImportStage("Carga completada");
     }
     setImporting(false);
+    setImportApplying(false);
   }
 
   const entityTypeOptions = useMemo(() => {
@@ -619,8 +597,11 @@ export default function EntitiesPage() {
                   setImportOpen(true);
                   setImportResult("");
                   setImportCsvText("");
-                  setImportApply(false);
-                  setBulkFormat("csv");
+                  setImportCanApply(false);
+                  setImportProgress(0);
+                  setImportStage("");
+                  setImportMode("update");
+                  setBulkPanel("import");
                   setBulkEntityTypeId("all");
                 }}
                 variant="outline"
@@ -758,31 +739,74 @@ export default function EntitiesPage() {
             </div>
 
             <div className="grid gap-2">
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-slate-50 p-2">
+                <Button
+                  size="sm"
+                  variant={bulkPanel === "export" ? "secondary" : "outline"}
+                  onClick={() => setBulkPanel("export")}
+                  disabled={importing}
+                >
+                  Exportar
+                </Button>
+                <Button
+                  size="sm"
+                  variant={bulkPanel === "import" ? "secondary" : "outline"}
+                  onClick={() => setBulkPanel("import")}
+                  disabled={importing}
+                >
+                  Importar
+                </Button>
+              </div>
+
               <div className="rounded-xl border bg-slate-50 p-3">
-                <div className="mb-2 text-xs font-semibold text-slate-700">Formato</div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant={bulkFormat === "csv" ? "secondary" : "outline"}
-                    onClick={() => setBulkFormat("csv")}
-                    disabled={importing}
-                  >
-                    CSV
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={bulkFormat === "excel" ? "secondary" : "outline"}
-                    onClick={() => setBulkFormat("excel")}
-                    disabled={importing}
-                  >
-                    Excel
-                  </Button>
-                </div>
+                {bulkPanel === "import" ? (
+                  <div className="grid gap-1">
+                    <label className="text-xs font-semibold text-slate-700">Importación</label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant={importMode === "update" ? "secondary" : "outline"}
+                        onClick={() => {
+                          setImportMode("update");
+                          setImportCanApply(false);
+                          setImportProgress(0);
+                          setImportStage("");
+                        }}
+                        disabled={importing}
+                      >
+                        Actualizar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={importMode === "create" ? "secondary" : "outline"}
+                        onClick={() => {
+                          setImportMode("create");
+                          setImportCanApply(false);
+                          setImportProgress(0);
+                          setImportStage("");
+                        }}
+                        disabled={importing}
+                      >
+                        Crear
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      {importMode === "update"
+                        ? "Actualizar requiere entity_id en cada fila."
+                        : "Crear ignora entity_id y genera nuevas entidades."}
+                    </p>
+                  </div>
+                ) : null}
                 <div className="mt-3 grid gap-1">
                   <label className="text-xs font-semibold text-slate-700">Tipo de entidad (opcional)</label>
                   <select
                     value={bulkEntityTypeId}
-                    onChange={(e) => setBulkEntityTypeId(e.target.value)}
+                    onChange={(e) => {
+                      setBulkEntityTypeId(e.target.value);
+                      setImportCanApply(false);
+                      setImportProgress(0);
+                      setImportStage("");
+                    }}
                     className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
                     disabled={importing || typesLoading}
                   >
@@ -796,88 +820,167 @@ export default function EntitiesPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border p-3">
-                <div className="mb-2 text-xs font-semibold text-slate-700">Descarga</div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const q = bulkEntityTypeId !== "all" ? `?entity_type_id=${encodeURIComponent(bulkEntityTypeId)}` : "";
-                      if (bulkFormat === "excel") {
+              {bulkPanel === "export" ? (
+                <div className="rounded-xl border p-3">
+                  <div className="mb-2 text-xs font-semibold text-slate-700">Descarga</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const params = new URLSearchParams();
+                        if (bulkEntityTypeId !== "all") params.set("entity_type_id", bulkEntityTypeId);
+                        params.set("mode", "update");
+                        const q = `?${params.toString()}`;
                         void downloadExcelFromCsvEndpoint(
                           `/api/entities/bulk/template${q}`,
-                          "entities_template.xls",
-                          "Plantilla_Entidades"
+                          "entities_template_update.xlsx"
                         );
-                      } else {
-                        void downloadCsv(`/api/entities/bulk/template${q}`, "entities_template.csv");
-                      }
-                    }}
-                    disabled={importing}
-                  >
-                    Descargar plantilla
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const q = bulkEntityTypeId !== "all" ? `?entity_type_id=${encodeURIComponent(bulkEntityTypeId)}` : "";
-                      if (bulkFormat === "excel") {
-                        void downloadExcelFromCsvEndpoint(`/api/entities/bulk/export${q}`, "entities_export.xls", "Entidades");
-                      } else {
-                        void downloadCsv(`/api/entities/bulk/export${q}`, "entities_export.csv");
-                      }
-                    }}
-                    disabled={importing}
-                  >
-                    Exportar entidades
-                  </Button>
+                      }}
+                      disabled={importing}
+                    >
+                      Plantilla actualización
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const params = new URLSearchParams();
+                        if (bulkEntityTypeId !== "all") params.set("entity_type_id", bulkEntityTypeId);
+                        params.set("mode", "create");
+                        const q = `?${params.toString()}`;
+                        void downloadExcelFromCsvEndpoint(
+                          `/api/entities/bulk/template${q}`,
+                          "entities_template_create.xlsx"
+                        );
+                      }}
+                      disabled={importing}
+                    >
+                      Plantilla altas
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const q = bulkEntityTypeId !== "all" ? `?entity_type_id=${encodeURIComponent(bulkEntityTypeId)}` : "";
+                        void downloadExcelFromCsvEndpoint(`/api/entities/bulk/export${q}`, "entities_export.xlsx");
+                      }}
+                      disabled={importing}
+                    >
+                      Exportar entidades Excel
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="relative rounded-xl border p-3">
+                  {importApplying ? (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-white/80 backdrop-blur-[1px]">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="relative h-28 w-28">
+                          <svg viewBox="0 0 120 120" className="h-28 w-28">
+                            <circle
+                              cx="60"
+                              cy="60"
+                              r={importRingRadius}
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="10"
+                              className="text-slate-200"
+                            />
+                            <circle
+                              cx="60"
+                              cy="60"
+                              r={importRingRadius}
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="10"
+                              strokeLinecap="round"
+                              className="text-emerald-600 transition-all duration-300"
+                              strokeDasharray={importRingCircumference}
+                              strokeDashoffset={importRingCircumference * (1 - importProgressClamped / 100)}
+                              transform="rotate(-90 60 60)"
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-emerald-700">
+                            {Math.round(importProgressClamped)}%
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-600">{importStage || "Aplicando cambios..."}</p>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="mb-2 text-xs font-semibold text-slate-700">Carga</div>
+                  <label className="text-xs font-medium text-slate-600">Selecciona archivo</label>
+                  <input
+                    type="file"
+                    accept=".csv,text/csv,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const lowerName = file.name.toLowerCase();
+                      const buffer = await file.arrayBuffer();
+                      setImportCanApply(false);
+                      setImportProgress(20);
+                      setImportStage("Procesando archivo...");
 
-              <div className="rounded-xl border p-3">
-                <div className="mb-2 text-xs font-semibold text-slate-700">Carga</div>
-              <label className="text-xs font-medium text-slate-600">Selecciona archivo</label>
-              <input
-                type="file"
-                accept=".csv,text/csv,.xls,.xml,application/vnd.ms-excel"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const text = await file.text();
-                  const lowerName = file.name.toLowerCase();
-                  if (lowerName.endsWith(".xls") || text.includes("<Workbook")) {
-                    setImportCsvText(parseSpreadsheetXmlToCsv(text));
-                  } else {
-                    setImportCsvText(text);
-                  }
-                }}
-                className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                disabled={importing}
-              />
-              <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={importApply}
-                  onChange={(e) => setImportApply(e.target.checked)}
-                  disabled={importing}
-                />
-                Aplicar cambios (si no, solo valida)
-              </label>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  onClick={runImport}
-                  disabled={importing || !importCsvText.trim()}
-                  className={importApply ? "bg-emerald-600 text-white hover:bg-emerald-700" : ""}
-                >
-                  {importing ? "Procesando..." : importApply ? "Validar y aplicar" : "Validar CSV"}
-                </Button>
-              </div>
-              {importResult ? (
-                <pre className="whitespace-pre-wrap rounded-xl border bg-slate-50 p-3 text-xs text-slate-700">{importResult}</pre>
-              ) : null}
-              </div>
+                      if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) {
+                        try {
+                          const XLSX = await getXlsxModule();
+                          const wb = XLSX.read(buffer, { type: "array" });
+                          const firstSheet = wb.SheetNames[0];
+                          if (!firstSheet) {
+                            setImportCsvText("");
+                            setImportResult("El archivo no contiene hojas para importar.");
+                            setImportProgress(0);
+                            setImportStage("");
+                            return;
+                          }
+                          const ws = wb.Sheets[firstSheet];
+                          const csv = XLSX.utils.sheet_to_csv(ws, { FS: ",", RS: "\n", blankrows: false });
+                          setImportCsvText(csv);
+                          setImportResult("");
+                          await runImport(false, csv);
+                          return;
+                        } catch {
+                          setImportCsvText("");
+                          setImportResult("No se pudo leer el archivo Excel. Verifica que no esté dañado.");
+                          setImportProgress(0);
+                          setImportStage("");
+                          return;
+                        }
+                      }
+
+                      const text = new TextDecoder("utf-8").decode(new Uint8Array(buffer));
+                      setImportCsvText(text);
+                      setImportResult("");
+                      await runImport(false, text);
+                    }}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                    disabled={importing}
+                  />
+                  {importProgress > 0 && !importApplying ? (
+                    <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                      <span>{importStage || "Procesando"}</span>
+                      <span>({Math.round(importProgressClamped)}%)</span>
+                    </div>
+                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-slate-500">La validación se ejecuta automáticamente al cargar el archivo.</span>
+                  </div>
+                  {importResult ? (
+                    <pre className="whitespace-pre-wrap rounded-xl border bg-slate-50 p-3 text-xs text-slate-700">{importResult}</pre>
+                  ) : null}
+                  {importCanApply ? (
+                    <Button
+                      onClick={() => void runImport(true)}
+                      disabled={importing || !importCsvText.trim()}
+                      className="w-fit bg-emerald-600 text-white hover:bg-emerald-700"
+                    >
+                      {importing ? "Procesando..." : "Aplicar cambios"}
+                    </Button>
+                  ) : null}
+                </div>
+              )}
             </div>
           </div>
         </div>

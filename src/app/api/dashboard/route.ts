@@ -71,31 +71,53 @@ async function getCardFieldsByEntity(db: DataClient, orgId: string, entityIds: s
   const out: Record<string, Array<{ name: string; value_text: string }>> = {};
   if (entityIds.length === 0) return out;
 
-  const { data: values, error: valuesError } = await db
-    .from("entity_field_values")
-    .select("entity_id, entity_field_id, value_text")
-    .eq("organization_id", orgId)
-    .in("entity_id", entityIds);
-  if (valuesError) throw valuesError;
+  const values: Array<{ entity_id: string; entity_field_id: string | null; value_text: string | null }> = [];
+  const idChunkSize = 200;
+  const pageSize = 1000;
+
+  for (let i = 0; i < entityIds.length; i += idChunkSize) {
+    const idChunk = entityIds.slice(i, i + idChunkSize);
+    let from = 0;
+    for (;;) {
+      const to = from + pageSize - 1;
+      const { data, error } = await db
+        .from("entity_field_values")
+        .select("entity_id, entity_field_id, value_text")
+        .eq("organization_id", orgId)
+        .in("entity_id", idChunk)
+        .order("entity_id", { ascending: true })
+        .order("entity_field_id", { ascending: true })
+        .range(from, to);
+      if (error) throw error;
+      const rows = (data ?? []) as Array<{ entity_id: string; entity_field_id: string | null; value_text: string | null }>;
+      values.push(...rows);
+      if (rows.length < pageSize) break;
+      from += pageSize;
+    }
+  }
 
   const fieldIds = Array.from(
     new Set(
-      ((values ?? []) as Array<{ entity_field_id: string | null }>)
-        .map((v) => v.entity_field_id)
+      values.map((v) => v.entity_field_id)
         .filter((id): id is string => Boolean(id))
     )
   );
   if (fieldIds.length === 0) return out;
 
-  const { data: fields, error: fieldsError } = await db
-    .from("entity_fields")
-    .select("id, name, show_in_card, created_at")
-    .eq("organization_id", orgId)
-    .in("id", fieldIds);
-  if (fieldsError) throw fieldsError;
+  const fields: Array<{ id: string; name: string; show_in_card: boolean; created_at: string | null }> = [];
+  for (let i = 0; i < fieldIds.length; i += idChunkSize) {
+    const fieldChunk = fieldIds.slice(i, i + idChunkSize);
+    const { data, error } = await db
+      .from("entity_fields")
+      .select("id, name, show_in_card, created_at")
+      .eq("organization_id", orgId)
+      .in("id", fieldChunk);
+    if (error) throw error;
+    fields.push(...((data ?? []) as Array<{ id: string; name: string; show_in_card: boolean; created_at: string | null }>));
+  }
 
   const fieldMap = new Map<string, { name: string; show_in_card: boolean; created_at: string | null }>();
-  for (const field of (fields ?? []) as Array<{ id: string; name: string; show_in_card: boolean; created_at: string | null }>) {
+  for (const field of fields) {
     fieldMap.set(field.id, {
       name: String(field.name ?? ""),
       show_in_card: Boolean(field.show_in_card),
@@ -103,7 +125,7 @@ async function getCardFieldsByEntity(db: DataClient, orgId: string, entityIds: s
     });
   }
 
-  for (const row of (values ?? []) as Array<{ entity_id: string; entity_field_id: string | null; value_text: string | null }>) {
+  for (const row of values) {
     if (!row.entity_field_id) continue;
     const field = fieldMap.get(row.entity_field_id);
     if (!field || !field.show_in_card) continue;

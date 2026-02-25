@@ -21,6 +21,51 @@ function getErrorMessage(error: unknown): string {
   return "error";
 }
 
+function normalizeHeader(value: string): string {
+  return String(value ?? "")
+    .replace(/^\uFEFF/, "")
+    .replace(/\u00A0/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function canonicalHeader(value: string): string {
+  return normalizeHeader(value)
+    .replace(/[\s\-]+/g, "_")
+    .replace(/[^a-z0-9_]/g, "")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function getHeaderIndex(indexByHeader: Map<string, number>, aliases: string[]): number {
+  for (const alias of aliases) {
+    const idx = indexByHeader.get(canonicalHeader(alias));
+    if (typeof idx === "number") return idx;
+  }
+  return -1;
+}
+
+function buildHeaderIndex(headers: string[]): Map<string, number> {
+  const out = new Map<string, number>();
+  headers.forEach((h, i) => out.set(canonicalHeader(h), i));
+  return out;
+}
+
+function detectHeaderRow(matrix: string[][]): { rowIndex: number; headers: string[]; indexByHeader: Map<string, number> } {
+  const probeLimit = Math.min(matrix.length, 8);
+  for (let i = 0; i < probeLimit; i++) {
+    const headers = (matrix[i] ?? []).map((h) => String(h ?? "").replace(/^\uFEFF/, "").trim());
+    const indexByHeader = buildHeaderIndex(headers);
+    const hasName = getHeaderIndex(indexByHeader, ["entity_name", "name"]) >= 0;
+    const hasEntityId = getHeaderIndex(indexByHeader, ["entity_id", "id"]) >= 0;
+    if (hasName || hasEntityId) {
+      return { rowIndex: i, headers, indexByHeader };
+    }
+  }
+  const fallbackHeaders = (matrix[0] ?? []).map((h) => String(h ?? "").replace(/^\uFEFF/, "").trim());
+  return { rowIndex: 0, headers: fallbackHeaders, indexByHeader: buildHeaderIndex(fallbackHeaders) };
+}
+
 function parseBool(value: string): boolean | null {
   const normalized = value.trim().toLowerCase();
   if (!normalized) return false;
@@ -49,7 +94,12 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const csv = String(body?.csv ?? "");
     const apply = Boolean(body?.apply ?? false);
+    const importModeRaw = String(body?.import_mode ?? "update").trim().toLowerCase();
+    const importMode = importModeRaw === "create" ? "create" : importModeRaw === "update" ? "update" : null;
     const selectedEntityTypeId = String(body?.entity_type_id ?? "").trim();
+    if (!importMode) {
+      return NextResponse.json({ error: "import_mode inválido (update|create)", code: "INVALID_INPUT" }, { status: 400 });
+    }
 
     if (!csv.trim()) {
       return NextResponse.json({ error: "csv is required", code: "INVALID_INPUT" }, { status: 400 });
@@ -63,28 +113,43 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Máximo 2000 filas por carga", code: "TOO_MANY_ROWS" }, { status: 400 });
     }
 
-    const headers = matrix[0].map((h) => String(h ?? "").trim());
-    const indexByHeader = new Map<string, number>();
-    headers.forEach((h, i) => indexByHeader.set(h, i));
+    const detected = detectHeaderRow(matrix);
+    const headers = detected.headers;
+    const indexByHeader = detected.indexByHeader;
 
-    const required = ["entity_name"];
-    for (const reqHeader of required) {
-      if (!indexByHeader.has(reqHeader)) {
-        return NextResponse.json({ error: `Falta columna requerida: ${reqHeader}`, code: "INVALID_HEADER" }, { status: 400 });
+    const requiredGroups = importMode === "update"
+      ? [
+          { label: "entity_id", aliases: ["entity_id", "id"] },
+          { label: "entity_name", aliases: ["entity_name", "name", "entity_name"] },
+        ]
+      : [{ label: "entity_name", aliases: ["entity_name", "name"] }];
+    for (const group of requiredGroups) {
+      if (getHeaderIndex(indexByHeader, group.aliases) < 0) {
+        return NextResponse.json(
+          { error: `Falta columna requerida: ${group.label}`, code: "INVALID_HEADER" },
+          { status: 400 }
+        );
       }
     }
 
-    const entityIdIdx = indexByHeader.get("entity_id") ?? -1;
-    const nameIdx = indexByHeader.get("entity_name") ?? -1;
-    const typeIdx = indexByHeader.get("entity_type") ?? -1;
-    const tracksUsageIdx = indexByHeader.get("tracks_usage") ?? -1;
-    const usageUnitNameIdx = indexByHeader.get("usage_unit") ?? -1;
-    const usageUnitIdIdx = indexByHeader.get("usage_unit_id") ?? -1;
+    const entityIdIdx = getHeaderIndex(indexByHeader, ["entity_id", "id"]);
+    const nameIdx = getHeaderIndex(indexByHeader, ["entity_name", "name"]);
+    const typeIdx = getHeaderIndex(indexByHeader, ["entity_type", "type"]);
+    const tracksUsageIdx = getHeaderIndex(indexByHeader, ["tracks_usage", "uses_usage", "registrar_uso"]);
+    const usageUnitNameIdx = getHeaderIndex(indexByHeader, ["usage_unit", "unit", "usage_unit_name"]);
+    const usageUnitIdIdx = getHeaderIndex(indexByHeader, ["usage_unit_id", "unit_id"]);
 
     const fieldColumns = headers
       .map((h, i) => ({ h, i }))
-      .filter(({ h }) => h.startsWith("field:"))
-      .map(({ h, i }) => ({ key: h.slice("field:".length).trim(), index: i }))
+      .map(({ h, i }) => ({
+        raw: h.replace(/^\uFEFF/, "").trim(),
+        index: i,
+      }))
+      .filter(({ raw }) => /^field(?:[:\s_-]|$)/i.test(raw))
+      .map(({ raw, index }) => ({
+        key: raw.replace(/^field[:\s_-]*/i, "").trim(),
+        index,
+      }))
       .filter((v) => v.key.length > 0);
 
     const [
@@ -135,7 +200,7 @@ export async function POST(req: Request) {
     const errors: Array<{ line: number; message: string }> = [];
     const parsed: ParsedRow[] = [];
 
-    for (let r = 1; r < matrix.length; r++) {
+    for (let r = detected.rowIndex + 1; r < matrix.length; r++) {
       const lineNo = r + 1;
       const row = matrix[r] ?? [];
 
@@ -164,14 +229,18 @@ export async function POST(req: Request) {
         errors.push({ line: lineNo, message: `Solo se permite tipo ${selectedType.name} en esta carga` });
       }
 
-      if (entityId) {
-        if (!isUuid(entityId)) {
+      if (importMode === "update") {
+        if (!entityId) {
+          errors.push({ line: lineNo, message: "entity_id requerido para actualización masiva" });
+        } else if (!isUuid(entityId)) {
           errors.push({ line: lineNo, message: `entity_id inválido: ${entityId}` });
         } else if (!entityTypeById.has(entityId)) {
           errors.push({ line: lineNo, message: `entity_id no existe en la organización: ${entityId}` });
         } else if (type && entityTypeById.get(entityId) !== type.id) {
           errors.push({ line: lineNo, message: "No se permite cambiar entity_type de una entidad existente por importación" });
         }
+      } else if (entityId) {
+        errors.push({ line: lineNo, message: "No usar entity_id en modo altas" });
       }
 
       const usageUnitProvided = usageUnitIdRaw.length > 0 || usageUnitNameRaw.length > 0;
@@ -243,8 +312,8 @@ export async function POST(req: Request) {
         mode: "validate",
         summary: {
           total_rows: parsed.length,
-          to_create: parsed.filter((p) => !p.entityId).length,
-          to_update: parsed.filter((p) => Boolean(p.entityId)).length,
+          to_update: importMode === "update" ? parsed.length : 0,
+          to_create: importMode === "create" ? parsed.length : 0,
           errors: 0,
         },
       });
@@ -262,8 +331,12 @@ export async function POST(req: Request) {
       }
 
       try {
-        let entityId = row.entityId;
-        if (entityId) {
+        let entityId: string | null = row.entityId;
+        if (importMode === "update") {
+          if (!entityId) {
+            applyErrors.push({ line: row.line, message: "entity_id requerido para actualización masiva" });
+            continue;
+          }
           const patch: Record<string, unknown> = { name: row.name };
           if (row.tracksUsageProvided) {
             patch.tracks_usage = row.tracksUsage === true;
@@ -284,6 +357,10 @@ export async function POST(req: Request) {
           if (updErr) throw updErr;
           updated++;
         } else {
+          if (!type) {
+            applyErrors.push({ line: row.line, message: `entity_type no encontrado: ${row.entityTypeName}` });
+            continue;
+          }
           const createTracksUsage = row.tracksUsage === true;
           const { data: ins, error: insErr } = await db
             .from("entities")
@@ -297,7 +374,7 @@ export async function POST(req: Request) {
             .select("id")
             .single();
           if (insErr) throw insErr;
-          entityId = ins.id as string;
+          entityId = String(ins.id);
           created++;
         }
 
@@ -307,7 +384,7 @@ export async function POST(req: Request) {
           if (!field) continue;
           fieldRows.push({
             organization_id: orgId,
-            entity_id: entityId as string,
+            entity_id: String(entityId),
             entity_field_id: field.id,
             value_text: value,
           });

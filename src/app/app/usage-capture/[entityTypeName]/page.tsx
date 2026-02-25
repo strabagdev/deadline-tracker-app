@@ -18,6 +18,7 @@ type Entity = {
   usage_unit_name: string;
   usage_unit_visible: boolean;
   usage_unit_suggested_values?: string[];
+  card_fields?: Array<{ name: string; value_text: string }>;
   fields: Field[];
   logged_days?: string[];
 };
@@ -60,6 +61,7 @@ export default function FocusedUsageCapturePage() {
   const [entities, setEntities] = useState<Entity[]>([]);
   const [entityId, setEntityId] = useState("");
   const [viewMode, setViewMode] = useState<"single" | "pending">("pending");
+  const [pendingSecondaryFilter, setPendingSecondaryFilter] = useState<string>("all");
   const [entitySearch, setEntitySearch] = useState("");
   const [value, setValue] = useState("");
   const [bulkDraftByEntity, setBulkDraftByEntity] = useState<Record<string, string>>({});
@@ -87,6 +89,42 @@ export default function FocusedUsageCapturePage() {
     }
     return Array.from(map.values());
   }, [pendingEntities]);
+  const pendingSecondaryOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const e of pendingEntities) {
+      const values = new Set(
+        (e.card_fields ?? [])
+          .map((f) => String(f.value_text ?? "").trim())
+          .filter((v) => v.length > 0)
+      );
+      for (const value of values) {
+        counts.set(value, (counts.get(value) ?? 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .map(([value, count]) => ({ value, label: value, count }))
+      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+  }, [pendingEntities]);
+  const filteredPendingEntities = useMemo(() => {
+    if (pendingSecondaryFilter === "all") return pendingEntities;
+    return pendingEntities.filter((e) =>
+      (e.card_fields ?? []).some((f) => String(f.value_text ?? "").trim() === pendingSecondaryFilter)
+    );
+  }, [pendingEntities, pendingSecondaryFilter]);
+  const orderedSelectedFields = useMemo(() => {
+    const selectedFields = selected?.fields ?? [];
+    if (selectedFields.length === 0) return [] as Field[];
+    const pendingOrder = new Map<string, number>();
+    pendingFieldColumns.forEach((f, idx) => pendingOrder.set(f.id, idx));
+    return [...selectedFields].sort((a, b) => {
+      const ai = pendingOrder.get(a.id);
+      const bi = pendingOrder.get(b.id);
+      const aScore = ai ?? Number.MAX_SAFE_INTEGER;
+      const bScore = bi ?? Number.MAX_SAFE_INTEGER;
+      if (aScore !== bScore) return aScore - bScore;
+      return a.name.localeCompare(b.name);
+    });
+  }, [selected?.fields, pendingFieldColumns]);
   const fullyLoggedDates = useMemo(() => {
     if (entities.length === 0) return [];
     const counts = new Map<string, number>();
@@ -101,6 +139,18 @@ export default function FocusedUsageCapturePage() {
       .map(([day]) => day)
       .sort((a, b) => b.localeCompare(a));
   }, [entities]);
+  const highlightedCalendarDates = useMemo(
+    () => (viewMode === "single" ? (selected?.logged_days ?? []) : fullyLoggedDates),
+    [viewMode, selected?.logged_days, fullyLoggedDates]
+  );
+  const chipDynamicFields = useMemo(
+    () => orderedSelectedFields.filter((f) => fieldOptions(f).length > 0),
+    [orderedSelectedFields]
+  );
+  const nonChipDynamicFields = useMemo(
+    () => orderedSelectedFields.filter((f) => fieldOptions(f).length === 0),
+    [orderedSelectedFields]
+  );
 
   async function getTokenOrRedirect() {
     const { data } = await supabaseAuth.auth.getSession();
@@ -230,6 +280,9 @@ export default function FocusedUsageCapturePage() {
       setEntityId(filteredEntities[0]?.id ?? "");
     }
   }, [entityId, filteredEntities]);
+  useEffect(() => {
+    setPendingSecondaryFilter("all");
+  }, [loggedOn, entitySearch, entityTypeName]);
 
   async function save() {
     setBusy(true);
@@ -454,7 +507,7 @@ export default function FocusedUsageCapturePage() {
                 <MarkedDatePicker
                   value={loggedOn}
                   onChange={setLoggedOn}
-                  highlightedDates={fullyLoggedDates}
+                  highlightedDates={highlightedCalendarDates}
                   disabledDates={[]}
                   label="Fecha de registro"
                   disabled={busy}
@@ -477,18 +530,18 @@ export default function FocusedUsageCapturePage() {
                     const mainSuggestions = selected?.usage_unit_suggested_values ?? [];
                     if (mainSuggestions.length > 0) {
                       return (
-                        <div className="grid gap-2 md:grid-cols-[minmax(240px,1fr)_220px]">
+                        <div className="flex flex-wrap items-center gap-2">
                           <select
                             value={entityId}
                             onChange={(e) => setEntityId(e.target.value)}
-                            className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                            className="h-10 min-w-[260px] rounded-xl border border-slate-300 bg-white px-3 text-sm"
                             disabled={busy}
                           >
                             {filteredEntities.map((e) => (
                               <option key={e.id} value={e.id}>{e.name}</option>
                             ))}
                           </select>
-                          <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap pb-1">
+                          <div className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap pb-1">
                             {mainSuggestions.map((opt) => {
                               const active = value.trim() === opt;
                               return (
@@ -509,15 +562,45 @@ export default function FocusedUsageCapturePage() {
                               );
                             })}
                           </div>
+                          {chipDynamicFields.map((f) => (
+                            <div key={`row-chip-${f.id}`} className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap pb-1">
+                              <span className="shrink-0 text-xs text-slate-600">{f.name}</span>
+                              {fieldOptions(f).map((opt) => {
+                                const current = String(fieldDraft[f.id] ?? "");
+                                const active = current === opt;
+                                return (
+                                  <button
+                                    key={`${f.id}-${opt}`}
+                                    type="button"
+                                    disabled={busy || loadingExisting}
+                                    onClick={() =>
+                                      setFieldDraft((p) => ({
+                                        ...p,
+                                        [f.id]: current === opt ? "" : opt,
+                                      }))
+                                    }
+                                    className={[
+                                      "shrink-0 rounded-full border px-2 py-1 text-[10px] transition",
+                                      active
+                                        ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                        : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                                    ].join(" ")}
+                                  >
+                                    {opt}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))}
                         </div>
                       );
                     }
                     return (
-                      <div className="grid gap-2 md:grid-cols-[minmax(240px,1fr)_220px]">
+                      <div className="flex flex-wrap items-center gap-2">
                         <select
                           value={entityId}
                           onChange={(e) => setEntityId(e.target.value)}
-                          className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                          className="h-10 min-w-[260px] rounded-xl border border-slate-300 bg-white px-3 text-sm"
                           disabled={busy}
                         >
                           {filteredEntities.map((e) => (
@@ -530,47 +613,50 @@ export default function FocusedUsageCapturePage() {
                           onChange={(e) => setValue(e.target.value)}
                           placeholder={selected?.usage_unit_visible && selected?.usage_unit_name ? `Valor (${selected.usage_unit_name})` : "Valor"}
                           disabled={busy || loadingExisting}
+                          className="min-w-[220px]"
                         />
+                        {chipDynamicFields.map((f) => (
+                          <div key={`row-chip-${f.id}`} className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap pb-1">
+                            <span className="shrink-0 text-xs text-slate-600">{f.name}</span>
+                            {fieldOptions(f).map((opt) => {
+                              const current = String(fieldDraft[f.id] ?? "");
+                              const active = current === opt;
+                              return (
+                                <button
+                                  key={`${f.id}-${opt}`}
+                                  type="button"
+                                  disabled={busy || loadingExisting}
+                                  onClick={() =>
+                                    setFieldDraft((p) => ({
+                                      ...p,
+                                      [f.id]: current === opt ? "" : opt,
+                                    }))
+                                  }
+                                  className={[
+                                    "shrink-0 rounded-full border px-2 py-1 text-[10px] transition",
+                                    active
+                                      ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                      : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                                  ].join(" ")}
+                                >
+                                  {opt}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ))}
                       </div>
                     );
                   })()}
 
-                  {(selected?.fields ?? []).length > 0 ? (
-                    <div className="grid gap-2 rounded-xl border p-3">
-                      <div className="text-xs font-semibold text-slate-600">Campos dinámicos</div>
-                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                        {selected?.fields.map((f) => (
-                          <div key={f.id} className="grid gap-1">
+                  {nonChipDynamicFields.length > 0 ? (
+                    <div className="grid gap-2 rounded-xl border p-3 lg:grid-cols-[minmax(220px,280px)_minmax(0,1fr)] lg:items-center">
+                      <div className="text-xs font-semibold text-slate-600">Campos dinámicos adicionales</div>
+                      <div className="flex min-w-0 items-start gap-2 overflow-x-auto pb-1">
+                        {nonChipDynamicFields.map((f) => (
+                          <div key={f.id} className="grid min-w-[180px] gap-1">
                             <label className="truncate text-xs text-slate-600" title={f.name}>{f.name}</label>
-                            {fieldOptions(f).length > 0 ? (
-                              <div className="flex gap-1 overflow-x-auto whitespace-nowrap pb-1">
-                                {fieldOptions(f).map((opt) => {
-                                  const current = String(fieldDraft[f.id] ?? "");
-                                  const active = current === opt;
-                                  return (
-                                    <button
-                                      key={`${f.id}-${opt}`}
-                                      type="button"
-                                      disabled={busy || loadingExisting}
-                                      onClick={() =>
-                                        setFieldDraft((p) => ({
-                                          ...p,
-                                          [f.id]: current === opt ? "" : opt,
-                                        }))
-                                      }
-                                      className={[
-                                        "shrink-0 rounded-full border px-2 py-1 text-[10px] transition",
-                                        active
-                                          ? "border-emerald-600 bg-emerald-50 text-emerald-700"
-                                          : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
-                                      ].join(" ")}
-                                    >
-                                      {opt}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            ) : f.field_type === "boolean" ? (
+                            {f.field_type === "boolean" ? (
                               <select
                                 value={fieldDraft[f.id] ?? ""}
                                 onChange={(e) => setFieldDraft((p) => ({ ...p, [f.id]: e.target.value }))}
@@ -614,7 +700,40 @@ export default function FocusedUsageCapturePage() {
                   <div className="text-xs text-slate-500">
                     Entidades sin registro en {loggedOn}: <b>{pendingEntities.length}</b>
                   </div>
-                  {pendingEntities.length === 0 ? (
+                  {pendingSecondaryOptions.length > 0 ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPendingSecondaryFilter("all")}
+                        className={[
+                          "rounded-full border px-2.5 py-1 text-xs transition",
+                          pendingSecondaryFilter === "all"
+                            ? "border-indigo-300 bg-indigo-100 text-indigo-800"
+                            : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                        ].join(" ")}
+                      >
+                        Todos {pendingEntities.length}
+                      </button>
+                      {pendingSecondaryOptions.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setPendingSecondaryFilter(opt.value)}
+                          className={[
+                            "rounded-full border px-2.5 py-1 text-xs transition",
+                            pendingSecondaryFilter === opt.value
+                              ? "border-indigo-300 bg-indigo-100 text-indigo-800"
+                              : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                          ].join(" ")}
+                          title={opt.label}
+                        >
+                          <span className="max-w-[140px] truncate align-middle inline-block">{opt.label}</span>{" "}
+                          <span className="font-semibold">{opt.count}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {filteredPendingEntities.length === 0 ? (
                     <p className="text-sm text-slate-500">No hay pendientes para la fecha seleccionada.</p>
                   ) : (
                     <div className="grid gap-2">
@@ -633,7 +752,7 @@ export default function FocusedUsageCapturePage() {
                           )}
                         </div>
                       </div>
-                      {pendingEntities.map((e) => (
+                      {filteredPendingEntities.map((e) => (
                         <div key={e.id} className="grid grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] items-center gap-2">
                           <div className="truncate text-sm text-slate-800" title={e.name}>{e.name}</div>
                           {(e.usage_unit_suggested_values ?? []).length > 0 ? (
@@ -770,7 +889,7 @@ export default function FocusedUsageCapturePage() {
                   <div className="text-[11px] text-slate-500">
                     En modo lote puedes cargar valor principal y campos dinámicos en formato compacto.
                   </div>
-                  <Button onClick={() => void saveBulkPending()} disabled={busy || pendingEntities.length === 0} className="w-auto justify-self-start">
+                  <Button onClick={() => void saveBulkPending()} disabled={busy || filteredPendingEntities.length === 0} className="w-auto justify-self-start">
                     {busy ? "Guardando..." : "Guardar lote"}
                   </Button>
                 </>

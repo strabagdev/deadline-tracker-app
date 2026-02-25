@@ -24,6 +24,8 @@ export async function GET(req: Request) {
     const orgId = access.organizationId;
     const url = new URL(req.url);
     const selectedTypeId = String(url.searchParams.get("entity_type_id") ?? "").trim();
+    const modeRaw = String(url.searchParams.get("mode") ?? "update").trim().toLowerCase();
+    const mode = modeRaw === "create" ? "create" : "update";
 
     const [{ data: types, error: typeErr }, { data: fields, error: fieldErr }] = await Promise.all([
       db.from("entity_types").select("id, name").eq("organization_id", orgId).order("name"),
@@ -48,7 +50,7 @@ export async function GET(req: Request) {
     ).sort((a, b) => a.localeCompare(b));
 
     const header = [
-      "entity_id",
+      ...(mode === "update" ? ["entity_id"] : []),
       "entity_name",
       "entity_type",
       "tracks_usage",

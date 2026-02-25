@@ -294,8 +294,8 @@ export default function EntityDetailPage() {
             </CardHeader>
             {editMode ? (
               <CardContent className="pt-0">
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="grid gap-1.5 text-xs text-slate-600">
+                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-12 lg:items-end">
+                  <label className="grid gap-1.5 text-xs text-slate-600 lg:col-span-4">
                     Nombre
                     <Input
                       value={draftName}
@@ -303,35 +303,35 @@ export default function EntityDetailPage() {
                       disabled={busy}
                     />
                   </label>
-                  <div className="grid gap-1.5 text-xs text-slate-600">
+                  <div className="grid gap-1.5 text-xs text-slate-600 lg:col-span-3">
                     <span>Tipo</span>
                     <Input value={entity.entity_type?.name ?? ""} disabled />
-                    <label className="mt-1 flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={draftTracksUsage}
-                        onChange={(e) => setDraftTracksUsage(e.target.checked)}
-                        disabled={busy}
-                        className="h-4 w-4"
-                      />
-                      tracks_usage (registrar uso)
-                    </label>
-                    <div className="mt-2 grid gap-1">
-                      <span className="text-[11px] font-medium text-slate-500">Unidad de uso</span>
-                      <select
-                        value={draftUsageUnitId}
-                        onChange={(e) => setDraftUsageUnitId(e.target.value)}
-                        disabled={busy || !draftTracksUsage}
-                        className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-100"
-                      >
-                        <option value="">Sin unidad</option>
-                        {usageUnits.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  </div>
+                  <label className="flex h-10 items-center gap-2 rounded-xl border border-slate-300 px-3 text-sm text-slate-700 lg:col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={draftTracksUsage}
+                      onChange={(e) => setDraftTracksUsage(e.target.checked)}
+                      disabled={busy}
+                      className="h-4 w-4"
+                    />
+                    Registrar uso
+                  </label>
+                  <div className="grid gap-1 lg:col-span-3">
+                    <span className="text-[11px] font-medium text-slate-500">Unidad de uso</span>
+                    <select
+                      value={draftUsageUnitId}
+                      onChange={(e) => setDraftUsageUnitId(e.target.value)}
+                      disabled={busy || !draftTracksUsage}
+                      className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-100"
+                    >
+                      <option value="">Sin unidad</option>
+                      {usageUnits.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </CardContent>
