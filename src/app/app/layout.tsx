@@ -235,6 +235,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [allowedModules, setAllowedModules] = React.useState<Set<string> | null>(null);
   const [moduleAccessLoaded, setModuleAccessLoaded] = React.useState(false);
   const [mobileHeaderMenuOpen, setMobileHeaderMenuOpen] = React.useState(false);
+  const [frontendRev, setFrontendRev] = React.useState("...");
+  const [backendRev, setBackendRev] = React.useState("...");
+  const [deployEnv, setDeployEnv] = React.useState("...");
   const isSuperAdminArea = pathname.startsWith("/app/super-admin");
   const isSuperAdminLockedOutRoute = isSuperAdmin && !isSuperAdminArea;
 
@@ -322,6 +325,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     setMobileHeaderMenuOpen(false);
   }, [pathname]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await fetch("/api/platform/version", { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      if (cancelled) return;
+      if (!res.ok) {
+        setFrontendRev("n/a");
+        setBackendRev("n/a");
+        setDeployEnv("n/a");
+        return;
+      }
+      setFrontendRev(String(json?.frontend_rev ?? "n/a"));
+      setBackendRev(String(json?.backend_rev ?? "n/a"));
+      setDeployEnv(String(json?.environment ?? "n/a"));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const visibleNavItems = React.useMemo(() => {
     if (!moduleAccessLoaded && !isSuperAdmin) return [];
@@ -560,7 +584,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       <footer className="border-t bg-white px-4 py-3">
         <div className={cn("mx-auto text-xs text-slate-500", isSuperAdmin ? "max-w-[1100px]" : "max-w-[1400px]")}>
-          v2 · Dashboard analítico y Operaciones separadas, con control de acceso por módulo y captura de uso dinámica.
+          {deployEnv === "production"
+            ? `v2 · Dashboard analítico y Operaciones separadas, con control de acceso por módulo y captura de uso dinámica. · UI ${frontendRev || "n/a"} · API ${backendRev || "n/a"} · production`
+            : "v2 · Dashboard analítico y Operaciones separadas, con control de acceso por módulo y captura de uso dinámica."}
         </div>
       </footer>
     </div>

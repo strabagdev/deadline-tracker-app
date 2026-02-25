@@ -268,9 +268,6 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({
-      _meta: {
-        backend_rev: String(process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GIT_COMMIT_SHA ?? "local").slice(0, 7),
-      },
       entity_type: {
         id: String(et.id),
         name: String(et.name ?? ""),
