@@ -68,6 +68,8 @@ export default function FocusedUsageCapturePage() {
   const [bulkFieldDraftByEntity, setBulkFieldDraftByEntity] = useState<Record<string, Record<string, string>>>({});
   const [loggedOn, setLoggedOn] = useState(todayDateInput());
   const [fieldDraft, setFieldDraft] = useState<Record<string, string>>({});
+  const [pendingPage, setPendingPage] = useState(1);
+  const pendingPageSize = 10;
 
   const selected = useMemo(() => entities.find((e) => e.id === entityId) ?? null, [entities, entityId]);
   const alreadyLoggedForDay = Boolean(selected?.logged_days?.includes(loggedOn));
@@ -117,6 +119,16 @@ export default function FocusedUsageCapturePage() {
       .map(([value, count]) => ({ value, label: value, count }))
       .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
   }, [filteredPendingEntities]);
+  const pendingTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(filteredPendingEntities.length / pendingPageSize)),
+    [filteredPendingEntities.length]
+  );
+  const safePendingPage = Math.min(pendingPage, pendingTotalPages);
+  const pendingPageStart = (safePendingPage - 1) * pendingPageSize;
+  const pendingPagedEntities = useMemo(
+    () => filteredPendingEntities.slice(pendingPageStart, pendingPageStart + pendingPageSize),
+    [filteredPendingEntities, pendingPageStart]
+  );
   const orderedSelectedFields = useMemo(() => {
     const selectedFields = selected?.fields ?? [];
     if (selectedFields.length === 0) return [] as Field[];
@@ -289,6 +301,12 @@ export default function FocusedUsageCapturePage() {
   useEffect(() => {
     setPendingSecondaryFilters([]);
   }, [loggedOn, entitySearch, entityTypeName]);
+  useEffect(() => {
+    setPendingPage(1);
+  }, [loggedOn, entitySearch, entityTypeName, pendingSecondaryFilters]);
+  useEffect(() => {
+    if (pendingPage > pendingTotalPages) setPendingPage(pendingTotalPages);
+  }, [pendingPage, pendingTotalPages]);
 
   async function save() {
     setBusy(true);
@@ -749,22 +767,22 @@ export default function FocusedUsageCapturePage() {
                     <p className="text-sm text-slate-500">No hay pendientes para la fecha seleccionada.</p>
                   ) : (
                     <div className="grid gap-2">
-                      <div className="grid grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] gap-2 rounded-lg border bg-slate-50 px-2 py-1 text-[11px] text-slate-500">
-                        <div>Entidad</div>
-                        <div>Valor</div>
+                      <div className="grid grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] items-center gap-2 rounded-lg border bg-slate-50 px-2 py-1 text-sm font-semibold text-slate-700">
+                        <div className="flex h-8 items-center">Entidad</div>
+                        <div className="flex h-8 items-center">Valor</div>
                         <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-4">
                           {pendingFieldColumns.length > 0 ? (
                             pendingFieldColumns.map((f) => (
-                              <div key={`head-${f.id}`} className="flex h-9 items-center text-[10px] text-slate-600">
+                              <div key={`head-${f.id}`} className="flex h-8 items-center text-sm font-semibold text-slate-700">
                                 {f.name}
                               </div>
                             ))
                           ) : (
-                            <div className="flex h-9 items-center text-[10px] text-slate-400">—</div>
+                            <div className="flex h-8 items-center text-sm font-semibold text-slate-400">—</div>
                           )}
                         </div>
                       </div>
-                      {filteredPendingEntities.map((e) => (
+                      {pendingPagedEntities.map((e) => (
                         <div key={e.id} className="grid grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] items-center gap-2">
                           <div className="truncate text-sm text-slate-800" title={e.name}>{e.name}</div>
                           {(e.usage_unit_suggested_values ?? []).length > 0 ? (
@@ -897,6 +915,51 @@ export default function FocusedUsageCapturePage() {
                       ))}
                     </div>
                   )}
+                  {filteredPendingEntities.length > 0 ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                      <div>
+                        Mostrando {pendingPageStart + 1}-{Math.min(pendingPageStart + pendingPageSize, filteredPendingEntities.length)} de{" "}
+                        {filteredPendingEntities.length}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setPendingPage(1)}
+                          disabled={safePendingPage <= 1}
+                          className="rounded border border-slate-300 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          «
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPendingPage((p) => Math.max(1, p - 1))}
+                          disabled={safePendingPage <= 1}
+                          className="rounded border border-slate-300 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          ‹
+                        </button>
+                        <span className="px-2">
+                          Página {safePendingPage} de {pendingTotalPages}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setPendingPage((p) => Math.min(pendingTotalPages, p + 1))}
+                          disabled={safePendingPage >= pendingTotalPages}
+                          className="rounded border border-slate-300 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          ›
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPendingPage(pendingTotalPages)}
+                          disabled={safePendingPage >= pendingTotalPages}
+                          className="rounded border border-slate-300 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          »
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div className="text-[11px] text-slate-500">
                     En modo lote puedes cargar valor principal y campos dinámicos en formato compacto.
