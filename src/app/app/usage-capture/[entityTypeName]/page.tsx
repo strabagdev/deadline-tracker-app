@@ -767,7 +767,7 @@ export default function FocusedUsageCapturePage() {
                     <p className="text-sm text-slate-500">No hay pendientes para la fecha seleccionada.</p>
                   ) : (
                     <div className="grid gap-2">
-                      <div className="grid grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] items-center gap-2 rounded-lg border bg-slate-50 px-2 py-1 text-sm font-semibold text-slate-700">
+                      <div className="grid grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] items-center gap-2 px-1 py-0 text-sm font-semibold text-slate-700">
                         <div className="flex h-8 items-center">Entidad</div>
                         <div className="flex h-8 items-center">Valor</div>
                         <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-4">
