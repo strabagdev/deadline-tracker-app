@@ -61,7 +61,7 @@ export default function FocusedUsageCapturePage() {
   const [entities, setEntities] = useState<Entity[]>([]);
   const [entityId, setEntityId] = useState("");
   const [viewMode, setViewMode] = useState<"single" | "pending">("pending");
-  const [pendingSecondaryFilter, setPendingSecondaryFilter] = useState<string>("all");
+  const [pendingSecondaryFilters, setPendingSecondaryFilters] = useState<string[]>([]);
   const [entitySearch, setEntitySearch] = useState("");
   const [value, setValue] = useState("");
   const [bulkDraftByEntity, setBulkDraftByEntity] = useState<Record<string, string>>({});
@@ -89,9 +89,21 @@ export default function FocusedUsageCapturePage() {
     }
     return Array.from(map.values());
   }, [pendingEntities]);
+  const filteredPendingEntities = useMemo(() => {
+    if (pendingSecondaryFilters.length === 0) return pendingEntities;
+    return pendingEntities.filter((e) => {
+      const values = new Set(
+        (e.card_fields ?? [])
+          .map((f) => String(f.value_text ?? "").trim())
+          .filter((v) => v.length > 0)
+      );
+      return pendingSecondaryFilters.every((filterValue) => values.has(filterValue));
+    });
+  }, [pendingEntities, pendingSecondaryFilters]);
   const pendingSecondaryOptions = useMemo(() => {
+    const source = filteredPendingEntities;
     const counts = new Map<string, number>();
-    for (const e of pendingEntities) {
+    for (const e of source) {
       const values = new Set(
         (e.card_fields ?? [])
           .map((f) => String(f.value_text ?? "").trim())
@@ -104,13 +116,7 @@ export default function FocusedUsageCapturePage() {
     return Array.from(counts.entries())
       .map(([value, count]) => ({ value, label: value, count }))
       .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
-  }, [pendingEntities]);
-  const filteredPendingEntities = useMemo(() => {
-    if (pendingSecondaryFilter === "all") return pendingEntities;
-    return pendingEntities.filter((e) =>
-      (e.card_fields ?? []).some((f) => String(f.value_text ?? "").trim() === pendingSecondaryFilter)
-    );
-  }, [pendingEntities, pendingSecondaryFilter]);
+  }, [filteredPendingEntities]);
   const orderedSelectedFields = useMemo(() => {
     const selectedFields = selected?.fields ?? [];
     if (selectedFields.length === 0) return [] as Field[];
@@ -281,7 +287,7 @@ export default function FocusedUsageCapturePage() {
     }
   }, [entityId, filteredEntities]);
   useEffect(() => {
-    setPendingSecondaryFilter("all");
+    setPendingSecondaryFilters([]);
   }, [loggedOn, entitySearch, entityTypeName]);
 
   async function save() {
@@ -704,10 +710,10 @@ export default function FocusedUsageCapturePage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setPendingSecondaryFilter("all")}
+                        onClick={() => setPendingSecondaryFilters([])}
                         className={[
                           "rounded-full border px-2.5 py-1 text-xs transition",
-                          pendingSecondaryFilter === "all"
+                          pendingSecondaryFilters.length === 0
                             ? "border-indigo-300 bg-indigo-100 text-indigo-800"
                             : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
                         ].join(" ")}
@@ -718,10 +724,16 @@ export default function FocusedUsageCapturePage() {
                         <button
                           key={opt.value}
                           type="button"
-                          onClick={() => setPendingSecondaryFilter(opt.value)}
+                          onClick={() =>
+                            setPendingSecondaryFilters((prev) =>
+                              prev.includes(opt.value)
+                                ? prev.filter((v) => v !== opt.value)
+                                : [...prev, opt.value]
+                            )
+                          }
                           className={[
                             "rounded-full border px-2.5 py-1 text-xs transition",
-                            pendingSecondaryFilter === opt.value
+                            pendingSecondaryFilters.includes(opt.value)
                               ? "border-indigo-300 bg-indigo-100 text-indigo-800"
                               : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
                           ].join(" ")}
