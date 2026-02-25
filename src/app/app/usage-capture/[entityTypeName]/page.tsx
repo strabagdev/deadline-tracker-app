@@ -19,6 +19,7 @@ type Entity = {
   usage_unit_visible: boolean;
   usage_unit_suggested_values?: string[];
   card_fields?: Array<{ name: string; value_text: string }>;
+  search_values?: string[];
   fields: Field[];
   logged_days?: string[];
 };
@@ -44,6 +45,14 @@ function fieldOptions(field: Field) {
     .map((v) => String(v ?? "").trim())
     .filter((v) => v.length > 0)
     .filter((v, i, arr) => arr.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i);
+}
+
+function normalizeSearchText(value: string) {
+  return String(value ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
 }
 
 export default function FocusedUsageCapturePage() {
@@ -75,9 +84,59 @@ export default function FocusedUsageCapturePage() {
   const alreadyLoggedForDay = Boolean(selected?.logged_days?.includes(loggedOn));
   const filteredEntities = useMemo(() => {
     const needle = entitySearch.trim().toLowerCase();
+    const needleNorm = normalizeSearchText(entitySearch);
     if (!needle) return entities;
-    return entities.filter((e) => e.name.toLowerCase().includes(needle));
+    return entities.filter((e) => {
+      const candidates = [
+        e.name,
+        e.id,
+        ...(e.card_fields ?? []).flatMap((f) => [String(f.name ?? ""), String(f.value_text ?? "")]),
+        ...(e.search_values ?? []).map((v) => String(v ?? "")),
+      ];
+      return candidates.some((candidate) => {
+        const raw = candidate.toLowerCase();
+        if (raw.includes(needle)) return true;
+        return needleNorm.length > 0 && normalizeSearchText(candidate).includes(needleNorm);
+      });
+    });
   }, [entities, entitySearch]);
+  const searchDebugMatches = useMemo(() => {
+    const needle = entitySearch.trim();
+    if (!needle) return [] as Array<{ entityName: string; values: string[]; pendingForDay: boolean; passesSecondaryFilters: boolean }>;
+    const needleNorm = normalizeSearchText(needle);
+    const selectedSecondary = new Set(pendingSecondaryFilters);
+    return entities
+      .map((e) => {
+        const fieldValues = [
+          String(e.name ?? ""),
+          String(e.id ?? ""),
+          ...(e.card_fields ?? []).flatMap((f) => [String(f.name ?? ""), String(f.value_text ?? "")]),
+          ...(e.search_values ?? []).map((v) => String(v ?? "")),
+        ]
+          .map((v) => v.trim())
+          .filter((v) => v.length > 0);
+
+        const dedup = Array.from(new Set(fieldValues));
+        const matches = dedup.filter((value) => {
+          const raw = value.toLowerCase();
+          if (raw.includes(needle.toLowerCase())) return true;
+          return needleNorm.length > 0 && normalizeSearchText(value).includes(needleNorm);
+        });
+        if (matches.length === 0) return null;
+        const pendingForDay = !Boolean(e.logged_days?.includes(loggedOn));
+        const cardValueSet = new Set(
+          (e.card_fields ?? [])
+            .map((f) => String(f.value_text ?? "").trim())
+            .filter((v) => v.length > 0)
+        );
+        const passesSecondaryFilters = selectedSecondary.size === 0
+          ? true
+          : Array.from(selectedSecondary).every((filterValue) => cardValueSet.has(filterValue));
+        return { entityName: e.name, values: matches.slice(0, 8), pendingForDay, passesSecondaryFilters };
+      })
+      .filter(Boolean)
+      .slice(0, 16) as Array<{ entityName: string; values: string[]; pendingForDay: boolean; passesSecondaryFilters: boolean }>;
+  }, [entities, entitySearch, loggedOn, pendingSecondaryFilters]);
   const pendingEntities = useMemo(
     () => filteredEntities.filter((e) => !Boolean(e.logged_days?.includes(loggedOn))),
     [filteredEntities, loggedOn]
@@ -545,6 +604,30 @@ export default function FocusedUsageCapturePage() {
                     placeholder="Buscar entidad..."
                     disabled={busy}
                   />
+                  {entitySearch.trim().length > 0 ? (
+                    <div className="max-h-44 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs">
+                      <div className="mb-1 font-semibold text-slate-700">Posibles coincidencias en campos de entidad</div>
+                      <div className="mb-2 text-[11px] text-slate-500">
+                        Coincidencias: {searchDebugMatches.length} · Pendientes visibles: {filteredPendingEntities.length} · Con registro ese día: {searchDebugMatches.filter((r) => !r.pendingForDay).length}
+                      </div>
+                      {searchDebugMatches.length === 0 ? (
+                        <div className="text-slate-500">Sin coincidencias en campos.</div>
+                      ) : (
+                        <div className="grid gap-1">
+                          {searchDebugMatches.map((row) => (
+                            <div key={`${row.entityName}-${row.values.join("|")}`} className="rounded border border-slate-200 bg-white px-2 py-1">
+                              <div className="truncate font-medium text-slate-700">
+                                {row.entityName}
+                                {!row.pendingForDay ? <span className="ml-2 text-[10px] font-normal text-amber-700">(ya registrado en la fecha)</span> : null}
+                                {row.pendingForDay && !row.passesSecondaryFilters ? <span className="ml-2 text-[10px] font-normal text-indigo-700">(filtrado por chips secundarios)</span> : null}
+                              </div>
+                              <div className="truncate text-slate-600">{row.values.join(" · ")}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
