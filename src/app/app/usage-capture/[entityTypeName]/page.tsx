@@ -67,6 +67,7 @@ export default function FocusedUsageCapturePage() {
   const [okMsg, setOkMsg] = useState("");
 
   const [typeLabel, setTypeLabel] = useState("");
+  const [backendRev, setBackendRev] = useState("local");
   const [entities, setEntities] = useState<Entity[]>([]);
   const [entityId, setEntityId] = useState("");
   const [viewMode, setViewMode] = useState<"single" | "pending">("pending");
@@ -228,6 +229,11 @@ export default function FocusedUsageCapturePage() {
     () => orderedSelectedFields.filter((f) => fieldOptions(f).length === 0),
     [orderedSelectedFields]
   );
+  const frontendRev = useMemo(
+    () =>
+      String(process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ?? process.env.NEXT_PUBLIC_APP_VERSION ?? "local").slice(0, 7),
+    []
+  );
 
   async function getTokenOrRedirect() {
     const { data } = await supabaseAuth.auth.getSession();
@@ -275,6 +281,7 @@ export default function FocusedUsageCapturePage() {
     }
 
     setTypeLabel(String(ctxJson.entity_type?.name ?? entityTypeName));
+    setBackendRev(String(ctxJson?._meta?.backend_rev ?? "local"));
     const list = (ctxJson.entities ?? []) as Entity[];
     setEntities(list);
     if (!entityId && list[0]?.id) setEntityId(String(list[0].id));
@@ -545,6 +552,7 @@ export default function FocusedUsageCapturePage() {
             <div>
               <CardTitle>Ingreso de Uso Enfocado</CardTitle>
               <p className="mt-1 text-sm text-slate-500">Tipo de entidad: <b>{typeLabel || entityTypeName || "—"}</b></p>
+              <p className="mt-1 text-[11px] text-slate-400">Build UI: {frontendRev} · API: {backendRev}</p>
             </div>
             <Link href="/app/usage-capture">
               <Button variant="outline" size="sm">Volver</Button>
