@@ -43,6 +43,7 @@ const MODULE_KEYS = [
   "deadline_types",
   "usage_units",
   "usage_capture",
+  "bi_integrations",
   "users",
 ] as const;
 
