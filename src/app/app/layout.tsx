@@ -436,11 +436,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     variant="outline"
                     size="sm"
                     onClick={() => setMobileHeaderMenuOpen(true)}
-                    className="h-9 bg-transparent"
+                    className="h-11 px-4 text-sm bg-transparent"
                     aria-label="Abrir menú"
                     title="Menú"
                   >
-                    <IconMenu className="mr-2 h-4 w-4" />
+                    <IconMenu className="mr-2 h-5 w-5" />
                     Menú
                   </Button>
                 </div>

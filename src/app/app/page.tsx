@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 import { Loader } from "@/components/ui/loader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 
 type EntityType = { id: string; name: string };
 type Status = "red" | "orange" | "yellow" | "green" | "none";
@@ -26,6 +25,12 @@ type DashboardMeta = {
   entity_count_in_org: number;
 };
 
+type DonutSlice = {
+  label: string;
+  value: number;
+  color: string;
+};
+
 const statusLabel: Record<Status, string> = {
   red: "Vencido",
   orange: "Por vencer",
@@ -42,13 +47,67 @@ const statusTone: Record<Status, string> = {
   none: "bg-slate-400",
 };
 
+const statusColor: Record<Status, string> = {
+  red: "#f43f5e",
+  orange: "#f97316",
+  yellow: "#f59e0b",
+  green: "#10b981",
+  none: "#94a3b8",
+};
+
+function buildDonutGradient(slices: DonutSlice[]) {
+  const total = slices.reduce((acc, s) => acc + s.value, 0);
+  if (total <= 0) return "conic-gradient(#e2e8f0 0deg 360deg)";
+  let acc = 0;
+  const parts: string[] = [];
+  for (const s of slices) {
+    if (s.value <= 0) continue;
+    const start = (acc / total) * 360;
+    acc += s.value;
+    const end = (acc / total) * 360;
+    parts.push(`${s.color} ${start}deg ${end}deg`);
+  }
+  return `conic-gradient(${parts.join(", ")})`;
+}
+
+function DonutChart({ slices, centerLabel }: { slices: DonutSlice[]; centerLabel: string }) {
+  const total = slices.reduce((acc, s) => acc + s.value, 0);
+  const gradient = buildDonutGradient(slices);
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="relative h-40 w-40 shrink-0 self-center rounded-full" style={{ background: gradient }}>
+        <div className="absolute inset-[18%] flex items-center justify-center rounded-full bg-white text-center">
+          <div>
+            <div className="text-[11px] text-slate-500">Total</div>
+            <div className="text-lg font-semibold text-slate-800">{total}</div>
+          </div>
+        </div>
+      </div>
+      <div className="grid min-w-0 gap-1 text-xs text-slate-600">
+        {slices.map((s) => {
+          const pct = total > 0 ? Math.round((s.value / total) * 100) : 0;
+          return (
+            <div key={s.label} className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
+                <span className="truncate">{s.label}</span>
+              </div>
+              <span className="shrink-0">{s.value} ({pct}%)</span>
+            </div>
+          );
+        })}
+      </div>
+      <span className="sr-only">{centerLabel}</span>
+    </div>
+  );
+}
+
 export default function AnalyticsDashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [entities, setEntities] = useState<EntityRow[]>([]);
   const [meta, setMeta] = useState<DashboardMeta | null>(null);
-  const [q, setQ] = useState("");
   const [entityTypeFilter, setEntityTypeFilter] = useState<string>("all");
 
   async function load() {
@@ -104,16 +163,11 @@ export default function AnalyticsDashboardPage() {
   }, [entities]);
 
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
     return entities.filter((e) => {
       if (entityTypeFilter !== "all" && e.entity_type_id !== entityTypeFilter) return false;
-      if (!needle) return true;
-      return (
-        e.name.toLowerCase().includes(needle) ||
-        (e.entity_types?.name ?? "").toLowerCase().includes(needle)
-      );
+      return true;
     });
-  }, [entities, q, entityTypeFilter]);
+  }, [entities, entityTypeFilter]);
 
   const countsByStatus = useMemo(() => {
     const base: Record<Status, number> = { red: 0, orange: 0, yellow: 0, green: 0, none: 0 };
@@ -142,6 +196,40 @@ export default function AnalyticsDashboardPage() {
     const arr = Array.from(counts.entries()).map(([name, count]) => ({ name, count }));
     return arr.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [filtered]);
+
+  const statusDonutSlices = useMemo<DonutSlice[]>(
+    () =>
+      (["red", "orange", "yellow", "green", "none"] as Status[]).map((s) => ({
+        label: statusLabel[s],
+        value: countsByStatus[s],
+        color: statusColor[s],
+      })),
+    [countsByStatus]
+  );
+
+  const entityTypeDonutSlices = useMemo<DonutSlice[]>(() => {
+    const palette = [
+      "#6366f1",
+      "#0ea5e9",
+      "#10b981",
+      "#f59e0b",
+      "#f97316",
+      "#ef4444",
+      "#8b5cf6",
+      "#14b8a6",
+    ];
+    const top = byEntityType.slice(0, 7);
+    const rest = byEntityType.slice(7).reduce((acc, row) => acc + row.count, 0);
+    const slices: DonutSlice[] = top.map((row, idx) => ({
+      label: row.name,
+      value: row.count,
+      color: palette[idx % palette.length],
+    }));
+    if (rest > 0) {
+      slices.push({ label: "Otros", value: rest, color: "#94a3b8" });
+    }
+    return slices;
+  }, [byEntityType]);
 
   const dueTrend30 = useMemo(() => {
     const buckets = new Map<string, number>();
@@ -193,7 +281,7 @@ export default function AnalyticsDashboardPage() {
           <p className="text-sm text-slate-500">Vista analítica para tratamiento de datos, totales, porcentajes y tendencias.</p>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-2 md:grid-cols-[220px_minmax(220px,1fr)]">
+          <div className="grid gap-2 md:grid-cols-[220px]">
             <select
               value={entityTypeFilter}
               onChange={(e) => setEntityTypeFilter(e.target.value)}
@@ -204,7 +292,6 @@ export default function AnalyticsDashboardPage() {
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar entidad o tipo..." />
           </div>
         </CardContent>
       </Card>
@@ -221,21 +308,7 @@ export default function AnalyticsDashboardPage() {
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-base">Distribución por estado</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            {(["red", "orange", "yellow", "green", "none"] as Status[]).map((s) => {
-              const count = countsByStatus[s];
-              const pct = filtered.length > 0 ? Math.round((count / filtered.length) * 100) : 0;
-              return (
-                <div key={s} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs text-slate-600">
-                    <span>{statusLabel[s]}</span>
-                    <span>{count} ({pct}%)</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-slate-100">
-                    <div className={`h-2 rounded-full ${statusTone[s]}`} style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              );
-            })}
+            <DonutChart slices={statusDonutSlices} centerLabel="Distribución por estado" />
           </CardContent>
         </Card>
 
@@ -243,20 +316,7 @@ export default function AnalyticsDashboardPage() {
           <CardHeader className="pb-2"><CardTitle className="text-base">Top por tipo de entidad</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {byEntityType.length === 0 ? <p className="text-sm text-slate-500">Sin datos para graficar.</p> : null}
-            {byEntityType.map((row) => {
-              const pct = totals.total > 0 ? Math.round((row.count / totals.total) * 100) : 0;
-              return (
-                <div key={row.name} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs text-slate-600">
-                    <span className="truncate pr-2">{row.name}</span>
-                    <span>{row.count}</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-slate-100">
-                    <div className="h-2 rounded-full bg-indigo-500" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              );
-            })}
+            {byEntityType.length > 0 ? <DonutChart slices={entityTypeDonutSlices} centerLabel="Top por tipo de entidad" /> : null}
           </CardContent>
         </Card>
       </div>
