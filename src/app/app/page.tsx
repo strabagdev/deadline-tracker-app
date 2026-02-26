@@ -275,26 +275,21 @@ export default function AnalyticsDashboardPage() {
 
   return (
     <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-center">Dashboard</CardTitle>
-          <p className="text-center text-sm text-slate-500">Vista analítica para tratamiento de datos, totales, porcentajes y tendencias.</p>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-2 md:grid-cols-[220px]">
-            <select
-              value={entityTypeFilter}
-              onChange={(e) => setEntityTypeFilter(e.target.value)}
-              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
-            >
-              <option value="all">Todos los tipos</option>
-              {entityTypes.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          </div>
-        </CardContent>
-      </Card>
+      <section className="rounded-xl border bg-white px-3 py-2">
+        <div className="grid items-center gap-2 sm:grid-cols-[160px_minmax(220px,320px)]">
+          <label className="text-lg font-semibold text-slate-900 sm:text-base">Dashboard</label>
+          <select
+            value={entityTypeFilter}
+            onChange={(e) => setEntityTypeFilter(e.target.value)}
+            className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+          >
+            <option value="all">Todos los tipos</option>
+            {entityTypes.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+      </section>
 
       <div className="grid grid-cols-5 gap-2 sm:gap-3">
         <Card>
