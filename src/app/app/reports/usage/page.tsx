@@ -369,13 +369,13 @@ export default function UsageReportsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
+    <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-4 sm:space-y-6">
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <CardTitle>Reportes de Uso</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Consulta histórica de registros de uso con filtros y exportación.</p>
+              <CardTitle className="app-page-title">Reportes de Uso</CardTitle>
+              <p className="app-page-subtitle">Consulta histórica de registros de uso con filtros y exportación.</p>
             </div>
             <div className="flex items-center gap-2">
               <Link href="/app/usage-capture">
@@ -389,10 +389,10 @@ export default function UsageReportsPage() {
         </CardHeader>
       </Card>
 
-      {errorMsg ? <p className="whitespace-pre-wrap text-sm text-rose-600">{errorMsg}</p> : null}
+      {errorMsg ? <div className="app-alert app-alert-error whitespace-pre-wrap">{errorMsg}</div> : null}
 
       <Card>
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-3">
           <CardTitle className="text-base">Filtros</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
@@ -400,7 +400,7 @@ export default function UsageReportsPage() {
             <select
               value={entityTypeId}
               onChange={(e) => setEntityTypeId(e.target.value)}
-              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+              className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
             >
               <option value="all">Todos los tipos</option>
               {typeOptions.map((o) => (
@@ -412,7 +412,7 @@ export default function UsageReportsPage() {
             <select
               value={dateMode}
               onChange={(e) => setDateMode(e.target.value as "range" | "single")}
-              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+              className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
             >
               <option value="range">Rango de fechas</option>
               <option value="single">Fecha exacta</option>
@@ -423,7 +423,7 @@ export default function UsageReportsPage() {
               <MarkedDatePicker value={dateFrom} onChange={setDateFrom} label="Desde" />
             )}
             {dateMode === "single" ? (
-              <div className="h-10" />
+              <div className="h-[var(--control-h)]" />
             ) : (
               <MarkedDatePicker value={dateTo} onChange={setDateTo} label="Hasta" />
             )}
@@ -436,13 +436,13 @@ export default function UsageReportsPage() {
             <Button variant="outline" size="sm" onClick={() => void exportPdf()} disabled={loading || busy || filteredRows.length === 0}>
               Exportar PDF
             </Button>
-            <span className="text-xs text-slate-500">Registros: {filteredRows.length}</span>
+            <span className="text-xs text-[var(--muted-foreground)]">Registros: {filteredRows.length}</span>
           </div>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-3">
           <CardTitle className="text-base">Resultados</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
@@ -451,14 +451,14 @@ export default function UsageReportsPage() {
               <Loader label="Cargando reporte..." />
             </div>
           ) : !hasSearched ? (
-            <p className="text-sm text-slate-500">Selecciona fecha exacta o rango para cargar resultados automáticamente.</p>
+            <p className="app-empty">Selecciona fecha exacta o rango para cargar resultados automáticamente.</p>
           ) : filteredRows.length === 0 ? (
-            <p className="text-sm text-slate-500">No hay registros para los filtros seleccionados.</p>
+            <p className="app-empty">No hay registros para los filtros seleccionados.</p>
           ) : (
-            <div className="overflow-x-auto rounded-xl border">
+            <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[color:var(--border)]">
               <table className="min-w-[980px] w-full border-collapse text-sm">
                 <thead>
-                  <tr className="border-b bg-slate-50 text-[11px] text-slate-500">
+                  <tr className="border-b bg-[var(--muted)] text-[11px] text-[var(--muted-foreground)]">
                     <th className="px-3 py-2 text-left font-medium">Entidad</th>
                     <th className="px-3 py-2 text-left font-medium">Fecha</th>
                     <th className="px-3 py-2 text-left font-medium">Valor</th>
@@ -477,16 +477,16 @@ export default function UsageReportsPage() {
                     const byName = new Map(r.field_values.map((fv) => [fv.name, fv.value]));
                     return (
                       <tr key={r.id} className="border-b">
-                        <td className="px-3 py-2 font-medium text-slate-800">{r.entity_name}</td>
-                        <td className="px-3 py-2 text-slate-700">{formatBusinessDate(r.logged_on)}</td>
-                        <td className="px-3 py-2 text-slate-800">{r.value_display}</td>
+                        <td className="px-3 py-2 font-medium text-[var(--foreground)]">{r.entity_name}</td>
+                        <td className="px-3 py-2 text-[var(--muted-foreground)]">{formatBusinessDate(r.logged_on)}</td>
+                        <td className="px-3 py-2 text-[var(--foreground)]">{r.value_display}</td>
                         {hasUnitColumn ? (
-                          <td className="px-3 py-2 text-slate-600">
+                          <td className="px-3 py-2 text-[var(--muted-foreground)]">
                             {r.usage_unit_visible === false ? "" : (r.usage_unit_name || "—")}
                           </td>
                         ) : null}
                         {dynamicColumns.map((col) => (
-                          <td key={`${r.id}-${col}`} className="px-3 py-2 text-slate-600">
+                          <td key={`${r.id}-${col}`} className="px-3 py-2 text-[var(--muted-foreground)]">
                             {byName.get(col) ?? "—"}
                           </td>
                         ))}

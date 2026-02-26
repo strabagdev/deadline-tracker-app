@@ -198,7 +198,7 @@ export default function EntitiesPage() {
   const [filterEntityType, setFilterEntityType] = useState<string>("all");
   const [sortMode, setSortMode] = useState<SortMode>("critical");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(25);
   const [searchPanelCollapsed, setSearchPanelCollapsed] = useState(true);
 
   const [semaphore, setSemaphore] = useState<SemaphoreSettings>({
@@ -603,13 +603,13 @@ export default function EntitiesPage() {
   }
 
   return (
-    <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
+    <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-4 sm:space-y-6">
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <CardTitle>Entidades</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Gestión compacta para alta densidad de registros.</p>
+              <CardTitle className="app-page-title">Entidades</CardTitle>
+              <p className="app-page-subtitle">Gestión compacta para alta densidad de registros.</p>
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -648,8 +648,8 @@ export default function EntitiesPage() {
         </CardHeader>
       </Card>
 
-      {errorMsg ? <p className="whitespace-pre-wrap text-sm text-rose-600">{errorMsg}</p> : null}
-      {flashMsg ? <p className="whitespace-pre-wrap text-sm text-emerald-700">{flashMsg}</p> : null}
+      {errorMsg ? <div className="app-alert app-alert-error whitespace-pre-wrap">{errorMsg}</div> : null}
+      {flashMsg ? <div className="app-alert app-alert-success whitespace-pre-wrap">{flashMsg}</div> : null}
 
       {showCreate ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
@@ -683,7 +683,7 @@ export default function EntitiesPage() {
                       value={createName}
                       onChange={(e) => setCreateName(e.target.value)}
                       placeholder="Ej: Retroexcavadora 320D / Daniel Silva"
-                      className="h-10"
+                      className="h-[var(--control-h)]"
                     />
                   </div>
 
@@ -693,7 +693,7 @@ export default function EntitiesPage() {
                       id="entity_type"
                       value={createEntityTypeId}
                       onChange={(e) => setCreateEntityTypeId(e.target.value)}
-                      className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                      className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
                     >
                       {entityTypes.map((t) => (
                         <option key={t.id} value={t.id}>
@@ -703,7 +703,7 @@ export default function EntitiesPage() {
                     </select>
                   </div>
 
-                  <label className="mt-1 flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 md:mt-5">
+                  <label className="mt-1 flex min-h-[var(--control-h)] items-center gap-2 rounded-[var(--radius-md)] border border-[color:var(--border)] px-3 text-[13px] text-slate-700 md:mt-5 sm:text-sm">
                     <input
                       id="create_tracks_usage"
                       type="checkbox"
@@ -714,7 +714,7 @@ export default function EntitiesPage() {
                     Con uso
                   </label>
 
-                  <Button type="submit" size="sm" disabled={creating} className="min-h-10 md:mt-5">
+                  <Button type="submit" size="sm" disabled={creating} className="min-h-[var(--control-h)] md:mt-5">
                     {creating ? "Creando..." : "Crear"}
                   </Button>
                 </div>
@@ -727,7 +727,7 @@ export default function EntitiesPage() {
                       value={createUsageUnitId}
                       onChange={(e) => setCreateUsageUnitId(e.target.value)}
                       disabled={usageUnits.length === 0}
-                      className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-100"
+                      className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm disabled:bg-slate-100"
                     >
                       <option value="">{usageUnits.length === 0 ? "Sin unidades activas" : "Sin unidad"}</option>
                       {usageUnits.map((u) => (
@@ -835,7 +835,7 @@ export default function EntitiesPage() {
                       setImportProgress(0);
                       setImportStage("");
                     }}
-                    className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                    className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
                     disabled={importing || typesLoading}
                   >
                     <option value="all">Todos los tipos</option>
@@ -1015,7 +1015,7 @@ export default function EntitiesPage() {
       ) : null}
 
       <Card>
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-3">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
             <CardTitle className="shrink-0 text-base">Búsqueda y filtros</CardTitle>
             <div className="min-w-0 lg:flex-1">
@@ -1040,7 +1040,7 @@ export default function EntitiesPage() {
               size="sm"
               variant="outline"
               onClick={() => setSearchPanelCollapsed((v) => !v)}
-              className="min-h-10 min-w-[108px] shrink-0 justify-between lg:min-h-9"
+              className="min-h-[var(--control-h)] min-w-[108px] shrink-0 justify-between"
             >
               <span>{searchPanelCollapsed ? "Buscar" : "Ocultar"}</span>
               <span className="text-xs">{searchPanelCollapsed ? "▼" : "▲"}</span>
@@ -1049,7 +1049,7 @@ export default function EntitiesPage() {
           <div className="pt-1 text-xs text-slate-500">{rows.length} resultado(s)</div>
         </CardHeader>
         {!searchPanelCollapsed ? (
-          <CardContent className="pt-2">
+          <CardContent className="pt-0">
             <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_190px_170px_140px_auto]">
               <Input
                 id="entities_search"
@@ -1062,7 +1062,7 @@ export default function EntitiesPage() {
                 aria-label="Filtrar por tipo"
                 value={filterEntityType}
                 onChange={(e) => setFilterEntityType(e.target.value)}
-                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
               >
                 <option value="all">Todos los tipos</option>
                 {entityTypeOptions.map((o) => (
@@ -1076,7 +1076,7 @@ export default function EntitiesPage() {
                 aria-label="Ordenar"
                 value={sortMode}
                 onChange={(e) => setSortMode(e.target.value as SortMode)}
-                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
               >
                 <option value="critical">Más crítico</option>
                 <option value="name">Nombre</option>
@@ -1088,7 +1088,7 @@ export default function EntitiesPage() {
                 aria-label="Filas por página"
                 value={String(pageSize)}
                 onChange={(e) => setPageSize(Number(e.target.value))}
-                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
               >
                 <option value="25">25 / pág</option>
                 <option value="50">50 / pág</option>
@@ -1111,7 +1111,7 @@ export default function EntitiesPage() {
         ) : null}
       </Card>
 
-      <section className="space-y-3">
+      <section className="space-y-4">
         {loading ? (
           <div className="flex justify-center py-6">
             <Loader label="Cargando entidades..." />
@@ -1119,7 +1119,7 @@ export default function EntitiesPage() {
         ) : rows.length === 0 ? (
           <Card>
             <CardContent className="pt-6">
-              <p className="text-sm text-slate-600">No hay entidades para mostrar con estos filtros.</p>
+              <p className="app-empty">No hay entidades para mostrar con estos filtros.</p>
             </CardContent>
           </Card>
         ) : (

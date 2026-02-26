@@ -203,61 +203,61 @@ export default function EntityDetailPage() {
   }
 
   return (
-    <main className="mx-auto max-w-[1200px] space-y-4 px-4 py-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle>Ficha de entidad</CardTitle>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button onClick={() => router.push("/app/entities")} variant="outline" size="sm">
-                ← Volver
+    <main className="mx-auto max-w-[1200px] space-y-5 px-4 py-4 sm:space-y-6">
+      <section className="rounded-[var(--radius-lg)] bg-[var(--muted)]/70 px-3 py-2 sm:px-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-lg font-semibold tracking-tight text-slate-900">Ficha de entidad</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={() => router.push("/app/entities")} variant="outline" size="sm" className="bg-[var(--card)]/85">
+              ← Volver
+            </Button>
+            <Button onClick={load} variant="outline" size="sm" disabled={busy} className="bg-[var(--card)]/85">
+              Refrescar
+            </Button>
+            {!editMode ? (
+              <Button
+                onClick={() => {
+                  if (entity) hydrateDraft(entity);
+                  setEditMode(true);
+                }}
+                variant="outline"
+                size="sm"
+                disabled={!entity || busy}
+                className="bg-[var(--card)]/85"
+              >
+                Editar
               </Button>
-              <Button onClick={load} variant="outline" size="sm" disabled={busy}>
-                Refrescar
-              </Button>
-              {!editMode ? (
+            ) : (
+              <>
                 <Button
                   onClick={() => {
                     if (entity) hydrateDraft(entity);
-                    setEditMode(true);
+                    setEditMode(false);
+                    setMsg("");
                   }}
                   variant="outline"
                   size="sm"
-                  disabled={!entity || busy}
+                  disabled={busy}
+                  className="bg-[var(--card)]/85"
                 >
-                  Editar
+                  Cancelar
                 </Button>
-              ) : (
-                <>
-                  <Button
-                    onClick={() => {
-                      if (entity) hydrateDraft(entity);
-                      setEditMode(false);
-                      setMsg("");
-                    }}
-                    variant="outline"
-                    size="sm"
-                    disabled={busy}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button onClick={save} size="sm" disabled={busy || !canSave}>
-                    {busy ? "Guardando..." : "Guardar"}
-                  </Button>
-                </>
-              )}
-              <Button
-                onClick={removeEntity}
-                variant="destructive"
-                size="sm"
-                disabled={!entity || busy || !canDelete}
-              >
-                Eliminar
-              </Button>
-            </div>
+                <Button onClick={save} size="sm" disabled={busy || !canSave}>
+                  {busy ? "Guardando..." : "Guardar"}
+                </Button>
+              </>
+            )}
+            <Button
+              onClick={removeEntity}
+              variant="destructive"
+              size="sm"
+              disabled={!entity || busy || !canDelete}
+            >
+              Eliminar
+            </Button>
           </div>
-        </CardHeader>
-      </Card>
+        </div>
+      </section>
 
       {loading ? (
         <div className="flex justify-center py-6">
@@ -307,7 +307,7 @@ export default function EntityDetailPage() {
                     <span>Tipo</span>
                     <Input value={entity.entity_type?.name ?? ""} disabled />
                   </div>
-                  <label className="flex h-10 items-center gap-2 rounded-xl border border-slate-300 px-3 text-sm text-slate-700 lg:col-span-2">
+                  <label className="flex h-[var(--control-h)] items-center gap-2 rounded-[var(--radius-md)] border border-[color:var(--input)] px-3 text-[13px] text-[var(--muted-foreground)] sm:text-sm lg:col-span-2">
                     <input
                       type="checkbox"
                       checked={draftTracksUsage}
@@ -323,7 +323,7 @@ export default function EntityDetailPage() {
                       value={draftUsageUnitId}
                       onChange={(e) => setDraftUsageUnitId(e.target.value)}
                       disabled={busy || !draftTracksUsage}
-                      className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-100"
+                      className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm disabled:bg-[var(--muted)]"
                     >
                       <option value="">Sin unidad</option>
                       {usageUnits.map((u) => (
@@ -348,7 +348,7 @@ export default function EntityDetailPage() {
               ) : (
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                   {entity.fields.map((f) => (
-                    <div key={f.id} className="rounded-xl border bg-slate-50 p-3">
+                    <div key={f.id} className="rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--muted)]/70 p-3">
                       <div className="text-sm font-semibold text-slate-900">{f.name}</div>
                       <div className="mt-1 text-[11px] text-slate-500">
                         <span className="font-mono">{f.key}</span> · {f.field_type}

@@ -62,26 +62,21 @@ export default function FocusedUsageCapturePage() {
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [loadingExisting, setLoadingExisting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [okMsg, setOkMsg] = useState("");
 
   const [typeLabel, setTypeLabel] = useState("");
   const [entities, setEntities] = useState<Entity[]>([]);
-  const [entityId, setEntityId] = useState("");
-  const [viewMode, setViewMode] = useState<"single" | "pending">("pending");
   const [pendingSecondaryFilters, setPendingSecondaryFilters] = useState<string[]>([]);
+  const [pendingSecondaryMenuOpen, setPendingSecondaryMenuOpen] = useState(false);
+  const [pendingSecondarySearch, setPendingSecondarySearch] = useState("");
   const [entitySearch, setEntitySearch] = useState("");
-  const [value, setValue] = useState("");
   const [bulkDraftByEntity, setBulkDraftByEntity] = useState<Record<string, string>>({});
   const [bulkFieldDraftByEntity, setBulkFieldDraftByEntity] = useState<Record<string, Record<string, string>>>({});
   const [loggedOn, setLoggedOn] = useState(todayDateInput());
-  const [fieldDraft, setFieldDraft] = useState<Record<string, string>>({});
   const [pendingPage, setPendingPage] = useState(1);
   const pendingPageSize = 10;
 
-  const selected = useMemo(() => entities.find((e) => e.id === entityId) ?? null, [entities, entityId]);
-  const alreadyLoggedForDay = Boolean(selected?.logged_days?.includes(loggedOn));
   const filteredEntities = useMemo(() => {
     const needle = entitySearch.trim().toLowerCase();
     const needleNorm = normalizeSearchText(entitySearch);
@@ -176,6 +171,15 @@ export default function FocusedUsageCapturePage() {
       .map(([value, count]) => ({ value, label: value, count }))
       .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
   }, [filteredPendingEntities]);
+  const pendingSecondaryTopOptions = useMemo(
+    () => pendingSecondaryOptions.slice(0, 8),
+    [pendingSecondaryOptions]
+  );
+  const pendingSecondaryFilteredOptions = useMemo(() => {
+    const needle = pendingSecondarySearch.trim().toLowerCase();
+    if (!needle) return pendingSecondaryOptions;
+    return pendingSecondaryOptions.filter((opt) => opt.label.toLowerCase().includes(needle));
+  }, [pendingSecondaryOptions, pendingSecondarySearch]);
   const pendingTotalPages = useMemo(
     () => Math.max(1, Math.ceil(filteredPendingEntities.length / pendingPageSize)),
     [filteredPendingEntities.length]
@@ -186,20 +190,6 @@ export default function FocusedUsageCapturePage() {
     () => filteredPendingEntities.slice(pendingPageStart, pendingPageStart + pendingPageSize),
     [filteredPendingEntities, pendingPageStart]
   );
-  const orderedSelectedFields = useMemo(() => {
-    const selectedFields = selected?.fields ?? [];
-    if (selectedFields.length === 0) return [] as Field[];
-    const pendingOrder = new Map<string, number>();
-    pendingFieldColumns.forEach((f, idx) => pendingOrder.set(f.id, idx));
-    return [...selectedFields].sort((a, b) => {
-      const ai = pendingOrder.get(a.id);
-      const bi = pendingOrder.get(b.id);
-      const aScore = ai ?? Number.MAX_SAFE_INTEGER;
-      const bScore = bi ?? Number.MAX_SAFE_INTEGER;
-      if (aScore !== bScore) return aScore - bScore;
-      return a.name.localeCompare(b.name);
-    });
-  }, [selected?.fields, pendingFieldColumns]);
   const fullyLoggedDates = useMemo(() => {
     if (entities.length === 0) return [];
     const counts = new Map<string, number>();
@@ -214,18 +204,7 @@ export default function FocusedUsageCapturePage() {
       .map(([day]) => day)
       .sort((a, b) => b.localeCompare(a));
   }, [entities]);
-  const highlightedCalendarDates = useMemo(
-    () => (viewMode === "single" ? (selected?.logged_days ?? []) : fullyLoggedDates),
-    [viewMode, selected?.logged_days, fullyLoggedDates]
-  );
-  const chipDynamicFields = useMemo(
-    () => orderedSelectedFields.filter((f) => fieldOptions(f).length > 0),
-    [orderedSelectedFields]
-  );
-  const nonChipDynamicFields = useMemo(
-    () => orderedSelectedFields.filter((f) => fieldOptions(f).length === 0),
-    [orderedSelectedFields]
-  );
+  const highlightedCalendarDates = fullyLoggedDates;
 
   async function getTokenOrRedirect() {
     const { data } = await supabaseAuth.auth.getSession();
@@ -275,7 +254,6 @@ export default function FocusedUsageCapturePage() {
     setTypeLabel(String(ctxJson.entity_type?.name ?? entityTypeName));
     const list = (ctxJson.entities ?? []) as Entity[];
     setEntities(list);
-    if (!entityId && list[0]?.id) setEntityId(String(list[0].id));
     setLoading(false);
   }
 
@@ -285,78 +263,11 @@ export default function FocusedUsageCapturePage() {
   }, [entityTypeName]);
 
   useEffect(() => {
-    setFieldDraft({});
-  }, [entityId]);
-
-  useEffect(() => {
-    if (viewMode !== "single") return;
-    if (!entityId || !loggedOn || !entityTypeName) return;
-
-    let cancelled = false;
-    async function loadExistingForDay() {
-      setLoadingExisting(true);
-      const token = await getTokenOrRedirect();
-      if (!token || cancelled) return;
-
-      const qs = new URLSearchParams();
-      qs.set("entity_type", entityTypeName);
-      qs.set("entity_id", entityId);
-      qs.set("logged_on", loggedOn);
-      const res = await fetch(`/api/usage-capture/log?${qs.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const json = await res.json().catch(() => ({}));
-      if (cancelled) return;
-      if (!res.ok) {
-        setLoadingExisting(false);
-        setErrorMsg(json.error || "No se pudo cargar el registro del día.");
-        return;
-      }
-
-      if (!json.exists || !json.usage_log) {
-        setValue("");
-        setFieldDraft({});
-        setLoadingExisting(false);
-        return;
-      }
-
-      const usageLog = json.usage_log as {
-        value?: number | null;
-        value_text?: string | null;
-        field_values?: Array<{ usage_field_id?: string; value?: string | null }>;
-      };
-      const main = usageLog.value_text != null && String(usageLog.value_text).trim().length > 0
-        ? String(usageLog.value_text)
-        : (usageLog.value != null ? String(usageLog.value) : "");
-      const nextFieldDraft: Record<string, string> = {};
-      for (const row of usageLog.field_values ?? []) {
-        const id = String(row.usage_field_id ?? "").trim();
-        if (!id) continue;
-        nextFieldDraft[id] = String(row.value ?? "");
-      }
-      setValue(main);
-      setFieldDraft(nextFieldDraft);
-      setLoadingExisting(false);
-    }
-
-    void loadExistingForDay();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, entityId, loggedOn, entityTypeName]);
-
-  useEffect(() => {
-    if (filteredEntities.length === 0) {
-      setEntityId("");
-      return;
-    }
-    if (!filteredEntities.some((e) => e.id === entityId)) {
-      setEntityId(filteredEntities[0]?.id ?? "");
-    }
-  }, [entityId, filteredEntities]);
-  useEffect(() => {
     setPendingSecondaryFilters([]);
+  }, [loggedOn, entitySearch, entityTypeName]);
+  useEffect(() => {
+    setPendingSecondaryMenuOpen(false);
+    setPendingSecondarySearch("");
   }, [loggedOn, entitySearch, entityTypeName]);
   useEffect(() => {
     setPendingPage(1);
@@ -364,83 +275,6 @@ export default function FocusedUsageCapturePage() {
   useEffect(() => {
     if (pendingPage > pendingTotalPages) setPendingPage(pendingTotalPages);
   }, [pendingPage, pendingTotalPages]);
-
-  async function save() {
-    setBusy(true);
-    setErrorMsg("");
-    setOkMsg("");
-
-    if (!entityTypeName) {
-      setErrorMsg("Faltan parámetros de acceso.");
-      setBusy(false);
-      return;
-    }
-    if (!entityId) {
-      setErrorMsg("Selecciona una entidad.");
-      setBusy(false);
-      return;
-    }
-    const rawValue = value.trim();
-
-    const dynamic = (selected?.fields ?? [])
-      .map((f) => {
-        const raw = String(fieldDraft[f.id] ?? "").trim();
-        if (!raw) return null;
-        if (f.field_type === "number") return { usage_field_id: f.id, value: Number(raw) };
-        if (f.field_type === "boolean") return { usage_field_id: f.id, value: raw === "true" };
-        return { usage_field_id: f.id, value: raw };
-      })
-      .filter(Boolean) as Array<{ usage_field_id: string; value: string | number | boolean }>;
-
-    const token = await getTokenOrRedirect();
-    if (!token) return;
-    const payload: Record<string, unknown> = {
-      entity_type: entityTypeName,
-      entity_id: entityId,
-      logged_on: loggedOn || undefined,
-    };
-    const parse = parseRawValue(rawValue);
-    if (parse.error) {
-      setErrorMsg(parse.error);
-      setBusy(false);
-      return;
-    }
-    if (parse.value != null) payload.value = parse.value;
-    if (parse.valueText) payload.value_text = parse.valueText;
-    if (dynamic.length > 0) payload.field_values = dynamic;
-    if (parse.value == null && !parse.valueText && dynamic.length === 0) {
-      setErrorMsg("Ingresa un valor o completa al menos un campo.");
-      setBusy(false);
-      return;
-    }
-
-    const res = await fetch("/api/usage-capture/log", {
-      method: alreadyLoggedForDay ? "PUT" : "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setErrorMsg(json.error || "No se pudo guardar el registro.");
-      setBusy(false);
-      return;
-    }
-
-    if (!alreadyLoggedForDay) {
-      setValue("");
-      setFieldDraft({});
-    }
-    setEntities((prev) =>
-      prev.map((e) => {
-        if (e.id !== entityId) return e;
-        const nextDays = new Set(e.logged_days ?? []);
-        if (loggedOn) nextDays.add(loggedOn);
-        return { ...e, logged_days: Array.from(nextDays).sort((a, b) => b.localeCompare(a)) };
-      })
-    );
-    setOkMsg(alreadyLoggedForDay ? "Registro actualizado correctamente." : "Registro guardado correctamente.");
-    setBusy(false);
-  }
 
   function parseRawValue(rawValue: string): { value: number | null; valueText: string | null; error?: string } {
     const clean = String(rawValue ?? "").trim();
@@ -536,13 +370,13 @@ export default function FocusedUsageCapturePage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-[1400px] space-y-4 px-4 py-6">
+    <main className="mx-auto w-full max-w-[1400px] space-y-5 px-4 py-4 sm:space-y-6">
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-2">
             <div>
-              <CardTitle>Ingreso de Uso Enfocado</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Tipo de entidad: <b>{typeLabel || entityTypeName || "—"}</b></p>
+              <CardTitle className="app-page-title">Ingreso de Uso Enfocado</CardTitle>
+              <p className="app-page-subtitle">Tipo de entidad: <b>{typeLabel || entityTypeName || "—"}</b></p>
             </div>
             <Link href="/app/usage-capture">
               <Button variant="outline" size="sm">Volver</Button>
@@ -551,39 +385,18 @@ export default function FocusedUsageCapturePage() {
         </CardHeader>
       </Card>
 
-      {errorMsg ? <p className="text-sm text-rose-600 whitespace-pre-wrap">{errorMsg}</p> : null}
-      {okMsg ? <p className="text-sm text-emerald-700">{okMsg}</p> : null}
+      {errorMsg ? <div className="app-alert app-alert-error whitespace-pre-wrap">{errorMsg}</div> : null}
+      {okMsg ? <div className="app-alert app-alert-success">{okMsg}</div> : null}
 
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Formulario</CardTitle></CardHeader>
+        <CardHeader className="pb-3"><CardTitle className="text-base">Pendientes del día ({pendingEntities.length})</CardTitle></CardHeader>
         <CardContent className="pt-0">
           {loading ? (
             <div className="flex justify-center py-6"><Loader label="Cargando..." /></div>
           ) : entities.length === 0 ? (
-            <p className="text-sm text-slate-500">No hay entidades disponibles para este tipo.</p>
+            <p className="app-empty">No hay entidades disponibles para este tipo.</p>
           ) : (
             <div className="grid gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant={viewMode === "pending" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setViewMode("pending")}
-                  disabled={busy}
-                >
-                  Pendientes del día ({pendingEntities.length})
-                </Button>
-                <Button
-                  type="button"
-                  variant={viewMode === "single" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setViewMode("single")}
-                  disabled={busy}
-                >
-                  Individual
-                </Button>
-              </div>
-
               <div className="grid items-end gap-2 md:grid-cols-[220px_minmax(220px,1fr)]">
                 <MarkedDatePicker
                   value={loggedOn}
@@ -595,7 +408,7 @@ export default function FocusedUsageCapturePage() {
                 />
 
                 <div className="grid gap-1">
-                  <label className="text-xs text-slate-600">Buscar entidad</label>
+                  <label className="text-xs text-[var(--muted-foreground)]">Buscar entidad</label>
                   <Input
                     value={entitySearch}
                     onChange={(e) => setEntitySearch(e.target.value)}
@@ -603,23 +416,23 @@ export default function FocusedUsageCapturePage() {
                     disabled={busy}
                   />
                   {entitySearch.trim().length > 0 ? (
-                    <div className="max-h-44 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs">
-                      <div className="mb-1 font-semibold text-slate-700">Posibles coincidencias en campos de entidad</div>
-                      <div className="mb-2 text-[11px] text-slate-500">
+                    <div className="max-h-44 overflow-auto rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--muted)]/80 p-2 text-xs">
+                      <div className="mb-1 font-semibold text-[var(--foreground)]">Posibles coincidencias en campos de entidad</div>
+                      <div className="mb-2 text-[11px] text-[var(--muted-foreground)]">
                         Coincidencias: {searchDebugMatches.length} · Pendientes visibles: {filteredPendingEntities.length} · Con registro ese día: {searchDebugMatches.filter((r) => !r.pendingForDay).length}
                       </div>
                       {searchDebugMatches.length === 0 ? (
-                        <div className="text-slate-500">Sin coincidencias en campos.</div>
+                        <div className="text-[var(--muted-foreground)]">Sin coincidencias en campos.</div>
                       ) : (
                         <div className="grid gap-1">
                           {searchDebugMatches.map((row) => (
-                            <div key={`${row.entityName}-${row.values.join("|")}`} className="rounded border border-slate-200 bg-white px-2 py-1">
-                              <div className="truncate font-medium text-slate-700">
+                            <div key={`${row.entityName}-${row.values.join("|")}`} className="rounded-[8px] border border-[color:var(--border)] bg-[var(--card)] px-2 py-1">
+                              <div className="truncate font-medium text-[var(--foreground)]">
                                 {row.entityName}
                                 {!row.pendingForDay ? <span className="ml-2 text-[10px] font-normal text-amber-700">(ya registrado en la fecha)</span> : null}
                                 {row.pendingForDay && !row.passesSecondaryFilters ? <span className="ml-2 text-[10px] font-normal text-indigo-700">(filtrado por chips secundarios)</span> : null}
                               </div>
-                              <div className="truncate text-slate-600">{row.values.join(" · ")}</div>
+                              <div className="truncate text-[var(--muted-foreground)]">{row.values.join(" · ")}</div>
                             </div>
                           ))}
                         </div>
@@ -629,223 +442,123 @@ export default function FocusedUsageCapturePage() {
                 </div>
               </div>
 
-              {viewMode === "single" ? (
-                <>
-                  {(() => {
-                    const mainSuggestions = selected?.usage_unit_suggested_values ?? [];
-                    if (mainSuggestions.length > 0) {
-                      return (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <select
-                            value={entityId}
-                            onChange={(e) => setEntityId(e.target.value)}
-                            className="h-10 min-w-[260px] rounded-xl border border-slate-300 bg-white px-3 text-sm"
-                            disabled={busy}
-                          >
-                            {filteredEntities.map((e) => (
-                              <option key={e.id} value={e.id}>{e.name}</option>
-                            ))}
-                          </select>
-                          <div className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap pb-1">
-                            {mainSuggestions.map((opt) => {
-                              const active = value.trim() === opt;
-                              return (
-                                  <button
-                                    key={`main-${opt}`}
-                                    type="button"
-                                    disabled={busy || loadingExisting}
-                                    onClick={() => setValue((prev) => (prev.trim() === opt ? "" : opt))}
-                                    className={[
-                                    "shrink-0 rounded-full border px-2 py-1 text-xs transition",
-                                    active
-                                      ? "border-emerald-600 bg-emerald-50 text-emerald-700"
-                                      : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
-                                  ].join(" ")}
-                                >
-                                  {opt}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          {chipDynamicFields.map((f) => (
-                            <div key={`row-chip-${f.id}`} className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap pb-1">
-                              <span className="shrink-0 text-xs text-slate-600">{f.name}</span>
-                              {fieldOptions(f).map((opt) => {
-                                const current = String(fieldDraft[f.id] ?? "");
-                                const active = current === opt;
-                                return (
-                                  <button
-                                    key={`${f.id}-${opt}`}
-                                    type="button"
-                                    disabled={busy || loadingExisting}
-                                    onClick={() =>
-                                      setFieldDraft((p) => ({
-                                        ...p,
-                                        [f.id]: current === opt ? "" : opt,
-                                      }))
-                                    }
-                                    className={[
-                                      "shrink-0 rounded-full border px-2 py-1 text-[10px] transition",
-                                      active
-                                        ? "border-emerald-600 bg-emerald-50 text-emerald-700"
-                                        : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
-                                    ].join(" ")}
-                                  >
-                                    {opt}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    }
-                    return (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <select
-                          value={entityId}
-                          onChange={(e) => setEntityId(e.target.value)}
-                          className="h-10 min-w-[260px] rounded-xl border border-slate-300 bg-white px-3 text-sm"
-                          disabled={busy}
-                        >
-                          {filteredEntities.map((e) => (
-                            <option key={e.id} value={e.id}>{e.name}</option>
-                          ))}
-                        </select>
-
-                        <Input
-                          value={value}
-                          onChange={(e) => setValue(e.target.value)}
-                          placeholder={selected?.usage_unit_visible && selected?.usage_unit_name ? `Valor (${selected.usage_unit_name})` : "Valor"}
-                          disabled={busy || loadingExisting}
-                          className="min-w-[220px]"
-                        />
-                        {chipDynamicFields.map((f) => (
-                          <div key={`row-chip-${f.id}`} className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap pb-1">
-                            <span className="shrink-0 text-xs text-slate-600">{f.name}</span>
-                            {fieldOptions(f).map((opt) => {
-                              const current = String(fieldDraft[f.id] ?? "");
-                              const active = current === opt;
-                              return (
-                                <button
-                                  key={`${f.id}-${opt}`}
-                                  type="button"
-                                  disabled={busy || loadingExisting}
-                                  onClick={() =>
-                                    setFieldDraft((p) => ({
-                                      ...p,
-                                      [f.id]: current === opt ? "" : opt,
-                                    }))
-                                  }
-                                  className={[
-                                    "shrink-0 rounded-full border px-2 py-1 text-[10px] transition",
-                                    active
-                                      ? "border-emerald-600 bg-emerald-50 text-emerald-700"
-                                      : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
-                                  ].join(" ")}
-                                >
-                                  {opt}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
-
-                  {nonChipDynamicFields.length > 0 ? (
-                    <div className="grid gap-2 rounded-xl border p-3 lg:grid-cols-[minmax(220px,280px)_minmax(0,1fr)] lg:items-center">
-                      <div className="text-xs font-semibold text-slate-600">Campos dinámicos adicionales</div>
-                      <div className="flex min-w-0 items-start gap-2 overflow-x-auto pb-1">
-                        {nonChipDynamicFields.map((f) => (
-                          <div key={f.id} className="grid min-w-[180px] gap-1">
-                            <label className="truncate text-xs text-slate-600" title={f.name}>{f.name}</label>
-                            {f.field_type === "boolean" ? (
-                              <select
-                                value={fieldDraft[f.id] ?? ""}
-                                onChange={(e) => setFieldDraft((p) => ({ ...p, [f.id]: e.target.value }))}
-                                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
-                                disabled={busy || loadingExisting}
-                              >
-                                <option value="">(vacío)</option>
-                                <option value="true">Sí</option>
-                                <option value="false">No</option>
-                              </select>
-                            ) : (
-                              <Input
-                                type={f.field_type === "number" ? "number" : f.field_type === "date" ? "date" : "text"}
-                                value={fieldDraft[f.id] ?? ""}
-                                onChange={(e) => setFieldDraft((p) => ({ ...p, [f.id]: e.target.value }))}
-                                disabled={busy || loadingExisting}
-                              />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <div className="text-[11px] text-slate-500">
-                    {loadingExisting
-                      ? "Cargando registro del día..."
-                      : alreadyLoggedForDay
-                      ? `Ya existe registro para ${loggedOn}. Puedes editarlo y guardar cambios.`
-                      : ((selected?.logged_days ?? []).slice(0, 5).length > 0
-                        ? `Días con registro: ${(selected?.logged_days ?? []).slice(0, 5).join(", ")}`
-                        : "Sin registros previos.")}
-                  </div>
-
-                  <Button onClick={() => void save()} disabled={busy || loadingExisting} className="w-auto justify-self-start">
-                    {busy ? "Guardando..." : alreadyLoggedForDay ? "Guardar cambios" : "Guardar registro"}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <div className="text-xs text-slate-500">
+              <>
+                  <div className="text-xs text-[var(--muted-foreground)]">
                     Entidades sin registro en {loggedOn}: <b>{pendingEntities.length}</b>
                   </div>
                   {pendingSecondaryOptions.length > 0 ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setPendingSecondaryFilters([])}
-                        className={[
-                          "rounded-full border px-2.5 py-1 text-xs transition",
-                          pendingSecondaryFilters.length === 0
-                            ? "border-indigo-300 bg-indigo-100 text-indigo-800"
-                            : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
-                        ].join(" ")}
-                      >
-                        Todos {pendingEntities.length}
-                      </button>
-                      {pendingSecondaryOptions.map((opt) => (
+                    <div className="grid gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <button
-                          key={opt.value}
                           type="button"
-                          onClick={() =>
-                            setPendingSecondaryFilters((prev) =>
-                              prev.includes(opt.value)
-                                ? prev.filter((v) => v !== opt.value)
-                                : [...prev, opt.value]
-                            )
-                          }
+                          onClick={() => setPendingSecondaryFilters([])}
                           className={[
                             "rounded-full border px-2.5 py-1 text-xs transition",
-                            pendingSecondaryFilters.includes(opt.value)
+                            pendingSecondaryFilters.length === 0
                               ? "border-indigo-300 bg-indigo-100 text-indigo-800"
                               : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
                           ].join(" ")}
-                          title={opt.label}
                         >
-                          <span className="max-w-[140px] truncate align-middle inline-block">{opt.label}</span>{" "}
-                          <span className="font-semibold">{opt.count}</span>
+                          Todos {pendingEntities.length}
                         </button>
-                      ))}
+                        {pendingSecondaryTopOptions.map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() =>
+                              setPendingSecondaryFilters((prev) =>
+                                prev.includes(opt.value)
+                                  ? prev.filter((v) => v !== opt.value)
+                                  : [...prev, opt.value]
+                              )
+                            }
+                            className={[
+                              "rounded-full border px-2.5 py-1 text-xs transition",
+                              pendingSecondaryFilters.includes(opt.value)
+                                ? "border-indigo-300 bg-indigo-100 text-indigo-800"
+                                : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                            ].join(" ")}
+                            title={opt.label}
+                          >
+                            <span className="max-w-[140px] truncate align-middle inline-block">{opt.label}</span>{" "}
+                            <span className="font-semibold">{opt.count}</span>
+                          </button>
+                        ))}
+                        {pendingSecondaryOptions.length > pendingSecondaryTopOptions.length ? (
+                          <button
+                            type="button"
+                            onClick={() => setPendingSecondaryMenuOpen((v) => !v)}
+                            className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 transition hover:bg-slate-50"
+                          >
+                            {pendingSecondaryMenuOpen ? "Ocultar" : `+${pendingSecondaryOptions.length - pendingSecondaryTopOptions.length} más`}
+                          </button>
+                        ) : null}
+                      </div>
+
+                      {pendingSecondaryFilters.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {pendingSecondaryFilters.map((value) => (
+                            <button
+                              key={`active-${value}`}
+                              type="button"
+                              onClick={() =>
+                                setPendingSecondaryFilters((prev) => prev.filter((v) => v !== value))
+                              }
+                              className="rounded-full border border-indigo-300 bg-indigo-100 px-2 py-0.5 text-[11px] text-indigo-800"
+                              title={`Quitar filtro ${value}`}
+                            >
+                              {value} ×
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {pendingSecondaryMenuOpen ? (
+                        <div className="rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--card)] p-2">
+                          <div className="grid gap-2">
+                            <Input
+                              value={pendingSecondarySearch}
+                              onChange={(e) => setPendingSecondarySearch(e.target.value)}
+                              placeholder="Buscar filtro secundario..."
+                              disabled={busy}
+                            />
+                            <div className="max-h-44 overflow-auto">
+                              <div className="flex flex-wrap gap-2">
+                                {pendingSecondaryFilteredOptions.map((opt) => (
+                                  <button
+                                    key={`more-${opt.value}`}
+                                    type="button"
+                                    onClick={() =>
+                                      setPendingSecondaryFilters((prev) =>
+                                        prev.includes(opt.value)
+                                          ? prev.filter((v) => v !== opt.value)
+                                          : [...prev, opt.value]
+                                      )
+                                    }
+                                    className={[
+                                      "rounded-full border px-2.5 py-1 text-xs transition",
+                                      pendingSecondaryFilters.includes(opt.value)
+                                        ? "border-indigo-300 bg-indigo-100 text-indigo-800"
+                                        : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                                    ].join(" ")}
+                                    title={opt.label}
+                                  >
+                                    <span className="max-w-[200px] truncate align-middle inline-block">{opt.label}</span>{" "}
+                                    <span className="font-semibold">{opt.count}</span>
+                                  </button>
+                                ))}
+                                {pendingSecondaryFilteredOptions.length === 0 ? (
+                                  <span className="text-xs text-[var(--muted-foreground)]">Sin coincidencias.</span>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                   {filteredPendingEntities.length === 0 ? (
-                    <p className="text-sm text-slate-500">No hay pendientes para la fecha seleccionada.</p>
+                    <p className="app-empty">No hay pendientes para la fecha seleccionada.</p>
                   ) : (
                     <div className="grid gap-2">
                       <div className="hidden grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] items-center gap-2 px-1 py-0 text-sm font-semibold text-slate-700 lg:grid">
@@ -974,7 +687,7 @@ export default function FocusedUsageCapturePage() {
                                             [e.id]: { ...(prev[e.id] ?? {}), [f.id]: ev.target.value },
                                           }))
                                         }
-                                        className="h-9 rounded-xl border border-slate-300 bg-white px-2 text-xs"
+                                        className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
                                         disabled={busy}
                                       >
                                         <option value="">(vacío)</option>
@@ -996,7 +709,7 @@ export default function FocusedUsageCapturePage() {
                                         }))
                                       }
                                       disabled={busy}
-                                      className="h-9 text-xs"
+                                      className="h-[var(--control-h)] text-[13px] sm:text-sm"
                                     />
                                   </div>
                                 );
@@ -1060,7 +773,6 @@ export default function FocusedUsageCapturePage() {
                     {busy ? "Guardando..." : "Guardar lote"}
                   </Button>
                 </>
-              )}
             </div>
           )}
         </CardContent>

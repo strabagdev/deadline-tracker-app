@@ -311,17 +311,19 @@ export default function AnalyticsDashboardPage() {
           <CardHeader>
             <CardTitle>Dashboard</CardTitle>
           </CardHeader>
-          <CardContent className="text-sm text-rose-700">{errorMsg}</CardContent>
+          <CardContent>
+            <div className="app-alert app-alert-error">{errorMsg}</div>
+          </CardContent>
         </Card>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
-      <section className="rounded-xl border bg-white px-3 py-2">
+    <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-4 sm:space-y-6">
+      <section className="rounded-xl border bg-white px-3 py-2 sm:px-4 sm:py-3">
         <div className="flex items-center gap-2">
-          <label className="shrink-0 text-base font-semibold text-slate-900">Dashboard</label>
+          <label className="app-page-title shrink-0">Dashboard</label>
           <select
             value={entityTypeFilter}
             onChange={(e) => setEntityTypeFilter(e.target.value)}
@@ -337,31 +339,31 @@ export default function AnalyticsDashboardPage() {
 
       <div className="grid grid-cols-5 gap-2 sm:gap-3">
         <Card>
-          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[108px] sm:gap-2 sm:px-4 sm:py-3">
+          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[110px] sm:gap-2 sm:px-4 sm:py-3">
             <div className="flex h-7 items-center justify-center text-[10px] leading-tight text-slate-500 sm:h-auto sm:text-xs">Total entidades</div>
             <div className="text-lg font-semibold tabular-nums sm:text-2xl">{totals.total}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[108px] sm:gap-2 sm:px-4 sm:py-3">
+          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[110px] sm:gap-2 sm:px-4 sm:py-3">
             <div className="flex h-7 items-center justify-center text-[10px] leading-tight text-slate-500 sm:h-auto sm:text-xs">Con forecast</div>
             <div className="text-lg font-semibold tabular-nums sm:text-2xl">{totals.withForecast}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[108px] sm:gap-2 sm:px-4 sm:py-3">
+          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[110px] sm:gap-2 sm:px-4 sm:py-3">
             <div className="flex h-7 items-center justify-center text-[10px] leading-tight text-slate-500 sm:h-auto sm:text-xs">Vencidas</div>
             <div className="text-lg font-semibold tabular-nums text-rose-700 sm:text-2xl">{totals.overdue}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[108px] sm:gap-2 sm:px-4 sm:py-3">
+          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[110px] sm:gap-2 sm:px-4 sm:py-3">
             <div className="flex h-7 items-center justify-center text-[10px] leading-tight text-slate-500 sm:h-auto sm:text-xs">Al día</div>
             <div className="text-lg font-semibold tabular-nums text-emerald-700 sm:text-2xl">{totals.healthy}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[108px] sm:gap-2 sm:px-4 sm:py-3">
+          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[110px] sm:gap-2 sm:px-4 sm:py-3">
             <div className="flex h-7 items-center justify-center text-[10px] leading-tight text-slate-500 sm:h-auto sm:text-xs">Cobertura</div>
             <div className="text-lg font-semibold tabular-nums sm:text-2xl">{totals.coverage}%</div>
           </CardContent>
@@ -379,23 +381,25 @@ export default function AnalyticsDashboardPage() {
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-center text-base">Top por tipo de entidad</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            {byEntityType.length === 0 ? <p className="text-sm text-slate-500">Sin datos para graficar.</p> : null}
+            {byEntityType.length === 0 ? <p className="app-empty">Sin datos para graficar.</p> : null}
             {byEntityType.length > 0 ? <DonutChart slices={entityTypeDonutSlices} centerLabel="Top por tipo de entidad" /> : null}
           </CardContent>
         </Card>
       </div>
 
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-center text-base">Tendencia próximos 30 días (vencimientos previstos)</CardTitle></CardHeader>
-        <CardContent>
-          {dueTrend30.length === 0 ? (
-            <p className="text-sm text-slate-500">No hay vencimientos previstos en los próximos 30 días con los filtros actuales.</p>
+        <CardHeader className="pb-2"><CardTitle className="text-center text-base">Campos dinámicos (gráficos)</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {entityTypeFilter === "all" ? (
+            <p className="app-empty text-center">Selecciona un tipo de entidad para ver gráficos de campos dinámicos configurados en modo analítico.</p>
+          ) : dynamicFieldCharts.length === 0 ? (
+            <p className="app-empty text-center">No hay campos dinámicos con modo analítico `distribution` para este tipo.</p>
           ) : (
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {dueTrend30.map((d) => (
-                <div key={d.day} className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700">
-                  <div className="text-xs text-slate-500">{d.day}</div>
-                  <div className="text-lg font-semibold">{d.count}</div>
+            <div className="grid gap-3 lg:grid-cols-2">
+              {dynamicFieldCharts.map((chart) => (
+                <div key={chart.title} className="rounded-xl border border-slate-200 p-3">
+                  <div className="mb-2 text-sm font-semibold text-slate-700">{chart.title}</div>
+                  <DonutChart slices={chart.slices} centerLabel={chart.title} />
                 </div>
               ))}
             </div>
@@ -404,18 +408,16 @@ export default function AnalyticsDashboardPage() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-center text-base">Campos dinámicos (gráficos)</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          {entityTypeFilter === "all" ? (
-            <p className="text-center text-sm text-slate-500">Selecciona un tipo de entidad para ver gráficos de campos dinámicos configurados en modo analítico.</p>
-          ) : dynamicFieldCharts.length === 0 ? (
-            <p className="text-center text-sm text-slate-500">No hay campos dinámicos con modo analítico `distribution` para este tipo.</p>
+        <CardHeader className="pb-2"><CardTitle className="text-center text-base">Tendencia próximos 30 días (vencimientos previstos)</CardTitle></CardHeader>
+        <CardContent>
+          {dueTrend30.length === 0 ? (
+            <p className="app-empty">No hay vencimientos previstos en los próximos 30 días con los filtros actuales.</p>
           ) : (
-            <div className="grid gap-3 lg:grid-cols-2">
-              {dynamicFieldCharts.map((chart) => (
-                <div key={chart.title} className="rounded-xl border border-slate-200 p-3">
-                  <div className="mb-2 text-sm font-semibold text-slate-700">{chart.title}</div>
-                  <DonutChart slices={chart.slices} centerLabel={chart.title} />
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {dueTrend30.map((d) => (
+                <div key={d.day} className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700">
+                  <div className="text-xs text-slate-500">{d.day}</div>
+                  <div className="text-lg font-semibold">{d.count}</div>
                 </div>
               ))}
             </div>

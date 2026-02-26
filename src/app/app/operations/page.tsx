@@ -426,7 +426,7 @@ export default function OperationsPage() {
             size="sm"
             variant="outline"
             onClick={() => setSecondaryMenuOpen((v) => !v)}
-            className="min-h-9"
+            className="min-h-[var(--control-h)]"
           >
             <span>Filtro secundario</span>
             <span className="text-xs">{secondaryMenuOpen ? "▲" : "▼"}</span>
@@ -443,7 +443,7 @@ export default function OperationsPage() {
         </div>
 
         {secondaryMenuOpen ? (
-          <div className={cn("mt-2 max-h-44 overflow-auto rounded-xl border bg-white p-2 shadow-sm z-30", menuClassName)}>
+          <div className={cn("mt-2 max-h-44 overflow-auto rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--card)] p-2 shadow-sm z-30", menuClassName)}>
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
@@ -491,11 +491,11 @@ export default function OperationsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
+    <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-4 sm:space-y-6">
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
-            <CardTitle className="shrink-0">Operaciones</CardTitle>
+            <CardTitle className="app-page-title shrink-0">Operaciones</CardTitle>
 
             <div className="min-w-0 lg:flex-1">
               <div className="flex w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 pr-2 lg:w-max lg:pb-0">
@@ -524,7 +524,7 @@ export default function OperationsPage() {
                 size="sm"
                 variant="outline"
                 onClick={() => setDashboardPanelCollapsed((v) => !v)}
-                className="min-h-10 min-w-[116px] justify-between lg:min-h-9"
+                className="min-w-[116px] justify-between"
               >
                 <span>{dashboardPanelCollapsed ? "Buscar" : "Ocultar"}</span>
                 <span className="text-xs">{dashboardPanelCollapsed ? "▼" : "▲"}</span>
@@ -534,21 +534,20 @@ export default function OperationsPage() {
         </CardHeader>
         <CardContent className="py-3">
           {!dashboardPanelCollapsed ? (
-            <div className="mt-3 rounded-xl border bg-slate-50/80 px-3 py-2">
+            <div className="mt-3 rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--muted)]/80 px-3 py-2 sm:px-4 sm:py-3">
               <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_150px_auto]">
                 <Input
                   id="dashboard_search"
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                   placeholder="Buscar por nombre, tipo o vencimiento..."
-                  className="h-10"
                 />
                 <select
                   id="dashboard_page_size"
                   aria-label="Filas por página"
                   value={String(pageSize)}
                   onChange={(e) => setPageSize(Number(e.target.value))}
-                  className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                  className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
                 >
                   <option value="25">25 / página</option>
                   <option value="50">50 / página</option>
@@ -556,7 +555,6 @@ export default function OperationsPage() {
                 </select>
                 <Button
                   variant="outline"
-                  className="h-10"
                   onClick={() => {
                     setQ("");
                     setFilterEntityType("all");
@@ -573,16 +571,16 @@ export default function OperationsPage() {
         </CardContent>
       </Card>
 
-      {errorMsg ? <p className="whitespace-pre-wrap text-sm text-rose-600">{errorMsg}</p> : null}
+      {errorMsg ? <div className="app-alert app-alert-error whitespace-pre-wrap">{errorMsg}</div> : null}
 
-      <section className="space-y-3">
+      <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-end gap-2">
           <select
             id="dashboard_type_quick"
             aria-label="Filtrar por tipo"
             value={filterEntityType}
             onChange={(e) => setFilterEntityType(e.target.value)}
-            className="h-10 min-w-[170px] rounded-xl border border-slate-300 bg-white px-3 text-sm lg:h-9"
+            className="h-[var(--control-h)] min-w-[170px] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
           >
             <option value="all">Todos los tipos</option>
             {entityTypeOptions.map((o) => (
@@ -595,7 +593,7 @@ export default function OperationsPage() {
             size="sm"
             variant={viewMode === "cards" ? "secondary" : "outline"}
             onClick={() => setViewMode("cards")}
-            className="min-h-10 min-w-10 lg:min-h-9"
+            className="min-h-[var(--control-h)] min-w-[var(--control-h)]"
             title="Vista tarjetas"
             aria-label="Vista tarjetas"
           >
@@ -605,7 +603,7 @@ export default function OperationsPage() {
             size="sm"
             variant={viewMode === "list" ? "secondary" : "outline"}
             onClick={() => setViewMode("list")}
-            className="min-h-10 min-w-10 lg:min-h-9"
+            className="min-h-[var(--control-h)] min-w-[var(--control-h)]"
             title="Vista lista"
             aria-label="Vista lista"
           >
@@ -620,9 +618,9 @@ export default function OperationsPage() {
           <Card>
             <CardContent className="pt-6">
               {!hasEntities ? (
-                <p className="text-sm text-slate-600">Aún no hay entidades. Crea tu primera entidad para comenzar.</p>
+                <p className="app-empty">Aún no hay entidades. Crea tu primera entidad para comenzar.</p>
               ) : (
-                <p className="text-sm text-slate-600">No hay entidades para mostrar con estos filtros.</p>
+                <p className="app-empty">No hay entidades para mostrar con estos filtros.</p>
               )}
             </CardContent>
           </Card>
@@ -632,7 +630,7 @@ export default function OperationsPage() {
               <div className="space-y-3">
                 {groupedPagedRows.map(([typeName, typeRows]) => (
                   <section key={typeName} className="space-y-2">
-                    <div className="sticky top-0 z-10 rounded-lg border bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700 backdrop-blur">
+                    <div className="sticky top-0 z-10 rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--card)]/92 px-3 py-1 text-xs font-semibold text-[var(--muted-foreground)] backdrop-blur">
                       {typeName}
                     </div>
                     <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
@@ -663,7 +661,7 @@ export default function OperationsPage() {
                                 router.push(`/app/entities/${e.id}`);
                               }
                             }}
-                            className="grid min-h-[112px] cursor-pointer content-between gap-1.5 rounded-2xl border p-2.5 shadow-sm transition-shadow hover:shadow-md"
+                          className="grid min-h-[112px] cursor-pointer content-between gap-1.5 rounded-[var(--radius-lg)] border p-2.5 shadow-sm transition-shadow hover:shadow-md"
                             style={{ borderColor: tone.border, background: tone.soft }}
                             title="Abrir ficha"
                           >
@@ -810,7 +808,7 @@ export default function OperationsPage() {
                   disabled={safePage <= 1}
                   variant="outline"
                   size="sm"
-                  className="h-10 min-w-10 px-2"
+                  className="h-[var(--control-h)] min-w-[var(--control-h)] px-2"
                   title="Página anterior"
                   aria-label="Página anterior"
                 >
@@ -822,7 +820,7 @@ export default function OperationsPage() {
                   disabled={safePage >= totalPages}
                   variant="outline"
                   size="sm"
-                  className="h-10 min-w-10 px-2"
+                  className="h-[var(--control-h)] min-w-[var(--control-h)] px-2"
                   title="Página siguiente"
                   aria-label="Página siguiente"
                 >

@@ -1,15 +1,39 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  /* Executive Light */
+  --background: #f4f7fb;
+  --foreground: #0f1b2d;
   --card: #ffffff;
-  --card-foreground: #0f172a;
-  --muted: #f1f5f9;
-  --muted-foreground: #475569;
-  --border: #e2e8f0;
-  --input: #cbd5e1;
-  --ring: #64748b;
+  --card-foreground: #0f1b2d;
+  --muted: #ecf1f8;
+  --muted-foreground: #415168;
+  --border: #d8e1ee;
+  --input: #c5d2e4;
+  --ring: #2d4f87;
+  --accent: #2d4f87;
+  --accent-foreground: #ffffff;
+  --accent-soft: #e7eef9;
+  --danger: #be123c;
+  --danger-foreground: #ffffff;
+  --radius-lg: 14px;
+  --radius-md: 10px;
+  --shadow-card: 0 8px 24px rgba(15, 27, 45, 0.06);
+  --control-h: 36px;
+  --control-h-sm: 40px;
+  --control-h-lg: 44px;
+  --card-pad: 16px;
+  --card-pad-lg: 20px;
+  --text-title: 15px;
+  --text-title-lg: 17px;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --control-h: var(--control-h-sm);
+    --card-pad: var(--card-pad-lg);
+    --text-title: var(--text-title-lg);
+  }
 }
 
 @theme inline {
@@ -27,11 +51,54 @@
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(45, 79, 135, 0.08) 0, transparent 28%),
+    radial-gradient(circle at 100% 0%, rgba(27, 52, 92, 0.06) 0, transparent 32%),
+    var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
 * {
   border-color: var(--border);
+}
+
+.app-page-title {
+  font-size: var(--text-title);
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+}
+
+.app-page-subtitle {
+  margin-top: 4px;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  color: var(--muted-foreground);
+}
+
+.app-alert {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+.app-alert-error {
+  border-color: #fecdd3;
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.app-alert-success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.app-empty {
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
 }

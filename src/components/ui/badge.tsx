@@ -4,9 +4,9 @@ import { cn } from "@/lib/utils";
 type BadgeVariant = "default" | "secondary" | "outline";
 
 function variantClass(variant: BadgeVariant) {
-  if (variant === "secondary") return "bg-slate-100 text-slate-700";
-  if (variant === "outline") return "border border-slate-300 text-slate-700";
-  return "bg-slate-900 text-white";
+  if (variant === "secondary") return "bg-[var(--accent-soft)] text-[var(--accent)]";
+  if (variant === "outline") return "border border-[color:var(--border)] text-[var(--muted-foreground)]";
+  return "bg-[var(--accent)] text-[var(--accent-foreground)]";
 }
 
 export function Badge({
@@ -16,7 +16,7 @@ export function Badge({
 }: React.HTMLAttributes<HTMLSpanElement> & { variant?: BadgeVariant }) {
   return (
     <span
-      className={cn("inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium", variantClass(variant), className)}
+      className={cn("inline-flex items-center rounded-[8px] px-2 py-0.5 text-[11px] font-medium sm:text-xs", variantClass(variant), className)}
       {...props}
     />
   );
