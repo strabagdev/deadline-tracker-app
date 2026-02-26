@@ -17,6 +17,13 @@ function toSlugKey(input: string) {
     .replace(/^_+|_+$/g, "");
 }
 
+function parseAnalyticsMode(input: unknown): "none" | "distribution" | null {
+  const mode = String(input ?? "").trim().toLowerCase();
+  if (mode === "none") return "none";
+  if (mode === "distribution" || mode === "trend" || mode === "count") return "distribution";
+  return null;
+}
+
 export async function GET(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
@@ -64,7 +71,7 @@ export async function POST(req: Request) {
     const name = String(body?.name ?? "").trim();
     const fieldType = String(body?.field_type ?? "text").trim();
     const showInCard = Boolean(body?.show_in_card ?? false);
-    const analyticsMode = String(body?.analytics_mode ?? "none").trim();
+    const analyticsMode = parseAnalyticsMode(body?.analytics_mode ?? "none");
 
     const rawKey = body?.key ? String(body.key) : name;
     const key = toSlugKey(rawKey);
@@ -77,8 +84,7 @@ export async function POST(req: Request) {
     if (!allowed.has(fieldType)) {
       return NextResponse.json({ error: "invalid field_type", code: "BAD_REQUEST" }, { status: 400 });
     }
-    const allowedAnalytics = new Set(["none", "distribution", "trend", "count"]);
-    if (!allowedAnalytics.has(analyticsMode)) {
+    if (!analyticsMode) {
       return NextResponse.json({ error: "invalid analytics_mode", code: "BAD_REQUEST" }, { status: 400 });
     }
 
@@ -160,9 +166,8 @@ export async function PUT(req: Request) {
       patch.show_in_card = Boolean(body.show_in_card);
     }
     if (body?.analytics_mode !== undefined) {
-      const analyticsMode = String(body.analytics_mode).trim();
-      const allowedAnalytics = new Set(["none", "distribution", "trend", "count"]);
-      if (!allowedAnalytics.has(analyticsMode)) {
+      const analyticsMode = parseAnalyticsMode(body.analytics_mode);
+      if (!analyticsMode) {
         return NextResponse.json({ error: "invalid analytics_mode", code: "BAD_REQUEST" }, { status: 400 });
       }
       patch.analytics_mode = analyticsMode;

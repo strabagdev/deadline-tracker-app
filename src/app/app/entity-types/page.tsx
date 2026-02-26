@@ -12,7 +12,7 @@ type EntityField = {
   key: string;
   field_type: "text" | "number" | "date" | "boolean" | "select";
   show_in_card: boolean;
-  analytics_mode: "none" | "distribution" | "trend" | "count";
+  analytics_mode: "none" | "distribution";
   options: unknown;
   created_at: string;
 };
@@ -23,6 +23,12 @@ type FieldDraft = {
   show_in_card: boolean;
   analytics_mode: EntityField["analytics_mode"];
 };
+
+function normalizeAnalyticsMode(value: unknown): EntityField["analytics_mode"] {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (raw === "distribution" || raw === "trend" || raw === "count") return "distribution";
+  return "none";
+}
 
 async function getTokenOrRedirect(router: { replace: (href: string) => void }) {
   const { data } = await supabaseAuth.auth.getSession();
@@ -135,7 +141,13 @@ export default function EntityTypesPage() {
       setMsg(json.error || "No se pudieron cargar campos");
       return;
     }
-    setFields(Array.isArray(json.entity_fields) ? json.entity_fields : []);
+    const list = Array.isArray(json.entity_fields) ? (json.entity_fields as EntityField[]) : [];
+    setFields(
+      list.map((field) => ({
+        ...field,
+        analytics_mode: normalizeAnalyticsMode(field.analytics_mode),
+      }))
+    );
   }
 
   async function createField() {
@@ -193,7 +205,7 @@ export default function EntityTypesPage() {
       key: field.key,
       field_type: field.field_type,
       show_in_card: field.show_in_card,
-      analytics_mode: field.analytics_mode ?? "none",
+      analytics_mode: normalizeAnalyticsMode(field.analytics_mode),
     });
   }
 
@@ -383,8 +395,6 @@ export default function EntityTypesPage() {
                 >
                   <option value="none">analytics: none</option>
                   <option value="distribution">analytics: distribution</option>
-                  <option value="trend">analytics: trend</option>
-                  <option value="count">analytics: count</option>
                 </select>
 
                 <button onClick={createField} disabled={busy} style={{ padding: 10 }}>
@@ -515,8 +525,6 @@ export default function EntityTypesPage() {
                               >
                                 <option value="none">none</option>
                                 <option value="distribution">distribution</option>
-                                <option value="trend">trend</option>
-                                <option value="count">count</option>
                               </select>
                             ) : (
                               f.analytics_mode ?? "none"

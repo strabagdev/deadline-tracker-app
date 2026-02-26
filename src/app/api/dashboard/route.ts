@@ -176,7 +176,7 @@ async function getDynamicDistributionByEntityType(
     .from("entity_fields")
     .select("id, entity_type_id, name, analytics_mode")
     .eq("organization_id", orgId)
-    .eq("analytics_mode", "distribution");
+    .in("analytics_mode", ["distribution", "trend", "count"]);
   if (fieldsErr) throw fieldsErr;
 
   const fields = (fieldsData ?? []) as Array<{ id: string; entity_type_id: string | null; name: string | null; analytics_mode: string | null }>;
