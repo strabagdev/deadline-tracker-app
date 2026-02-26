@@ -276,12 +276,12 @@ export default function AnalyticsDashboardPage() {
   return (
     <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
       <section className="rounded-xl border bg-white px-3 py-2">
-        <div className="grid items-center gap-2 sm:grid-cols-[160px_minmax(220px,320px)]">
-          <label className="text-lg font-semibold text-slate-900 sm:text-base">Dashboard</label>
+        <div className="flex items-center gap-2">
+          <label className="shrink-0 text-base font-semibold text-slate-900">Dashboard</label>
           <select
             value={entityTypeFilter}
             onChange={(e) => setEntityTypeFilter(e.target.value)}
-            className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+            className="h-10 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 text-sm"
           >
             <option value="all">Todos los tipos</option>
             {entityTypes.map((t) => (
