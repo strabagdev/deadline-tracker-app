@@ -277,8 +277,8 @@ export default function AnalyticsDashboardPage() {
     <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle>Dashboard</CardTitle>
-          <p className="text-sm text-slate-500">Vista analítica para tratamiento de datos, totales, porcentajes y tendencias.</p>
+          <CardTitle className="text-center">Dashboard</CardTitle>
+          <p className="text-center text-sm text-slate-500">Vista analítica para tratamiento de datos, totales, porcentajes y tendencias.</p>
         </CardHeader>
         <CardContent>
           <div className="grid gap-2 md:grid-cols-[220px]">
@@ -297,23 +297,48 @@ export default function AnalyticsDashboardPage() {
       </Card>
 
       <div className="grid grid-cols-5 gap-2 sm:gap-3">
-        <Card><CardContent className="pt-3 sm:pt-4"><div className="text-[10px] leading-tight text-slate-500 sm:text-xs">Total entidades</div><div className="text-lg font-semibold sm:text-2xl">{totals.total}</div></CardContent></Card>
-        <Card><CardContent className="pt-3 sm:pt-4"><div className="text-[10px] leading-tight text-slate-500 sm:text-xs">Con forecast</div><div className="text-lg font-semibold sm:text-2xl">{totals.withForecast}</div></CardContent></Card>
-        <Card><CardContent className="pt-3 sm:pt-4"><div className="text-[10px] leading-tight text-slate-500 sm:text-xs">Vencidas</div><div className="text-lg font-semibold text-rose-700 sm:text-2xl">{totals.overdue}</div></CardContent></Card>
-        <Card><CardContent className="pt-3 sm:pt-4"><div className="text-[10px] leading-tight text-slate-500 sm:text-xs">Al día</div><div className="text-lg font-semibold text-emerald-700 sm:text-2xl">{totals.healthy}</div></CardContent></Card>
-        <Card><CardContent className="pt-3 sm:pt-4"><div className="text-[10px] leading-tight text-slate-500 sm:text-xs">Cobertura</div><div className="text-lg font-semibold sm:text-2xl">{totals.coverage}%</div></CardContent></Card>
+        <Card>
+          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[108px] sm:gap-2 sm:px-4 sm:py-3">
+            <div className="flex h-7 items-center justify-center text-[10px] leading-tight text-slate-500 sm:h-auto sm:text-xs">Total entidades</div>
+            <div className="text-lg font-semibold tabular-nums sm:text-2xl">{totals.total}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[108px] sm:gap-2 sm:px-4 sm:py-3">
+            <div className="flex h-7 items-center justify-center text-[10px] leading-tight text-slate-500 sm:h-auto sm:text-xs">Con forecast</div>
+            <div className="text-lg font-semibold tabular-nums sm:text-2xl">{totals.withForecast}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[108px] sm:gap-2 sm:px-4 sm:py-3">
+            <div className="flex h-7 items-center justify-center text-[10px] leading-tight text-slate-500 sm:h-auto sm:text-xs">Vencidas</div>
+            <div className="text-lg font-semibold tabular-nums text-rose-700 sm:text-2xl">{totals.overdue}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[108px] sm:gap-2 sm:px-4 sm:py-3">
+            <div className="flex h-7 items-center justify-center text-[10px] leading-tight text-slate-500 sm:h-auto sm:text-xs">Al día</div>
+            <div className="text-lg font-semibold tabular-nums text-emerald-700 sm:text-2xl">{totals.healthy}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[108px] sm:gap-2 sm:px-4 sm:py-3">
+            <div className="flex h-7 items-center justify-center text-[10px] leading-tight text-slate-500 sm:h-auto sm:text-xs">Cobertura</div>
+            <div className="text-lg font-semibold tabular-nums sm:text-2xl">{totals.coverage}%</div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Distribución por estado</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-center text-base">Distribución por estado</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             <DonutChart slices={statusDonutSlices} centerLabel="Distribución por estado" />
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Top por tipo de entidad</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-center text-base">Top por tipo de entidad</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {byEntityType.length === 0 ? <p className="text-sm text-slate-500">Sin datos para graficar.</p> : null}
             {byEntityType.length > 0 ? <DonutChart slices={entityTypeDonutSlices} centerLabel="Top por tipo de entidad" /> : null}
@@ -322,7 +347,7 @@ export default function AnalyticsDashboardPage() {
       </div>
 
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Tendencia próximos 30 días (vencimientos previstos)</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-center text-base">Tendencia próximos 30 días (vencimientos previstos)</CardTitle></CardHeader>
         <CardContent>
           {dueTrend30.length === 0 ? (
             <p className="text-sm text-slate-500">No hay vencimientos previstos en los próximos 30 días con los filtros actuales.</p>
@@ -340,8 +365,8 @@ export default function AnalyticsDashboardPage() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Contexto</CardTitle></CardHeader>
-        <CardContent className="text-xs text-slate-500">
+        <CardHeader className="pb-2"><CardTitle className="text-center text-base">Contexto</CardTitle></CardHeader>
+        <CardContent className="text-center text-xs text-slate-500">
           Entidades en organización: <b>{meta?.entity_count_in_org ?? entities.length}</b>. Este dashboard es analítico; la operación diaria se mantiene en <b>Operaciones</b>.
         </CardContent>
       </Card>

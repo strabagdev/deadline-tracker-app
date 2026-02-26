@@ -390,7 +390,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   ) : null;
 
   const userInfoCapsuleMobile = !isSuperAdmin ? (
-    <div className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1 lg:hidden">
+    <div className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1">
       {activeOrgLogoUrl ? (
         <img
           src={activeOrgLogoUrl}
@@ -426,22 +426,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   className="h-11 w-11 rounded-lg object-cover sm:h-9 sm:w-9"
                 />
               ) : null}
-              <Link href={isSuperAdmin ? "/app/super-admin" : "/app"} className="min-w-0 truncate text-lg font-semibold text-slate-900 sm:text-base">
+              <Link href={isSuperAdmin ? "/app/super-admin" : "/app"} className="min-w-0 truncate text-base font-semibold text-slate-900 sm:text-base">
                 OpsAhead
               </Link>
               {isSuperAdmin ? <Badge variant="secondary" className="shrink-0">Global</Badge> : null}
+              {!isSuperAdmin ? <div className="min-w-0 flex-1 lg:hidden">{userInfoCapsuleMobile}</div> : null}
               {!isSuperAdmin ? (
-                <div className="ml-auto lg:hidden">
+                <div className="shrink-0 lg:hidden">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setMobileHeaderMenuOpen(true)}
-                    className="h-11 px-4 text-sm bg-transparent"
+                    className="h-11 w-11 px-0 bg-transparent"
                     aria-label="Abrir menú"
                     title="Menú"
                   >
-                    <IconMenu className="mr-2 h-5 w-5" />
-                    Menú
+                    <IconMenu className="h-6 w-6" />
                   </Button>
                 </div>
               ) : null}
@@ -496,7 +496,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             )}
           </div>
-          {!isSuperAdmin ? userInfoCapsuleMobile : null}
         </div>
       </header>
 
