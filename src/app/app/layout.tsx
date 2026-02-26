@@ -245,29 +245,50 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     (async () => {
-      const { data } = await supabaseAuth.auth.getSession();
-      const token = data.session?.access_token;
-      const email = data.session?.user?.email || "";
-      if (!cancelled) setSessionEmail(email);
-      if (!token) return;
+      try {
+        setModuleAccessLoaded(false);
 
-      const [statusRes, platformRes] = await Promise.all([
-        fetch("/api/platform/super-admin/status", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch("/api/platform/branding", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
+        const { data } = await supabaseAuth.auth.getSession();
+        let session = data.session;
+        if (!session?.access_token) {
+          const refresh = await supabaseAuth.auth.refreshSession();
+          session = refresh.data.session ?? null;
+        }
 
-      const json = await statusRes.json().catch(() => ({}));
-      const platformJson = await platformRes.json().catch(() => ({}));
-      if (!cancelled) {
+        const token = session?.access_token;
+        const email = session?.user?.email || "";
+        if (!cancelled) setSessionEmail(email);
+
+        if (!token) {
+          if (!cancelled) {
+            setIsSuperAdmin(false);
+            setPlatformLogoUrl("");
+            setActiveOrgName("");
+            setActiveOrgLogoUrl("");
+            setAllowedModules(null);
+            setModuleAccessLoaded(true);
+          }
+          router.replace("/login");
+          return;
+        }
+
+        const [statusRes, platformRes] = await Promise.all([
+          fetch("/api/platform/super-admin/status", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch("/api/platform/branding", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+
+        const json = await statusRes.json().catch(() => ({}));
+        const platformJson = await platformRes.json().catch(() => ({}));
+        if (cancelled) return;
+
         const currentIsSuperAdmin = Boolean(json?.is_super_admin);
         setPlatformLogoUrl(platformJson?.platform?.logo_url ?? "");
         setIsSuperAdmin(currentIsSuperAdmin);
         if (!currentIsSuperAdmin) {
-          setModuleAccessLoaded(false);
           const [orgRes, accessRes] = await Promise.all([
             fetch("/api/orgs/active", {
               headers: { Authorization: `Bearer ${token}` },
@@ -301,6 +322,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         if (currentIsSuperAdmin && pathname && !pathname.startsWith("/app/super-admin")) {
           router.replace("/app/super-admin");
         }
+      } catch {
+        if (!cancelled) {
+          setSessionEmail("");
+          setIsSuperAdmin(false);
+          setPlatformLogoUrl("");
+          setActiveOrgName("");
+          setActiveOrgLogoUrl("");
+          setAllowedModules(null);
+          setModuleAccessLoaded(true);
+        }
+        router.replace("/login");
       }
     })();
 
