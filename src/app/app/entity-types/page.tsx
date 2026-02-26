@@ -12,6 +12,7 @@ type EntityField = {
   key: string;
   field_type: "text" | "number" | "date" | "boolean" | "select";
   show_in_card: boolean;
+  analytics_mode: "none" | "distribution" | "trend" | "count";
   options: unknown;
   created_at: string;
 };
@@ -20,6 +21,7 @@ type FieldDraft = {
   key: string;
   field_type: EntityField["field_type"];
   show_in_card: boolean;
+  analytics_mode: EntityField["analytics_mode"];
 };
 
 async function getTokenOrRedirect(router: { replace: (href: string) => void }) {
@@ -49,6 +51,7 @@ export default function EntityTypesPage() {
   const [newFieldName, setNewFieldName] = useState("");
   const [newFieldType, setNewFieldType] = useState<EntityField["field_type"]>("text");
   const [newShowInCard, setNewShowInCard] = useState(false);
+  const [newAnalyticsMode, setNewAnalyticsMode] = useState<EntityField["analytics_mode"]>("none");
   const [editingFieldId, setEditingFieldId] = useState<string>("");
   const [fieldDraft, setFieldDraft] = useState<FieldDraft | null>(null);
 
@@ -164,6 +167,7 @@ export default function EntityTypesPage() {
         name,
         field_type: newFieldType,
         show_in_card: newShowInCard,
+        analytics_mode: newAnalyticsMode,
       }),
     });
 
@@ -177,6 +181,7 @@ export default function EntityTypesPage() {
     setNewFieldName("");
     setNewFieldType("text");
     setNewShowInCard(false);
+    setNewAnalyticsMode("none");
     await loadFields(selectedId);
     setBusy(false);
   }
@@ -188,6 +193,7 @@ export default function EntityTypesPage() {
       key: field.key,
       field_type: field.field_type,
       show_in_card: field.show_in_card,
+      analytics_mode: field.analytics_mode ?? "none",
     });
   }
 
@@ -334,7 +340,7 @@ export default function EntityTypesPage() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 180px 140px 110px",
+                  gridTemplateColumns: "1fr 180px 140px 170px 110px",
                   gap: 8,
                 }}
               >
@@ -369,6 +375,18 @@ export default function EntityTypesPage() {
                   show_in_card
                 </label>
 
+                <select
+                  value={newAnalyticsMode}
+                  onChange={(e) => setNewAnalyticsMode(e.target.value as EntityField["analytics_mode"])}
+                  style={{ padding: 10 }}
+                  disabled={busy}
+                >
+                  <option value="none">analytics: none</option>
+                  <option value="distribution">analytics: distribution</option>
+                  <option value="trend">analytics: trend</option>
+                  <option value="count">analytics: count</option>
+                </select>
+
                 <button onClick={createField} disabled={busy} style={{ padding: 10 }}>
                   Agregar
                 </button>
@@ -392,6 +410,9 @@ export default function EntityTypesPage() {
                         </th>
                         <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>
                           show_in_card
+                        </th>
+                        <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>
+                          analytics_mode
                         </th>
                         <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>
                           Acciones
@@ -476,6 +497,29 @@ export default function EntityTypesPage() {
                               </label>
                             ) : (
                               (f.show_in_card ? "true" : "false")
+                            )}
+                          </td>
+                          <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
+                            {editingFieldId === f.id ? (
+                              <select
+                                value={fieldDraft?.analytics_mode ?? "none"}
+                                onChange={(e) =>
+                                  setFieldDraft((prev) =>
+                                    prev
+                                      ? { ...prev, analytics_mode: e.target.value as EntityField["analytics_mode"] }
+                                      : prev
+                                  )
+                                }
+                                style={{ padding: 8 }}
+                                disabled={busy}
+                              >
+                                <option value="none">none</option>
+                                <option value="distribution">distribution</option>
+                                <option value="trend">trend</option>
+                                <option value="count">count</option>
+                              </select>
+                            ) : (
+                              f.analytics_mode ?? "none"
                             )}
                           </td>
                           <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>

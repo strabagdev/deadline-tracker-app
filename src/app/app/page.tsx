@@ -25,6 +25,13 @@ type DashboardMeta = {
   entity_count_in_org: number;
 };
 
+type DynamicFieldDistribution = {
+  field_id: string;
+  field_name: string;
+  total: number;
+  values: Array<{ label: string; count: number }>;
+};
+
 type DonutSlice = {
   label: string;
   value: number;
@@ -108,6 +115,7 @@ export default function AnalyticsDashboardPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [entities, setEntities] = useState<EntityRow[]>([]);
   const [meta, setMeta] = useState<DashboardMeta | null>(null);
+  const [dynamicDistributionByEntityType, setDynamicDistributionByEntityType] = useState<Record<string, DynamicFieldDistribution[]>>({});
   const [entityTypeFilter, setEntityTypeFilter] = useState<string>("all");
 
   async function load() {
@@ -127,12 +135,16 @@ export default function AnalyticsDashboardPage() {
       setErrorMsg(json.error || "No se pudo cargar información analítica.");
       setEntities([]);
       setMeta(null);
+      setDynamicDistributionByEntityType({});
       setLoading(false);
       return;
     }
 
     setEntities((json.entities ?? []) as EntityRow[]);
     setMeta((json.meta ?? null) as DashboardMeta | null);
+    setDynamicDistributionByEntityType(
+      (json.dynamic_distribution_by_entity_type ?? {}) as Record<string, DynamicFieldDistribution[]>
+    );
     setLoading(false);
   }
 
@@ -230,6 +242,38 @@ export default function AnalyticsDashboardPage() {
     }
     return slices;
   }, [byEntityType]);
+
+  const dynamicFieldCharts = useMemo(() => {
+    if (entityTypeFilter === "all") return [] as Array<{ title: string; slices: DonutSlice[] }>;
+    const rows = dynamicDistributionByEntityType[entityTypeFilter] ?? [];
+    const palette = [
+      "#0ea5e9",
+      "#10b981",
+      "#f59e0b",
+      "#f97316",
+      "#ef4444",
+      "#8b5cf6",
+      "#14b8a6",
+      "#6366f1",
+    ];
+
+    return rows
+      .filter((row) => row.total > 0)
+      .map((row) => {
+        const top = row.values.slice(0, 7);
+        const rest = row.values.slice(7).reduce((acc, item) => acc + item.count, 0);
+        const slices: DonutSlice[] = top.map((item, idx) => ({
+          label: item.label,
+          value: item.count,
+          color: palette[idx % palette.length],
+        }));
+        if (rest > 0) {
+          slices.push({ label: "Otros", value: rest, color: "#94a3b8" });
+        }
+        return { title: row.field_name, slices };
+      })
+      .filter((row) => row.slices.length > 0);
+  }, [dynamicDistributionByEntityType, entityTypeFilter]);
 
   const dueTrend30 = useMemo(() => {
     const buckets = new Map<string, number>();
@@ -352,6 +396,26 @@ export default function AnalyticsDashboardPage() {
                 <div key={d.day} className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700">
                   <div className="text-xs text-slate-500">{d.day}</div>
                   <div className="text-lg font-semibold">{d.count}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-center text-base">Campos dinámicos (gráficos)</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {entityTypeFilter === "all" ? (
+            <p className="text-center text-sm text-slate-500">Selecciona un tipo de entidad para ver gráficos de campos dinámicos configurados en modo analítico.</p>
+          ) : dynamicFieldCharts.length === 0 ? (
+            <p className="text-center text-sm text-slate-500">No hay campos dinámicos con modo analítico `distribution` para este tipo.</p>
+          ) : (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {dynamicFieldCharts.map((chart) => (
+                <div key={chart.title} className="rounded-xl border border-slate-200 p-3">
+                  <div className="mb-2 text-sm font-semibold text-slate-700">{chart.title}</div>
+                  <DonutChart slices={chart.slices} centerLabel={chart.title} />
                 </div>
               ))}
             </div>

@@ -29,6 +29,13 @@ type ForecastRow = {
     | null;
 };
 
+type DynamicFieldDistribution = {
+  field_id: string;
+  field_name: string;
+  total: number;
+  values: Array<{ label: string; count: number }>;
+};
+
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "error";
 }
@@ -156,6 +163,99 @@ async function getCardFieldsByEntity(db: DataClient, orgId: string, entityIds: s
   return out;
 }
 
+async function getDynamicDistributionByEntityType(
+  db: DataClient,
+  orgId: string,
+  entities: Array<{ id: string; entity_type_id: string | null }>
+) {
+  const out: Record<string, DynamicFieldDistribution[]> = {};
+  const entityIds = entities.map((e) => e.id);
+  if (entityIds.length === 0) return out;
+
+  const { data: fieldsData, error: fieldsErr } = await db
+    .from("entity_fields")
+    .select("id, entity_type_id, name, analytics_mode")
+    .eq("organization_id", orgId)
+    .eq("analytics_mode", "distribution");
+  if (fieldsErr) throw fieldsErr;
+
+  const fields = (fieldsData ?? []) as Array<{ id: string; entity_type_id: string | null; name: string | null; analytics_mode: string | null }>;
+  if (fields.length === 0) return out;
+
+  const fieldsById = new Map(
+    fields.map((f) => [
+      String(f.id),
+      { entity_type_id: String(f.entity_type_id ?? ""), name: String(f.name ?? "Campo") },
+    ])
+  );
+  const entityTypeByEntityId = new Map(
+    entities.map((e) => [String(e.id), String(e.entity_type_id ?? "")])
+  );
+
+  const rows: Array<{ entity_id: string; entity_field_id: string | null; value_text: string | null }> = [];
+  const idChunkSize = 200;
+  const pageSize = 1000;
+  for (let i = 0; i < entityIds.length; i += idChunkSize) {
+    const idChunk = entityIds.slice(i, i + idChunkSize);
+    let from = 0;
+    for (;;) {
+      const to = from + pageSize - 1;
+      const { data, error } = await db
+        .from("entity_field_values")
+        .select("entity_id, entity_field_id, value_text")
+        .eq("organization_id", orgId)
+        .in("entity_id", idChunk)
+        .order("entity_id", { ascending: true })
+        .order("entity_field_id", { ascending: true })
+        .range(from, to);
+      if (error) throw error;
+      const page = (data ?? []) as Array<{ entity_id: string; entity_field_id: string | null; value_text: string | null }>;
+      rows.push(...page);
+      if (page.length < pageSize) break;
+      from += pageSize;
+    }
+  }
+
+  const bucket = new Map<string, Map<string, number>>();
+  for (const row of rows) {
+    const fieldId = String(row.entity_field_id ?? "").trim();
+    if (!fieldId) continue;
+    const field = fieldsById.get(fieldId);
+    if (!field) continue;
+    const entityId = String(row.entity_id ?? "").trim();
+    if (!entityId) continue;
+    const entityTypeId = entityTypeByEntityId.get(entityId) ?? "";
+    if (!entityTypeId || entityTypeId !== field.entity_type_id) continue;
+    const value = String(row.value_text ?? "").trim();
+    if (!value) continue;
+    const fieldKey = `${entityTypeId}::${fieldId}::${field.name}`;
+    const valueMap = bucket.get(fieldKey) ?? new Map<string, number>();
+    valueMap.set(value, (valueMap.get(value) ?? 0) + 1);
+    bucket.set(fieldKey, valueMap);
+  }
+
+  for (const [fieldKey, valuesMap] of bucket.entries()) {
+    const [entityTypeId, fieldId, fieldName] = fieldKey.split("::");
+    const values = Array.from(valuesMap.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+    const total = values.reduce((acc, v) => acc + v.count, 0);
+    if (!out[entityTypeId]) out[entityTypeId] = [];
+    out[entityTypeId].push({
+      field_id: fieldId,
+      field_name: fieldName,
+      total,
+      values,
+    });
+  }
+
+  for (const entityTypeId of Object.keys(out)) {
+    out[entityTypeId].sort((a, b) => b.total - a.total || a.field_name.localeCompare(b.field_name));
+  }
+
+  return out;
+}
+
 export async function GET(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
@@ -212,9 +312,10 @@ export async function GET(req: Request) {
     const entities = (entitiesData ?? []) as EntityRow[];
     const entityIds = entities.map((e) => e.id);
 
-    const [latestUsageByEntity, cardFieldsByEntity] = await Promise.all([
+    const [latestUsageByEntity, cardFieldsByEntity, dynamicDistributionByEntityType] = await Promise.all([
       getLatestUsageByEntity(db, orgId, entityIds),
       getCardFieldsByEntity(db, orgId, entityIds),
+      getDynamicDistributionByEntityType(db, orgId, entities.map((e) => ({ id: e.id, entity_type_id: e.entity_type_id }))),
     ]);
 
     const nearestForecastByEntity = new Map<
@@ -388,6 +489,7 @@ export async function GET(req: Request) {
       },
       entities: entitiesOut,
       latest_usage_by_entity: latestUsageFiltered,
+      dynamic_distribution_by_entity_type: dynamicDistributionByEntityType,
     });
   } catch (e: unknown) {
     return NextResponse.json({ error: getErrorMessage(e), code: "INTERNAL_ERROR" }, { status: 500 });

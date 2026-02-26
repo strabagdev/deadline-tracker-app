@@ -35,7 +35,7 @@ export async function GET(req: Request) {
 
     const { data, error } = await db
       .from("entity_fields")
-      .select("id, entity_type_id, name, key, field_type, show_in_card, options, created_at")
+      .select("id, entity_type_id, name, key, field_type, show_in_card, analytics_mode, options, created_at")
       .eq("organization_id", access.organizationId)
       .eq("entity_type_id", entityTypeId)
       .order("created_at", { ascending: true });
@@ -64,6 +64,7 @@ export async function POST(req: Request) {
     const name = String(body?.name ?? "").trim();
     const fieldType = String(body?.field_type ?? "text").trim();
     const showInCard = Boolean(body?.show_in_card ?? false);
+    const analyticsMode = String(body?.analytics_mode ?? "none").trim();
 
     const rawKey = body?.key ? String(body.key) : name;
     const key = toSlugKey(rawKey);
@@ -75,6 +76,10 @@ export async function POST(req: Request) {
     const allowed = new Set(["text", "number", "date", "boolean", "select"]);
     if (!allowed.has(fieldType)) {
       return NextResponse.json({ error: "invalid field_type", code: "BAD_REQUEST" }, { status: 400 });
+    }
+    const allowedAnalytics = new Set(["none", "distribution", "trend", "count"]);
+    if (!allowedAnalytics.has(analyticsMode)) {
+      return NextResponse.json({ error: "invalid analytics_mode", code: "BAD_REQUEST" }, { status: 400 });
     }
 
     const options = body?.options ?? null;
@@ -88,9 +93,10 @@ export async function POST(req: Request) {
         key,
         field_type: fieldType,
         show_in_card: showInCard,
+        analytics_mode: analyticsMode,
         options,
       })
-      .select("id, entity_type_id, name, key, field_type, show_in_card, options, created_at")
+      .select("id, entity_type_id, name, key, field_type, show_in_card, analytics_mode, options, created_at")
       .single();
 
     if (error) throw error;
@@ -118,7 +124,7 @@ export async function PUT(req: Request) {
 
     const { data: existing, error: existingErr } = await db
       .from("entity_fields")
-      .select("id, organization_id, name, key, field_type, show_in_card, options")
+      .select("id, organization_id, name, key, field_type, show_in_card, analytics_mode, options")
       .eq("organization_id", access.organizationId)
       .eq("id", id)
       .maybeSingle();
@@ -153,6 +159,14 @@ export async function PUT(req: Request) {
     if (body?.show_in_card !== undefined) {
       patch.show_in_card = Boolean(body.show_in_card);
     }
+    if (body?.analytics_mode !== undefined) {
+      const analyticsMode = String(body.analytics_mode).trim();
+      const allowedAnalytics = new Set(["none", "distribution", "trend", "count"]);
+      if (!allowedAnalytics.has(analyticsMode)) {
+        return NextResponse.json({ error: "invalid analytics_mode", code: "BAD_REQUEST" }, { status: 400 });
+      }
+      patch.analytics_mode = analyticsMode;
+    }
 
     if (body?.options !== undefined) {
       patch.options = body.options;
@@ -167,7 +181,7 @@ export async function PUT(req: Request) {
       .update(patch)
       .eq("organization_id", access.organizationId)
       .eq("id", id)
-      .select("id, entity_type_id, name, key, field_type, show_in_card, options, created_at")
+      .select("id, entity_type_id, name, key, field_type, show_in_card, analytics_mode, options, created_at")
       .single();
 
     if (error) throw error;
