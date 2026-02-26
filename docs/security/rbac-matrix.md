@@ -40,6 +40,8 @@
 - `GET|POST|PUT /api/entity-fields`: lectura miembro, mutación `owner|admin`.
 - `GET|POST|DELETE /api/usage-logs`: miembro.
 - `GET|PUT /api/settings/semaphore`: lectura miembro, mutación `owner|admin`.
+- `GET|POST|PUT|DELETE /api/reporting/endpoints`: `owner|admin` (admin de endpoints BI).
+- `GET /api/reporting/external/[slug]?token=...`: acceso por token de endpoint (sin sesión).
 
 ## Profile / Auth
 - `POST /api/profile/sync`: autenticado.
