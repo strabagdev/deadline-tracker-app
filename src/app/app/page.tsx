@@ -209,12 +209,12 @@ export default function AnalyticsDashboardPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <Card><CardContent className="pt-4"><div className="text-xs text-slate-500">Total entidades</div><div className="text-2xl font-semibold">{totals.total}</div></CardContent></Card>
-        <Card><CardContent className="pt-4"><div className="text-xs text-slate-500">Con forecast</div><div className="text-2xl font-semibold">{totals.withForecast}</div></CardContent></Card>
-        <Card><CardContent className="pt-4"><div className="text-xs text-slate-500">Vencidas</div><div className="text-2xl font-semibold text-rose-700">{totals.overdue}</div></CardContent></Card>
-        <Card><CardContent className="pt-4"><div className="text-xs text-slate-500">Al día</div><div className="text-2xl font-semibold text-emerald-700">{totals.healthy}</div></CardContent></Card>
-        <Card><CardContent className="pt-4"><div className="text-xs text-slate-500">Cobertura</div><div className="text-2xl font-semibold">{totals.coverage}%</div></CardContent></Card>
+      <div className="grid grid-cols-5 gap-2 sm:gap-3">
+        <Card><CardContent className="pt-3 sm:pt-4"><div className="text-[10px] leading-tight text-slate-500 sm:text-xs">Total entidades</div><div className="text-lg font-semibold sm:text-2xl">{totals.total}</div></CardContent></Card>
+        <Card><CardContent className="pt-3 sm:pt-4"><div className="text-[10px] leading-tight text-slate-500 sm:text-xs">Con forecast</div><div className="text-lg font-semibold sm:text-2xl">{totals.withForecast}</div></CardContent></Card>
+        <Card><CardContent className="pt-3 sm:pt-4"><div className="text-[10px] leading-tight text-slate-500 sm:text-xs">Vencidas</div><div className="text-lg font-semibold text-rose-700 sm:text-2xl">{totals.overdue}</div></CardContent></Card>
+        <Card><CardContent className="pt-3 sm:pt-4"><div className="text-[10px] leading-tight text-slate-500 sm:text-xs">Al día</div><div className="text-lg font-semibold text-emerald-700 sm:text-2xl">{totals.healthy}</div></CardContent></Card>
+        <Card><CardContent className="pt-3 sm:pt-4"><div className="text-[10px] leading-tight text-slate-500 sm:text-xs">Cobertura</div><div className="text-lg font-semibold sm:text-2xl">{totals.coverage}%</div></CardContent></Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

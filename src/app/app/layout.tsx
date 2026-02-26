@@ -430,6 +430,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 OpsAhead
               </Link>
               {isSuperAdmin ? <Badge variant="secondary" className="shrink-0">Global</Badge> : null}
+              {!isSuperAdmin ? (
+                <div className="ml-auto lg:hidden">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setMobileHeaderMenuOpen(true)}
+                    className="h-9 bg-transparent"
+                    aria-label="Abrir menú"
+                    title="Menú"
+                  >
+                    <IconMenu className="mr-2 h-4 w-4" />
+                    Menú
+                  </Button>
+                </div>
+              ) : null}
             </div>
 
             {isSuperAdmin ? (
@@ -445,94 +460,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             ) : (
               <div className="flex w-full min-w-0 flex-col gap-2 lg:flex-1 lg:flex-row lg:items-center lg:gap-2">
-                <div className="flex items-center justify-end lg:hidden">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setMobileHeaderMenuOpen(true)}
-                    className="h-9 bg-transparent"
-                    aria-label="Abrir menú"
-                    title="Menú"
-                  >
-                    <IconMenu className="mr-2 h-4 w-4" />
-                    Menú
-                  </Button>
-                </div>
                 <nav className="hidden min-w-0 flex-nowrap items-center gap-1 overflow-x-auto p-1 lg:flex lg:flex-1 lg:overflow-visible">
                   {visibleNavItems.map((item) => (
                     <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} />
                   ))}
                 </nav>
-                {mobileHeaderMenuOpen ? (
-                  <div className="fixed inset-0 z-50 bg-slate-900/30 lg:hidden" onClick={() => setMobileHeaderMenuOpen(false)}>
-                    <aside
-                      className="absolute right-0 top-0 h-full w-72 max-w-[90vw] border-l bg-white p-3 shadow-xl"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <div className="mb-3 flex items-center justify-between">
-                        <div className="text-sm font-semibold text-slate-900">Menú</div>
-                        <Button
-                          onClick={() => setMobileHeaderMenuOpen(false)}
-                          variant="outline"
-                          size="sm"
-                          className="h-8 bg-transparent"
-                          aria-label="Cerrar menú"
-                          title="Cerrar"
-                        >
-                          Cerrar
-                        </Button>
-                      </div>
-                      <div className="grid gap-1">
-                        {visibleNavItems.map((item) => (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            onClick={() => setMobileHeaderMenuOpen(false)}
-                            className="inline-flex items-center gap-2 rounded-lg border border-transparent px-2 py-2 text-sm text-slate-700 hover:border-slate-300"
-                          >
-                            {item.icon}
-                            <span>{item.label}</span>
-                          </Link>
-                        ))}
-                      </div>
-                      <div className="mt-3 border-t pt-3">
-                        <div className="grid gap-1">
-                          <Button
-                            onClick={() => {
-                              setMobileHeaderMenuOpen(false);
-                              refreshApp();
-                            }}
-                            variant="outline"
-                            size="sm"
-                            className="h-9 justify-start bg-transparent"
-                            title="Refrescar"
-                            aria-label="Refrescar"
-                          >
-                            <IconRefresh className="mr-2 h-4 w-4" />
-                            Refrescar
-                          </Button>
-                          <Link href="/app/profile" className="block" onClick={() => setMobileHeaderMenuOpen(false)}>
-                            <Button variant="outline" size="sm" className="h-9 w-full justify-start bg-transparent" title="Perfil" aria-label="Perfil">
-                              <IconUser className="mr-2 h-4 w-4" />
-                              Perfil
-                            </Button>
-                          </Link>
-                          <Button
-                            onClick={logout}
-                            variant="outline"
-                            size="sm"
-                            className="h-9 justify-start bg-transparent"
-                            title="Salir"
-                            aria-label="Salir"
-                          >
-                            <IconLogout className="mr-2 h-4 w-4" />
-                            Salir
-                          </Button>
-                        </div>
-                      </div>
-                    </aside>
-                  </div>
-                ) : null}
                 <div className="hidden min-w-0 items-center gap-2 lg:flex lg:flex-nowrap">
                   <Button
                     onClick={refreshApp}
@@ -567,6 +499,79 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {!isSuperAdmin ? userInfoCapsuleMobile : null}
         </div>
       </header>
+
+      {mobileHeaderMenuOpen ? (
+        <div className="fixed inset-0 z-[120] bg-slate-900/35 lg:hidden" onClick={() => setMobileHeaderMenuOpen(false)}>
+          <aside
+            className="absolute right-0 top-0 flex h-full w-72 max-w-[90vw] flex-col border-l bg-white p-3 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <div className="text-sm font-semibold text-slate-900">Menú</div>
+              <Button
+                onClick={() => setMobileHeaderMenuOpen(false)}
+                variant="outline"
+                size="sm"
+                className="h-8 bg-transparent"
+                aria-label="Cerrar menú"
+                title="Cerrar"
+              >
+                Cerrar
+              </Button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="grid gap-1">
+                {visibleNavItems.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileHeaderMenuOpen(false)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-transparent px-2 py-2 text-sm text-slate-700 hover:border-slate-300"
+                  >
+                    {item.icon}
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+            <div className="mt-3 border-t pt-3">
+              <div className="grid gap-1">
+                <Button
+                  onClick={() => {
+                    setMobileHeaderMenuOpen(false);
+                    refreshApp();
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="h-9 justify-start bg-transparent"
+                  title="Refrescar"
+                  aria-label="Refrescar"
+                >
+                  <IconRefresh className="mr-2 h-4 w-4" />
+                  Refrescar
+                </Button>
+                <Link href="/app/profile" className="block" onClick={() => setMobileHeaderMenuOpen(false)}>
+                  <Button variant="outline" size="sm" className="h-9 w-full justify-start bg-transparent" title="Perfil" aria-label="Perfil">
+                    <IconUser className="mr-2 h-4 w-4" />
+                    Perfil
+                  </Button>
+                </Link>
+                <Button
+                  onClick={logout}
+                  variant="outline"
+                  size="sm"
+                  className="h-9 justify-start bg-transparent"
+                  title="Salir"
+                  aria-label="Salir"
+                >
+                  <IconLogout className="mr-2 h-4 w-4" />
+                  Salir
+                </Button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      ) : null}
 
       <div className="flex-1">
         {isSuperAdminLockedOutRoute ? (
