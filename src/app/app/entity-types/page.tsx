@@ -12,7 +12,7 @@ type EntityField = {
   key: string;
   field_type: "text" | "number" | "date" | "boolean" | "select";
   show_in_card: boolean;
-  analytics_mode: "none" | "distribution";
+  analytics_mode: "none" | "distribution" | "trend" | "count";
   options: unknown;
   created_at: string;
 };
@@ -26,7 +26,7 @@ type FieldDraft = {
 
 function normalizeAnalyticsMode(value: unknown): EntityField["analytics_mode"] {
   const raw = String(value ?? "").trim().toLowerCase();
-  if (raw === "distribution" || raw === "trend" || raw === "count") return "distribution";
+  if (raw === "distribution" || raw === "trend" || raw === "count") return raw;
   return "none";
 }
 
@@ -63,6 +63,33 @@ export default function EntityTypesPage() {
 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string>("");
+  const [isMobile, setIsMobile] = useState(false);
+  const controlStyle: React.CSSProperties = {
+    width: "100%",
+    minWidth: 0,
+    padding: "10px 12px",
+    border: "1px solid #d9e0ea",
+    borderRadius: 10,
+    background: "#fff",
+    fontSize: 14,
+  };
+  const thStyle: React.CSSProperties = {
+    textAlign: "left",
+    borderBottom: "1px solid #dbe4ef",
+    padding: "10px 8px",
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#41526b",
+    background: "#f6f9fc",
+    whiteSpace: "nowrap",
+  };
+  const tdStyle: React.CSSProperties = {
+    borderBottom: "1px solid #edf2f7",
+    padding: "10px 8px",
+    verticalAlign: "top",
+    fontSize: 14,
+    color: "#0f172a",
+  };
 
   useEffect(() => {
     void loadTypes();
@@ -74,6 +101,15 @@ export default function EntityTypesPage() {
     else setFields([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
+
+  useEffect(() => {
+    function handleResize() {
+      setIsMobile(window.innerWidth < 768);
+    }
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   async function loadTypes() {
     setMsg("");
@@ -270,7 +306,7 @@ export default function EntityTypesPage() {
   }
 
   return (
-    <main style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
+    <main style={{ padding: 12, maxWidth: 1100, margin: "0 auto" }}>
       <h2>Tipos de entidad</h2>
       <p style={{ opacity: 0.75, marginTop: 6 }}>
         Define tipos (Máquina, Persona, etc.) y sus campos personalizados.
@@ -290,7 +326,7 @@ export default function EntityTypesPage() {
       <section
         style={{
           display: "grid",
-          gridTemplateColumns: "360px 1fr",
+          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
           gap: 16,
           marginTop: 16,
         }}
@@ -298,15 +334,15 @@ export default function EntityTypesPage() {
         <div style={{ border: "1px solid #eee", padding: 12 }}>
           <h3 style={{ marginTop: 0 }}>Tipos</h3>
 
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <input
               value={newTypeName}
               onChange={(e) => setNewTypeName(e.target.value)}
               placeholder="Ej: Máquina"
-              style={{ flex: 1, padding: 10 }}
+              style={{ flex: "1 1 220px", minWidth: 0, padding: 10 }}
               disabled={busy}
             />
-            <button onClick={createType} disabled={busy} style={{ padding: "10px 12px" }}>
+            <button onClick={createType} disabled={busy} style={{ padding: "10px 12px", flex: "0 0 auto" }}>
               Crear
             </button>
           </div>
@@ -315,25 +351,38 @@ export default function EntityTypesPage() {
             {types.length === 0 ? (
               <p style={{ opacity: 0.7 }}>Aún no hay tipos.</p>
             ) : (
-              <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-                {types.map((t) => (
-                  <li key={t.id} style={{ marginBottom: 8 }}>
-                    <button
-                      onClick={() => setSelectedId(t.id)}
-                      style={{
-                        width: "100%",
-                        textAlign: "left",
-                        padding: 10,
-                        border: "1px solid #eee",
-                        background: t.id === selectedId ? "#f7f7f7" : "white",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <strong>{t.name}</strong>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              isMobile ? (
+                <select
+                  value={selectedId}
+                  onChange={(e) => setSelectedId(e.target.value)}
+                  style={{ width: "100%", padding: 10 }}
+                  disabled={busy}
+                >
+                  {types.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                  {types.map((t) => (
+                    <li key={t.id} style={{ marginBottom: 8 }}>
+                      <button
+                        onClick={() => setSelectedId(t.id)}
+                        style={{
+                          width: "100%",
+                          textAlign: "left",
+                          padding: 10,
+                          border: "1px solid #eee",
+                          background: t.id === selectedId ? "#f7f7f7" : "white",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <strong>{t.name}</strong>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )
             )}
           </div>
         </div>
@@ -345,111 +394,153 @@ export default function EntityTypesPage() {
             <p style={{ opacity: 0.7 }}>Selecciona un tipo para ver/crear campos.</p>
           ) : (
             <>
-              <div style={{ opacity: 0.8, marginBottom: 10 }}>
-                Tipo seleccionado: <strong>{selected.name}</strong>
+              <div
+                style={{
+                  marginBottom: 12,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  border: "1px solid #dbe4ef",
+                  background: "#f8fbff",
+                  borderRadius: 999,
+                  padding: "6px 10px",
+                  fontSize: 13,
+                }}
+              >
+                <span style={{ opacity: 0.75 }}>Tipo seleccionado</span>
+                <strong>{selected.name}</strong>
               </div>
 
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 180px 140px 170px 110px",
-                  gap: 8,
+                  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+                  gap: 10,
+                  border: "1px solid #e6edf5",
+                  background: "linear-gradient(180deg, #fbfdff 0%, #f6f9fc 100%)",
+                  borderRadius: 12,
+                  padding: 12,
                 }}
               >
-                <input
-                  value={newFieldName}
-                  onChange={(e) => setNewFieldName(e.target.value)}
-                  placeholder="Ej: Patente"
-                  style={{ padding: 10 }}
-                  disabled={busy}
-                />
-
-                <select
-                  value={newFieldType}
-                  onChange={(e) => setNewFieldType(e.target.value as EntityField["field_type"])}
-                  style={{ padding: 10 }}
-                  disabled={busy}
-                >
-                  <option value="text">text</option>
-                  <option value="number">number</option>
-                  <option value="date">date</option>
-                  <option value="boolean">boolean</option>
-                  <option value="select">select</option>
-                </select>
-
-                <label style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 8 }}>
+                <div>
+                  <div style={{ fontSize: 12, marginBottom: 6, color: "#4f5d75" }}>Nombre del campo</div>
                   <input
-                    type="checkbox"
-                    checked={newShowInCard}
-                    onChange={(e) => setNewShowInCard(e.target.checked)}
+                    value={newFieldName}
+                    onChange={(e) => setNewFieldName(e.target.value)}
+                    placeholder="Ej: Patente"
+                    style={controlStyle}
                     disabled={busy}
                   />
-                  show_in_card
-                </label>
+                </div>
 
-                <select
-                  value={newAnalyticsMode}
-                  onChange={(e) => setNewAnalyticsMode(e.target.value as EntityField["analytics_mode"])}
-                  style={{ padding: 10 }}
-                  disabled={busy}
-                >
-                  <option value="none">analytics: none</option>
-                  <option value="distribution">analytics: distribution</option>
-                </select>
+                <div>
+                  <div style={{ fontSize: 12, marginBottom: 6, color: "#4f5d75" }}>Tipo de dato</div>
+                  <select
+                    value={newFieldType}
+                    onChange={(e) => setNewFieldType(e.target.value as EntityField["field_type"])}
+                    style={controlStyle}
+                    disabled={busy}
+                  >
+                    <option value="text">text</option>
+                    <option value="number">number</option>
+                    <option value="date">date</option>
+                    <option value="boolean">boolean</option>
+                    <option value="select">select</option>
+                  </select>
+                </div>
 
-                <button onClick={createField} disabled={busy} style={{ padding: 10 }}>
-                  Agregar
-                </button>
+                <div>
+                  <div style={{ fontSize: 12, marginBottom: 6, color: "#4f5d75" }}>Mostrar en tarjeta</div>
+                  <label
+                    style={{
+                      ...controlStyle,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={newShowInCard}
+                      onChange={(e) => setNewShowInCard(e.target.checked)}
+                      disabled={busy}
+                    />
+                    show_in_card
+                  </label>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 12, marginBottom: 6, color: "#4f5d75" }}>Modo analítico</div>
+                  <select
+                    value={newAnalyticsMode}
+                    onChange={(e) => setNewAnalyticsMode(e.target.value as EntityField["analytics_mode"])}
+                    style={controlStyle}
+                    disabled={busy}
+                  >
+                    <option value="none">analytics: none</option>
+                    <option value="distribution">analytics: distribution</option>
+                    <option value="trend">analytics: trend</option>
+                    <option value="count">analytics: count</option>
+                  </select>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "flex-end" }}>
+                  <button
+                    onClick={createField}
+                    disabled={busy}
+                    style={{
+                      width: "100%",
+                      padding: "10px 12px",
+                      borderRadius: 10,
+                      border: "1px solid #1d4ed8",
+                      background: "#2563eb",
+                      color: "white",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Agregar campo
+                  </button>
+                </div>
               </div>
 
-              <div style={{ marginTop: 12 }}>
+              <div style={{ marginTop: 12, overflowX: "auto" }}>
                 {fields.length === 0 ? (
                   <p style={{ opacity: 0.7 }}>Este tipo aún no tiene campos.</p>
                 ) : (
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <table style={{ width: "100%", minWidth: 760, borderCollapse: "separate", borderSpacing: 0 }}>
                     <thead>
                       <tr>
-                        <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>
-                          Nombre
-                        </th>
-                        <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>
-                          Key
-                        </th>
-                        <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>
-                          Tipo
-                        </th>
-                        <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>
-                          show_in_card
-                        </th>
-                        <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>
-                          analytics_mode
-                        </th>
-                        <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>
-                          Acciones
-                        </th>
+                        <th style={thStyle}>Nombre</th>
+                        <th style={thStyle}>Key</th>
+                        <th style={thStyle}>Tipo</th>
+                        <th style={thStyle}>show_in_card</th>
+                        <th style={thStyle}>analytics_mode</th>
+                        <th style={thStyle}>Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {fields.map((f) => (
-                        <tr key={f.id}>
-                          <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
+                      {fields.map((f, idx) => (
+                        <tr key={f.id} style={{ background: idx % 2 === 0 ? "#ffffff" : "#fbfdff" }}>
+                          <td style={tdStyle}>
                             {editingFieldId === f.id ? (
                               <input
                                 value={fieldDraft?.name ?? ""}
                                 onChange={(e) =>
                                   setFieldDraft((prev) => (prev ? { ...prev, name: e.target.value } : prev))
                                 }
-                                style={{ width: "100%", padding: 8 }}
+                                style={controlStyle}
                                 disabled={busy}
                               />
                             ) : (
-                              f.name
+                              <strong>{f.name}</strong>
                             )}
                           </td>
                           <td
                             style={{
-                              borderBottom: "1px solid #f3f3f3",
-                              padding: 8,
+                              ...tdStyle,
                               fontFamily: "monospace",
                             }}
                           >
@@ -459,14 +550,14 @@ export default function EntityTypesPage() {
                                 onChange={(e) =>
                                   setFieldDraft((prev) => (prev ? { ...prev, key: e.target.value } : prev))
                                 }
-                                style={{ width: "100%", padding: 8, fontFamily: "monospace" }}
+                                style={{ ...controlStyle, fontFamily: "monospace" }}
                                 disabled={busy}
                               />
                             ) : (
                               f.key
                             )}
                           </td>
-                          <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
+                          <td style={tdStyle}>
                             {editingFieldId === f.id ? (
                               <select
                                 value={fieldDraft?.field_type ?? "text"}
@@ -477,7 +568,7 @@ export default function EntityTypesPage() {
                                       : prev
                                   )
                                 }
-                                style={{ padding: 8 }}
+                                style={controlStyle}
                                 disabled={busy}
                               >
                                 <option value="text">text</option>
@@ -487,10 +578,21 @@ export default function EntityTypesPage() {
                                 <option value="select">select</option>
                               </select>
                             ) : (
-                              f.field_type
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  border: "1px solid #dbe4ef",
+                                  background: "#f8fbff",
+                                  borderRadius: 999,
+                                  padding: "3px 8px",
+                                  fontSize: 12,
+                                }}
+                              >
+                                {f.field_type}
+                              </span>
                             )}
                           </td>
-                          <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
+                          <td style={tdStyle}>
                             {editingFieldId === f.id ? (
                               <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                 <input
@@ -506,10 +608,22 @@ export default function EntityTypesPage() {
                                 true
                               </label>
                             ) : (
-                              (f.show_in_card ? "true" : "false")
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  borderRadius: 999,
+                                  padding: "3px 8px",
+                                  fontSize: 12,
+                                  border: `1px solid ${f.show_in_card ? "#86efac" : "#e2e8f0"}`,
+                                  background: f.show_in_card ? "#f0fdf4" : "#f8fafc",
+                                  color: f.show_in_card ? "#166534" : "#475569",
+                                }}
+                              >
+                                {f.show_in_card ? "true" : "false"}
+                              </span>
                             )}
                           </td>
-                          <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
+                          <td style={tdStyle}>
                             {editingFieldId === f.id ? (
                               <select
                                 value={fieldDraft?.analytics_mode ?? "none"}
@@ -520,23 +634,58 @@ export default function EntityTypesPage() {
                                       : prev
                                   )
                                 }
-                                style={{ padding: 8 }}
+                                style={controlStyle}
                                 disabled={busy}
                               >
                                 <option value="none">none</option>
                                 <option value="distribution">distribution</option>
+                                <option value="trend">trend</option>
+                                <option value="count">count</option>
                               </select>
                             ) : (
-                              f.analytics_mode ?? "none"
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  borderRadius: 999,
+                                  padding: "3px 8px",
+                                  fontSize: 12,
+                                  border: "1px solid #bfdbfe",
+                                  background: "#eff6ff",
+                                  color: "#1d4ed8",
+                                }}
+                              >
+                                {f.analytics_mode ?? "none"}
+                              </span>
                             )}
                           </td>
-                          <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
+                          <td style={tdStyle}>
                             {editingFieldId === f.id ? (
                               <div style={{ display: "flex", gap: 8 }}>
-                                <button onClick={saveField} disabled={busy} style={{ padding: "6px 10px" }}>
+                                <button
+                                  onClick={saveField}
+                                  disabled={busy}
+                                  style={{
+                                    padding: "7px 10px",
+                                    borderRadius: 8,
+                                    border: "1px solid #1d4ed8",
+                                    background: "#2563eb",
+                                    color: "white",
+                                    fontWeight: 600,
+                                  }}
+                                >
                                   Guardar
                                 </button>
-                                <button onClick={cancelEditField} disabled={busy} style={{ padding: "6px 10px" }}>
+                                <button
+                                  onClick={cancelEditField}
+                                  disabled={busy}
+                                  style={{
+                                    padding: "7px 10px",
+                                    borderRadius: 8,
+                                    border: "1px solid #cbd5e1",
+                                    background: "white",
+                                    color: "#334155",
+                                  }}
+                                >
                                   Cancelar
                                 </button>
                               </div>
@@ -545,14 +694,25 @@ export default function EntityTypesPage() {
                                 <button
                                   onClick={() => startEditField(f)}
                                   disabled={busy}
-                                  style={{ padding: "6px 10px" }}
+                                  style={{
+                                    padding: "7px 10px",
+                                    borderRadius: 8,
+                                    border: "1px solid #cbd5e1",
+                                    background: "white",
+                                  }}
                                 >
                                   Editar
                                 </button>
                                 <button
                                   onClick={() => void deleteField(f.id, f.name)}
                                   disabled={busy}
-                                  style={{ padding: "6px 10px", color: "crimson" }}
+                                  style={{
+                                    padding: "7px 10px",
+                                    borderRadius: 8,
+                                    border: "1px solid #fecaca",
+                                    background: "#fff1f2",
+                                    color: "#be123c",
+                                  }}
                                 >
                                   Eliminar
                                 </button>

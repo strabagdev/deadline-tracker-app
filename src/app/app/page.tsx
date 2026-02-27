@@ -28,6 +28,7 @@ type DashboardMeta = {
 type DynamicFieldDistribution = {
   field_id: string;
   field_name: string;
+  analytics_mode: "distribution" | "trend" | "count";
   total: number;
   values: Array<{ label: string; count: number }>;
 };
@@ -44,14 +45,6 @@ const statusLabel: Record<Status, string> = {
   yellow: "Aviso",
   green: "Al día",
   none: "Sin info",
-};
-
-const statusTone: Record<Status, string> = {
-  red: "bg-rose-500",
-  orange: "bg-orange-500",
-  yellow: "bg-amber-500",
-  green: "bg-emerald-500",
-  none: "bg-slate-400",
 };
 
 const statusColor: Record<Status, string> = {
@@ -105,6 +98,63 @@ function DonutChart({ slices, centerLabel }: { slices: DonutSlice[]; centerLabel
         })}
       </div>
       <span className="sr-only">{centerLabel}</span>
+    </div>
+  );
+}
+
+function BarChart({ points }: { points: Array<{ label: string; value: number }> }) {
+  const max = points.reduce((acc, p) => Math.max(acc, p.value), 0);
+  return (
+    <div className="grid gap-2">
+      {points.map((p) => {
+        const pct = max > 0 ? Math.max(6, Math.round((p.value / max) * 100)) : 0;
+        return (
+          <div key={p.label} className="grid grid-cols-[minmax(0,1fr)_48px] items-center gap-2 text-xs">
+            <div className="min-w-0">
+              <div className="mb-1 truncate text-slate-600">{p.label}</div>
+              <div className="h-2 rounded bg-slate-100">
+                <div className="h-2 rounded bg-sky-500" style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+            <div className="text-right font-semibold text-slate-700">{p.value}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TrendLineChart({ points }: { points: Array<{ label: string; value: number }> }) {
+  if (points.length === 0) return null;
+  const max = points.reduce((acc, p) => Math.max(acc, p.value), 1);
+  const width = 360;
+  const height = 140;
+  const padX = 18;
+  const padY = 16;
+  const chartW = width - padX * 2;
+  const chartH = height - padY * 2;
+  const stepX = points.length > 1 ? chartW / (points.length - 1) : 0;
+
+  const coords = points.map((p, idx) => {
+    const x = padX + idx * stepX;
+    const y = padY + chartH - (p.value / max) * chartH;
+    return { x, y, ...p };
+  });
+  const polyline = coords.map((c) => `${c.x},${c.y}`).join(" ");
+
+  return (
+    <div className="space-y-2">
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-36 w-full">
+        <polyline fill="none" stroke="#0ea5e9" strokeWidth="2.5" points={polyline} />
+        {coords.map((c) => (
+          <circle key={c.label} cx={c.x} cy={c.y} r="3.5" fill="#0284c7" />
+        ))}
+      </svg>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-600 sm:grid-cols-3">
+        {points.map((p) => (
+          <div key={p.label} className="truncate">{p.label}: {p.value}</div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -244,7 +294,12 @@ export default function AnalyticsDashboardPage() {
   }, [byEntityType]);
 
   const dynamicFieldCharts = useMemo(() => {
-    if (entityTypeFilter === "all") return [] as Array<{ title: string; slices: DonutSlice[] }>;
+    if (entityTypeFilter === "all") return [] as Array<{
+      title: string;
+      mode: "distribution" | "trend" | "count";
+      slices: DonutSlice[];
+      points: Array<{ label: string; value: number }>;
+    }>;
     const rows = dynamicDistributionByEntityType[entityTypeFilter] ?? [];
     const palette = [
       "#0ea5e9",
@@ -270,7 +325,12 @@ export default function AnalyticsDashboardPage() {
         if (rest > 0) {
           slices.push({ label: "Otros", value: rest, color: "#94a3b8" });
         }
-        return { title: row.field_name, slices };
+        return {
+          title: row.field_name,
+          mode: row.analytics_mode,
+          slices,
+          points: slices.map((s) => ({ label: s.label, value: s.value })),
+        };
       })
       .filter((row) => row.slices.length > 0);
   }, [dynamicDistributionByEntityType, entityTypeFilter]);
@@ -393,13 +453,18 @@ export default function AnalyticsDashboardPage() {
           {entityTypeFilter === "all" ? (
             <p className="app-empty text-center">Selecciona un tipo de entidad para ver gráficos de campos dinámicos configurados en modo analítico.</p>
           ) : dynamicFieldCharts.length === 0 ? (
-            <p className="app-empty text-center">No hay campos dinámicos con modo analítico `distribution` para este tipo.</p>
+            <p className="app-empty text-center">No hay campos dinámicos con modo analítico (`distribution`, `trend` o `count`) para este tipo.</p>
           ) : (
             <div className="grid gap-3 lg:grid-cols-2">
               {dynamicFieldCharts.map((chart) => (
                 <div key={chart.title} className="rounded-xl border border-slate-200 p-3">
-                  <div className="mb-2 text-sm font-semibold text-slate-700">{chart.title}</div>
-                  <DonutChart slices={chart.slices} centerLabel={chart.title} />
+                  <div className="mb-1 text-sm font-semibold text-slate-700">{chart.title}</div>
+                  <div className="mb-2 text-xs uppercase tracking-wide text-slate-500">{chart.mode}</div>
+                  {chart.mode === "distribution" ? (
+                    <DonutChart slices={chart.slices} centerLabel={chart.title} />
+                  ) : null}
+                  {chart.mode === "count" ? <BarChart points={chart.points} /> : null}
+                  {chart.mode === "trend" ? <TrendLineChart points={chart.points} /> : null}
                 </div>
               ))}
             </div>

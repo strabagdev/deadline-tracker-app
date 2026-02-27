@@ -17,10 +17,10 @@ function toSlugKey(input: string) {
     .replace(/^_+|_+$/g, "");
 }
 
-function parseAnalyticsMode(input: unknown): "none" | "distribution" | null {
+function parseAnalyticsMode(input: unknown): "none" | "distribution" | "trend" | "count" | null {
   const mode = String(input ?? "").trim().toLowerCase();
   if (mode === "none") return "none";
-  if (mode === "distribution" || mode === "trend" || mode === "count") return "distribution";
+  if (mode === "distribution" || mode === "trend" || mode === "count") return mode;
   return null;
 }
 

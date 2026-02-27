@@ -32,6 +32,7 @@ type ForecastRow = {
 type DynamicFieldDistribution = {
   field_id: string;
   field_name: string;
+  analytics_mode: "distribution" | "trend" | "count";
   total: number;
   values: Array<{ label: string; count: number }>;
 };
@@ -185,7 +186,14 @@ async function getDynamicDistributionByEntityType(
   const fieldsById = new Map(
     fields.map((f) => [
       String(f.id),
-      { entity_type_id: String(f.entity_type_id ?? ""), name: String(f.name ?? "Campo") },
+      {
+        entity_type_id: String(f.entity_type_id ?? ""),
+        name: String(f.name ?? "Campo"),
+        analytics_mode:
+          f.analytics_mode === "trend" || f.analytics_mode === "count" || f.analytics_mode === "distribution"
+            ? f.analytics_mode
+            : "distribution",
+      },
     ])
   );
   const entityTypeByEntityId = new Map(
@@ -228,14 +236,18 @@ async function getDynamicDistributionByEntityType(
     if (!entityTypeId || entityTypeId !== field.entity_type_id) continue;
     const value = String(row.value_text ?? "").trim();
     if (!value) continue;
-    const fieldKey = `${entityTypeId}::${fieldId}::${field.name}`;
+    const fieldKey = `${entityTypeId}::${fieldId}::${field.name}::${field.analytics_mode}`;
     const valueMap = bucket.get(fieldKey) ?? new Map<string, number>();
     valueMap.set(value, (valueMap.get(value) ?? 0) + 1);
     bucket.set(fieldKey, valueMap);
   }
 
   for (const [fieldKey, valuesMap] of bucket.entries()) {
-    const [entityTypeId, fieldId, fieldName] = fieldKey.split("::");
+    const [entityTypeId, fieldId, fieldName, analyticsModeRaw] = fieldKey.split("::");
+    const analyticsMode =
+      analyticsModeRaw === "trend" || analyticsModeRaw === "count" || analyticsModeRaw === "distribution"
+        ? analyticsModeRaw
+        : "distribution";
     const values = Array.from(valuesMap.entries())
       .map(([label, count]) => ({ label, count }))
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
@@ -244,6 +256,7 @@ async function getDynamicDistributionByEntityType(
     out[entityTypeId].push({
       field_id: fieldId,
       field_name: fieldName,
+      analytics_mode: analyticsMode,
       total,
       values,
     });
