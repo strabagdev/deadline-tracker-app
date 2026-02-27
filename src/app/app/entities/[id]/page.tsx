@@ -33,6 +33,25 @@ type EntityDetail = {
 };
 
 type UsageUnit = { id: string; name: string; is_active: boolean };
+type DeadlineHistoryRow = {
+  id: string;
+  deadline_type_id: string;
+  version_group_id?: string | null;
+  version_no?: number | null;
+  is_current?: boolean;
+  created_at: string;
+  superseded_at?: string | null;
+  next_due_date?: string | null;
+  last_done_usage?: number | null;
+  deadline_types?:
+    | { id?: string; name?: string | null; measure_by?: "date" | "usage" | null }
+    | { id?: string; name?: string | null; measure_by?: "date" | "usage" | null }[]
+    | null;
+  computed?: {
+    status?: string;
+    semaphore?: string | null;
+  } | null;
+};
 
 async function getTokenOrRedirect(router: { replace: (path: string) => void }) {
   const { data } = await supabaseAuth.auth.getSession();
@@ -55,6 +74,10 @@ export default function EntityDetailPage() {
   const [busy, setBusy] = useState(false);
   const [role, setRole] = useState<string>("");
   const [usageUnits, setUsageUnits] = useState<UsageUnit[]>([]);
+  const [deadlineHistory, setDeadlineHistory] = useState<DeadlineHistoryRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyMsg, setHistoryMsg] = useState("");
+  const [historyExpanded, setHistoryExpanded] = useState(false);
 
   const [editMode, setEditMode] = useState(false);
   const [draftName, setDraftName] = useState("");
@@ -68,11 +91,27 @@ export default function EntityDetailPage() {
     return true;
   }, [entity, draftName]);
   const canDelete = role === "owner" || role === "admin";
+  const sortedDeadlineHistory = useMemo(() => {
+    const getTypeName = (d: DeadlineHistoryRow) => {
+      const v = pickOne(d.deadline_types);
+      return String(v?.name ?? "Vencimiento");
+    };
+    return [...deadlineHistory].sort((a, b) => {
+      const byType = getTypeName(a).localeCompare(getTypeName(b));
+      if (byType !== 0) return byType;
+      return Number(a.version_no ?? 1) - Number(b.version_no ?? 1);
+    });
+  }, [deadlineHistory]);
 
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  function pickOne<T>(value: T | T[] | null | undefined): T | null {
+    if (Array.isArray(value)) return value[0] ?? null;
+    return value ?? null;
+  }
 
   function hydrateDraft(from: EntityDetail) {
     setDraftName(from.name);
@@ -86,11 +125,16 @@ export default function EntityDetailPage() {
   async function load() {
     setLoading(true);
     setMsg("");
+    setHistoryLoading(true);
+    setHistoryMsg("");
 
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setHistoryLoading(false);
+      return;
+    }
 
-    const [res, roleRes, unitsRes] = await Promise.all([
+    const [res, roleRes, unitsRes, historyRes] = await Promise.all([
       fetch(`/api/entities?id=${encodeURIComponent(id)}`, {
         headers: { Authorization: `Bearer ${token}` },
       }),
@@ -100,11 +144,15 @@ export default function EntityDetailPage() {
       fetch("/api/usage-units?active=1", {
         headers: { Authorization: `Bearer ${token}` },
       }),
+      fetch(`/api/deadlines?entity_id=${encodeURIComponent(id)}&include_history=true`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
     ]);
 
     const json = await res.json().catch(() => ({}));
     const roleJson = await roleRes.json().catch(() => ({}));
     const unitsJson = await unitsRes.json().catch(() => ({}));
+    const historyJson = await historyRes.json().catch(() => ({}));
     setRole(typeof roleJson?.role === "string" ? roleJson.role : "");
     if (!res.ok) {
       setMsg(json.error || "No se pudo cargar la entidad");
@@ -119,6 +167,15 @@ export default function EntityDetailPage() {
       setUsageUnits((unitsJson.usage_units ?? []) as UsageUnit[]);
     } else {
       setUsageUnits([]);
+    }
+    setHistoryLoading(false);
+    if (historyRes.ok) {
+      const history = Array.isArray(historyJson.history) ? (historyJson.history as DeadlineHistoryRow[]) : [];
+      setDeadlineHistory(history);
+      setHistoryMsg("");
+    } else {
+      setDeadlineHistory([]);
+      setHistoryMsg(historyJson.error || "No se pudo cargar el histórico de vencimientos.");
     }
     setLoading(false);
 
@@ -386,6 +443,64 @@ export default function EntityDetailPage() {
           <section>
             <EntityDeadlinesManager entityId={entity.id} tracksUsage={entity.tracks_usage} />
           </section>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-base">Histórico de vencimientos</CardTitle>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setHistoryExpanded((v) => !v)}
+                >
+                  {historyExpanded ? "Comprimir" : "Expandir"}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className={historyExpanded ? "pt-0" : "hidden"}>
+              {historyLoading ? <Loader label="Cargando histórico..." /> : null}
+              {!historyLoading && historyMsg ? <p className="text-sm text-rose-600">{historyMsg}</p> : null}
+              {!historyLoading && !historyMsg && deadlineHistory.length === 0 ? (
+                <p className="text-sm text-slate-600">No hay histórico para esta entidad.</p>
+              ) : null}
+              {!historyLoading && !historyMsg && sortedDeadlineHistory.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-[760px] w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-xs text-slate-500">
+                        <th className="px-2 py-2 text-left">Tipo</th>
+                        <th className="px-2 py-2 text-left">Versión</th>
+                        <th className="px-2 py-2 text-left">Estado</th>
+                        <th className="px-2 py-2 text-left">Vigente</th>
+                        <th className="px-2 py-2 text-left">Creado</th>
+                        <th className="px-2 py-2 text-left">Reemplazado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedDeadlineHistory.map((d) => {
+                        const dt = pickOne(d.deadline_types);
+                        const typeName = dt?.name ?? "Vencimiento";
+                        const state = d.computed?.semaphore ?? d.computed?.status ?? "—";
+                        return (
+                          <tr key={d.id} className="border-b border-slate-100">
+                            <td className="px-2 py-2">{typeName}</td>
+                            <td className="px-2 py-2">v{Number(d.version_no ?? 1)}</td>
+                            <td className="px-2 py-2">{String(state)}</td>
+                            <td className="px-2 py-2">
+                              <Badge variant="outline">{d.is_current ? "Sí" : "No"}</Badge>
+                            </td>
+                            <td className="px-2 py-2">{new Date(d.created_at).toLocaleString()}</td>
+                            <td className="px-2 py-2">{d.superseded_at ? new Date(d.superseded_at).toLocaleString() : "—"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
         </>
       )}
     </main>
