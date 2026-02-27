@@ -36,6 +36,11 @@ type DeadlineRow = {
   id: string;
   entity_id: string;
   deadline_type_id: string;
+  version_group_id?: string | null;
+  version_no?: number | null;
+  is_current?: boolean;
+  superseded_at?: string | null;
+  superseded_by_deadline_id?: string | null;
   last_done_date: string | null;
   next_due_date: string | null;
   last_done_usage: number | null;
@@ -559,18 +564,24 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url);
     const entityId = url.searchParams.get("entity_id");
+    const includeHistory = ["1", "true", "yes"].includes(String(url.searchParams.get("include_history") ?? "").toLowerCase());
     if (!entityId) return NextResponse.json({ error: "entity_id required", code: "BAD_REQUEST" }, { status: 400 });
 
     const entity = await getEntity(db, orgId, entityId);
     if (!entity) return NextResponse.json({ error: "entity not found", code: "ENTITY_NOT_FOUND" }, { status: 404 });
 
-    const { data, error } = await db
+    let query = db
       .from("deadlines")
       .select(
         `
         id,
         entity_id,
         deadline_type_id,
+        version_group_id,
+        version_no,
+        is_current,
+        superseded_at,
+        superseded_by_deadline_id,
         last_done_date,
         next_due_date,
         last_done_usage,
@@ -583,15 +594,26 @@ export async function GET(req: Request) {
       `
       )
       .eq("organization_id", orgId)
-      .eq("is_current", true)
       .eq("entity_id", entityId)
       .order("created_at", { ascending: false });
+    if (!includeHistory) query = query.eq("is_current", true);
+    const { data, error } = await query;
 
     if (error) throw error;
 
-    const computed = await Promise.all(((data ?? []) as DeadlineRow[]).map((d) => attachComputed(db, orgId, entityId, d)));
+    const allDeadlines = (data ?? []) as DeadlineRow[];
+    const currentDeadlines = allDeadlines.filter((d) => d.is_current === true);
+    const computedCurrent = await Promise.all(currentDeadlines.map((d) => attachComputed(db, orgId, entityId, d)));
+    if (!includeHistory) {
+      return NextResponse.json({ entity: { id: entity.id, tracks_usage: entity.tracks_usage }, deadlines: computedCurrent });
+    }
+    const computedHistory = await Promise.all(allDeadlines.map((d) => attachComputed(db, orgId, entityId, d)));
 
-    return NextResponse.json({ entity: { id: entity.id, tracks_usage: entity.tracks_usage }, deadlines: computed });
+    return NextResponse.json({
+      entity: { id: entity.id, tracks_usage: entity.tracks_usage },
+      deadlines: computedCurrent,
+      history: computedHistory,
+    });
   } catch (e: unknown) {
     return NextResponse.json({ error: getErrorMessage(e), code: "INTERNAL_ERROR" }, { status: 500 });
   }
