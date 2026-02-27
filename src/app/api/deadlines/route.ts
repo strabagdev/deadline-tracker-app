@@ -86,6 +86,28 @@ async function getDeadlineSnapshot(db: DataClient, orgId: string, id: string): P
   return (data ?? null) as DeadlineSnapshot | null;
 }
 
+async function getCurrentDeadlineByEntityAndType(
+  db: DataClient,
+  orgId: string,
+  entityId: string,
+  deadlineTypeId: string
+): Promise<DeadlineSnapshot | null> {
+  const { data, error } = await db
+    .from("deadlines")
+    .select(
+      "id, entity_id, deadline_type_id, title, measure_by, last_done_date, next_due_date, last_done_usage, frequency, frequency_unit, usage_daily_average, usage_daily_average_mode, version_group_id, version_no"
+    )
+    .eq("organization_id", orgId)
+    .eq("entity_id", entityId)
+    .eq("deadline_type_id", deadlineTypeId)
+    .eq("is_current", true)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  const row = (data ?? [])[0] ?? null;
+  return (row ?? null) as DeadlineSnapshot | null;
+}
+
 async function safeLogDeadlineChangeEvent(
   db: DataClient,
   input: {
@@ -301,7 +323,9 @@ function makeDeadlinesRepo(db: DataClient, actorUserId: string): DeadlinesRepo {
       return { id: dt.id, name: dt.name, measure_by: dt.measure_by, is_active: dt.is_active };
     },
     createDateDeadline: async (orgId, input) => {
-      const versionGroupId = crypto.randomUUID();
+      const replaced = await getCurrentDeadlineByEntityAndType(db, orgId, input.entityId, input.deadlineTypeId);
+      const versionGroupId = replaced?.version_group_id ? String(replaced.version_group_id) : crypto.randomUUID();
+      const versionNo = replaced ? Math.max(1, Number(replaced.version_no ?? 1)) + 1 : 1;
       const { data, error } = await db
         .from("deadlines")
         .insert({
@@ -313,13 +337,25 @@ function makeDeadlinesRepo(db: DataClient, actorUserId: string): DeadlinesRepo {
           last_done_date: input.lastDoneDate,
           next_due_date: input.nextDueDate,
           version_group_id: versionGroupId,
-          version_no: 1,
+          version_no: versionNo,
           is_current: true,
         })
         .select("id")
         .single();
       if (error) throw error;
       const createdId = String(data?.id ?? "");
+      if (replaced?.id) {
+        const { error: replaceErr } = await db
+          .from("deadlines")
+          .update({
+            is_current: false,
+            superseded_at: new Date().toISOString(),
+            superseded_by_deadline_id: createdId,
+          })
+          .eq("organization_id", orgId)
+          .eq("id", replaced.id);
+        if (replaceErr) throw replaceErr;
+      }
       await safeLogDeadlineChangeEvent(db, {
         organizationId: orgId,
         deadlineId: createdId,
@@ -343,12 +379,15 @@ function makeDeadlinesRepo(db: DataClient, actorUserId: string): DeadlinesRepo {
             usage_daily_average: null,
             usage_daily_average_mode: "manual",
           },
+          supersedes_deadline_id: replaced?.id ?? null,
         },
       });
       return { id: createdId };
     },
     createUsageDeadline: async (orgId, input) => {
-      const versionGroupId = crypto.randomUUID();
+      const replaced = await getCurrentDeadlineByEntityAndType(db, orgId, input.entityId, input.deadlineTypeId);
+      const versionGroupId = replaced?.version_group_id ? String(replaced.version_group_id) : crypto.randomUUID();
+      const versionNo = replaced ? Math.max(1, Number(replaced.version_no ?? 1)) + 1 : 1;
       const { data, error } = await db
         .from("deadlines")
         .insert({
@@ -364,13 +403,25 @@ function makeDeadlinesRepo(db: DataClient, actorUserId: string): DeadlinesRepo {
           usage_daily_average_mode: input.mode,
           usage_daily_average: input.usageDailyAverage,
           version_group_id: versionGroupId,
-          version_no: 1,
+          version_no: versionNo,
           is_current: true,
         })
         .select("id")
         .single();
       if (error) throw error;
       const createdId = String(data?.id ?? "");
+      if (replaced?.id) {
+        const { error: replaceErr } = await db
+          .from("deadlines")
+          .update({
+            is_current: false,
+            superseded_at: new Date().toISOString(),
+            superseded_by_deadline_id: createdId,
+          })
+          .eq("organization_id", orgId)
+          .eq("id", replaced.id);
+        if (replaceErr) throw replaceErr;
+      }
       await safeLogDeadlineChangeEvent(db, {
         organizationId: orgId,
         deadlineId: createdId,
@@ -394,6 +445,7 @@ function makeDeadlinesRepo(db: DataClient, actorUserId: string): DeadlinesRepo {
             usage_daily_average: input.usageDailyAverage,
             usage_daily_average_mode: input.mode,
           },
+          supersedes_deadline_id: replaced?.id ?? null,
         },
       });
       return { id: createdId };
@@ -461,7 +513,15 @@ function makeDeadlinesRepo(db: DataClient, actorUserId: string): DeadlinesRepo {
     },
     deleteDeadline: async (orgId, id) => {
       const before = await getDeadlineSnapshot(db, orgId, id);
-      const { error } = await db.from("deadlines").delete().eq("organization_id", orgId).eq("id", id);
+      const { error } = await db
+        .from("deadlines")
+        .update({
+          is_current: false,
+          superseded_at: new Date().toISOString(),
+          superseded_by_deadline_id: null,
+        })
+        .eq("organization_id", orgId)
+        .eq("id", id);
       if (error) throw error;
       if (before) {
         await safeLogDeadlineChangeEvent(db, {
