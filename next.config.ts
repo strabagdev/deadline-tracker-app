@@ -21,6 +21,20 @@ const supabaseHostnames = Array.from(
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            // HSTS in app layer as fallback if upstream proxy/CDN is bypassed.
+            key: "Strict-Transport-Security",
+            value: "max-age=31536000; includeSubDomains; preload",
+          },
+        ],
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {
