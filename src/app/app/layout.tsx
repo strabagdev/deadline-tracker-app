@@ -449,9 +449,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-40 border-b bg-white/95 backdrop-blur">
-        <div className={cn("mx-auto grid gap-2 px-4 py-2", isSuperAdmin ? "max-w-[1100px]" : "max-w-[1400px]")}>
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+      <header className="sticky top-0 z-40 px-2 py-2 backdrop-blur sm:px-3">
+        <div className={cn("mx-auto", isSuperAdmin ? "max-w-[1100px]" : "max-w-[1400px]")}>
+          <div
+            className="flex flex-col gap-2 px-4 py-2 lg:flex-row lg:items-center lg:justify-between"
+            style={{
+              background: "linear-gradient(120deg, rgba(236, 253, 245, 0.8), rgba(239, 246, 255, 0.9), rgba(255, 255, 255, 1))",
+              border: "1px solid #d6e0ea",
+              borderRadius: "14px",
+              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)",
+            }}
+          >
             <div className="flex min-w-0 items-center gap-2">
               {platformLogoUrl ? (
                 <img
