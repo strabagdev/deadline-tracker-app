@@ -4,6 +4,7 @@ import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { isSuperAdmin } from "@/lib/server/superAdmin";
 import { createAuthAdminClient, findAuthUserIdByEmail } from "@/lib/server/authAdmin";
 import { parsePlatformInvitePayload } from "@/lib/api/platformAdminInput";
+import { getPublicAppOrigin } from "@/lib/server/publicAppOrigin";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
 
     const authAdmin = createAuthAdminClient();
 
-    const redirectTo = new URL("/auth/callback", req.url).toString();
+    const redirectTo = `${getPublicAppOrigin(req)}/auth/callback`;
     const { data: inviteData, error: inviteErr } = await authAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo,
       data: { needs_temp_password: true },

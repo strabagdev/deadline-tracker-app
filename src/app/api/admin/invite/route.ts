@@ -4,6 +4,7 @@ import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { getAdminOrgAccess, getErrorMessage } from "@/lib/server/adminOrgAccess";
 import { createClient } from "@supabase/supabase-js";
 import { findAuthUserIdByEmail } from "@/lib/server/authAdmin";
+import { getPublicAppOrigin } from "@/lib/server/publicAppOrigin";
 
 type MemberListRow = {
   user_id: string;
@@ -116,7 +117,7 @@ export async function POST(req: Request) {
       process.env.SUPABASE_AUTH_SERVICE_ROLE_KEY!
     );
 
-    const redirectTo = new URL("/auth/callback", req.url).toString();
+    const redirectTo = `${getPublicAppOrigin(req)}/auth/callback`;
     const { data: inviteData, error: inviteErr } =
       await supabaseAuthAdmin.auth.admin.inviteUserByEmail(email, {
         redirectTo,

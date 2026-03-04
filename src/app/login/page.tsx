@@ -45,8 +45,8 @@ export default function LoginPage() {
   const canSendReset = nowTs > resetCooldownUntil;
 
   function getBaseUrl() {
-    // En cliente, esto es confiable en dev; en prod, NEXT_PUBLIC_APP_URL es mejor.
-    return process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+    // Prioriza el origen real del browser para evitar links con host desactualizado.
+    return window.location.origin || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   }
 
   function humanizeAuthErrorMessage(raw: string) {
