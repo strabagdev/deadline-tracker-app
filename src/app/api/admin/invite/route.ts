@@ -141,7 +141,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // profiles usa user_id como clave...
+    // profiles usa user_id como clave
     const { error: profileErr } = await db.from("profiles").upsert(
       {
         user_id: invitedUserId,
