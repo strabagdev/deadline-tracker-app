@@ -1,4 +1,19 @@
 import type { NextConfig } from "next";
+const withPWA =
+  (() => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const nextPWA = require("next-pwa");
+      return nextPWA({
+        dest: "public",
+        disable: process.env.NODE_ENV === "development",
+        register: true,
+        skipWaiting: true,
+      });
+    } catch {
+      return (config: NextConfig) => config;
+    }
+  })() as (config: NextConfig) => NextConfig;
 
 function hostnameFromUrl(value?: string) {
   if (!value) return null;
@@ -51,4 +66,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withPWA(nextConfig);
