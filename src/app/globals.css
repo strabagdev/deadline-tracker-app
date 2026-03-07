@@ -102,3 +102,10 @@ body {
   font-size: 0.875rem;
   color: var(--muted-foreground);
 }
+
+@media (max-width: 639px) {
+  .app-shell .app-content > main {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+}

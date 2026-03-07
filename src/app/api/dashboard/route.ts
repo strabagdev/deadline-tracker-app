@@ -37,6 +37,23 @@ type DynamicFieldDistribution = {
   values: Array<{ label: string; count: number }>;
 };
 
+function parseTrendLabelTime(label: string): number | null {
+  const raw = String(label ?? "").trim();
+  if (!raw) return null;
+  const isoDay = raw.match(/^\d{4}-\d{2}-\d{2}$/);
+  if (isoDay) {
+    const t = new Date(`${raw}T00:00:00Z`).getTime();
+    return Number.isFinite(t) ? t : null;
+  }
+  const isoMonth = raw.match(/^\d{4}-\d{2}$/);
+  if (isoMonth) {
+    const t = new Date(`${raw}-01T00:00:00Z`).getTime();
+    return Number.isFinite(t) ? t : null;
+  }
+  const t = new Date(raw).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "error";
 }
@@ -224,7 +241,16 @@ async function getDynamicDistributionByEntityType(
     }
   }
 
-  const bucket = new Map<string, Map<string, number>>();
+  const bucket = new Map<
+    string,
+    {
+      entityTypeId: string;
+      fieldId: string;
+      fieldName: string;
+      analyticsMode: "distribution" | "trend" | "count";
+      values: Map<string, number>;
+    }
+  >();
   for (const row of rows) {
     const fieldId = String(row.entity_field_id ?? "").trim();
     if (!fieldId) continue;
@@ -236,27 +262,38 @@ async function getDynamicDistributionByEntityType(
     if (!entityTypeId || entityTypeId !== field.entity_type_id) continue;
     const value = String(row.value_text ?? "").trim();
     if (!value) continue;
-    const fieldKey = `${entityTypeId}::${fieldId}::${field.name}::${field.analytics_mode}`;
-    const valueMap = bucket.get(fieldKey) ?? new Map<string, number>();
-    valueMap.set(value, (valueMap.get(value) ?? 0) + 1);
-    bucket.set(fieldKey, valueMap);
+    const fieldKey = `${entityTypeId}::${fieldId}`;
+    const entry = bucket.get(fieldKey) ?? {
+      entityTypeId,
+      fieldId,
+      fieldName: field.name,
+      analyticsMode: field.analytics_mode,
+      values: new Map<string, number>(),
+    };
+    entry.values.set(value, (entry.values.get(value) ?? 0) + 1);
+    bucket.set(fieldKey, entry);
   }
 
-  for (const [fieldKey, valuesMap] of bucket.entries()) {
-    const [entityTypeId, fieldId, fieldName, analyticsModeRaw] = fieldKey.split("::");
-    const analyticsMode =
-      analyticsModeRaw === "trend" || analyticsModeRaw === "count" || analyticsModeRaw === "distribution"
-        ? analyticsModeRaw
-        : "distribution";
-    const values = Array.from(valuesMap.entries())
-      .map(([label, count]) => ({ label, count }))
-      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  for (const entry of bucket.values()) {
+    const values = Array.from(entry.values.entries()).map(([label, count]) => ({ label, count }));
+    if (entry.analyticsMode === "trend") {
+      values.sort((a, b) => {
+        const at = parseTrendLabelTime(a.label);
+        const bt = parseTrendLabelTime(b.label);
+        if (at != null && bt != null) return at - bt;
+        if (at != null && bt == null) return -1;
+        if (at == null && bt != null) return 1;
+        return a.label.localeCompare(b.label, "es", { sensitivity: "base" });
+      });
+    } else {
+      values.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
+    }
     const total = values.reduce((acc, v) => acc + v.count, 0);
-    if (!out[entityTypeId]) out[entityTypeId] = [];
-    out[entityTypeId].push({
-      field_id: fieldId,
-      field_name: fieldName,
-      analytics_mode: analyticsMode,
+    if (!out[entry.entityTypeId]) out[entry.entityTypeId] = [];
+    out[entry.entityTypeId].push({
+      field_id: entry.fieldId,
+      field_name: entry.fieldName,
+      analytics_mode: entry.analyticsMode,
       total,
       values,
     });

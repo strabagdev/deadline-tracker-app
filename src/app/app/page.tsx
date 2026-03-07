@@ -159,6 +159,29 @@ function TrendLineChart({ points }: { points: Array<{ label: string; value: numb
   );
 }
 
+function parseTrendLabelTime(label: string): number | null {
+  const raw = String(label ?? "").trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const t = new Date(`${raw}T00:00:00Z`).getTime();
+    return Number.isFinite(t) ? t : null;
+  }
+  if (/^\d{4}-\d{2}$/.test(raw)) {
+    const t = new Date(`${raw}-01T00:00:00Z`).getTime();
+    return Number.isFinite(t) ? t : null;
+  }
+  const t = new Date(raw).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+function isTemporalTrend(points: Array<{ label: string; value: number }>) {
+  let temporal = 0;
+  for (const p of points) {
+    if (parseTrendLabelTime(p.label) != null) temporal += 1;
+  }
+  return temporal >= 2;
+}
+
 export default function AnalyticsDashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -295,6 +318,7 @@ export default function AnalyticsDashboardPage() {
 
   const dynamicFieldCharts = useMemo(() => {
     if (entityTypeFilter === "all") return [] as Array<{
+      fieldId: string;
       title: string;
       mode: "distribution" | "trend" | "count";
       slices: DonutSlice[];
@@ -315,6 +339,15 @@ export default function AnalyticsDashboardPage() {
     return rows
       .filter((row) => row.total > 0)
       .map((row) => {
+        if (row.analytics_mode === "trend") {
+          return {
+            fieldId: row.field_id,
+            title: row.field_name,
+            mode: row.analytics_mode,
+            slices: [],
+            points: row.values.map((item) => ({ label: item.label, value: item.count })),
+          };
+        }
         const top = row.values.slice(0, 7);
         const rest = row.values.slice(7).reduce((acc, item) => acc + item.count, 0);
         const slices: DonutSlice[] = top.map((item, idx) => ({
@@ -326,6 +359,7 @@ export default function AnalyticsDashboardPage() {
           slices.push({ label: "Otros", value: rest, color: "#94a3b8" });
         }
         return {
+          fieldId: row.field_id,
           title: row.field_name,
           mode: row.analytics_mode,
           slices,
@@ -457,14 +491,20 @@ export default function AnalyticsDashboardPage() {
           ) : (
             <div className="grid gap-3 lg:grid-cols-2">
               {dynamicFieldCharts.map((chart) => (
-                <div key={chart.title} className="rounded-xl border border-slate-200 p-3">
+                <div key={chart.fieldId} className="rounded-xl border border-slate-200 p-3">
                   <div className="mb-1 text-sm font-semibold text-slate-700">{chart.title}</div>
                   <div className="mb-2 text-xs uppercase tracking-wide text-slate-500">{chart.mode}</div>
                   {chart.mode === "distribution" ? (
                     <DonutChart slices={chart.slices} centerLabel={chart.title} />
                   ) : null}
                   {chart.mode === "count" ? <BarChart points={chart.points} /> : null}
-                  {chart.mode === "trend" ? <TrendLineChart points={chart.points} /> : null}
+                  {chart.mode === "trend" ? (
+                    isTemporalTrend(chart.points) ? (
+                      <TrendLineChart points={chart.points} />
+                    ) : (
+                      <BarChart points={chart.points} />
+                    )
+                  ) : null}
                 </div>
               ))}
             </div>

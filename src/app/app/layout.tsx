@@ -448,7 +448,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   ) : null;
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="app-shell flex min-h-screen flex-col">
       <header className="sticky top-0 z-40 px-2 py-2 backdrop-blur sm:px-3">
         <div className={cn("mx-auto", isSuperAdmin ? "max-w-[1100px]" : "max-w-[1400px]")}>
           <div
@@ -616,7 +616,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       ) : null}
 
-      <div className="flex-1">
+      <div className="app-content flex-1">
         {isSuperAdminLockedOutRoute ? (
           <div className="flex justify-center p-4">
             <Loader label="Redirigiendo al panel global..." />
