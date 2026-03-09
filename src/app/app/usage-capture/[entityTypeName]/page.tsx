@@ -24,6 +24,15 @@ type Entity = {
   logged_days?: string[];
 };
 
+type SavedUsageLog = {
+  id: string;
+  value: number | null;
+  value_text: string | null;
+  logged_on: string;
+  logged_at: string;
+  field_values: Array<{ usage_field_id: string; value: string }>;
+};
+
 function todayDateInput() {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -75,7 +84,17 @@ export default function FocusedUsageCapturePage() {
   const [bulkFieldDraftByEntity, setBulkFieldDraftByEntity] = useState<Record<string, Record<string, string>>>({});
   const [loggedOn, setLoggedOn] = useState(todayDateInput());
   const [pendingPage, setPendingPage] = useState(1);
+  const [registeredPage, setRegisteredPage] = useState(1);
+  const [activeTab, setActiveTab] = useState<"pending" | "registered">("pending");
+  const [savedLogsByEntity, setSavedLogsByEntity] = useState<Record<string, SavedUsageLog | null | undefined>>({});
+  const [loadingSavedByEntity, setLoadingSavedByEntity] = useState<Record<string, boolean>>({});
+  const [editingEntity, setEditingEntity] = useState<Entity | null>(null);
+  const [editMainDraft, setEditMainDraft] = useState("");
+  const [editFieldDraft, setEditFieldDraft] = useState<Record<string, string>>({});
+  const [editLoading, setEditLoading] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
   const pendingPageSize = 10;
+  const registeredPageSize = 10;
 
   const filteredEntities = useMemo(() => {
     const needle = entitySearch.trim().toLowerCase();
@@ -134,6 +153,10 @@ export default function FocusedUsageCapturePage() {
     () => filteredEntities.filter((e) => !Boolean(e.logged_days?.includes(loggedOn))),
     [filteredEntities, loggedOn]
   );
+  const registeredEntities = useMemo(
+    () => filteredEntities.filter((e) => Boolean(e.logged_days?.includes(loggedOn))),
+    [filteredEntities, loggedOn]
+  );
   const pendingFieldColumns = useMemo(() => {
     const map = new Map<string, Field>();
     for (const e of pendingEntities) {
@@ -189,6 +212,16 @@ export default function FocusedUsageCapturePage() {
   const pendingPagedEntities = useMemo(
     () => filteredPendingEntities.slice(pendingPageStart, pendingPageStart + pendingPageSize),
     [filteredPendingEntities, pendingPageStart]
+  );
+  const registeredTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(registeredEntities.length / registeredPageSize)),
+    [registeredEntities.length]
+  );
+  const safeRegisteredPage = Math.min(registeredPage, registeredTotalPages);
+  const registeredPageStart = (safeRegisteredPage - 1) * registeredPageSize;
+  const registeredPagedEntities = useMemo(
+    () => registeredEntities.slice(registeredPageStart, registeredPageStart + registeredPageSize),
+    [registeredEntities, registeredPageStart]
   );
   const fullyLoggedDates = useMemo(() => {
     if (entities.length === 0) return [];
@@ -277,8 +310,17 @@ export default function FocusedUsageCapturePage() {
     setPendingPage(1);
   }, [loggedOn, entitySearch, entityTypeName, pendingSecondaryFilters]);
   useEffect(() => {
+    setRegisteredPage(1);
+  }, [loggedOn, entitySearch, entityTypeName]);
+  useEffect(() => {
     if (pendingPage > pendingTotalPages) setPendingPage(pendingTotalPages);
   }, [pendingPage, pendingTotalPages]);
+  useEffect(() => {
+    if (registeredPage > registeredTotalPages) setRegisteredPage(registeredTotalPages);
+  }, [registeredPage, registeredTotalPages]);
+  useEffect(() => {
+    setActiveTab("pending");
+  }, [loggedOn, entitySearch, entityTypeName]);
 
   function parseRawValue(rawValue: string): { value: number | null; valueText: string | null; error?: string } {
     const clean = String(rawValue ?? "").trim();
@@ -290,6 +332,129 @@ export default function FocusedUsageCapturePage() {
     }
     return { value: null, valueText: clean };
   }
+
+  async function fetchSavedLog(token: string, entityId: string) {
+    setLoadingSavedByEntity((prev) => ({ ...prev, [entityId]: true }));
+    const qs = new URLSearchParams();
+    qs.set("entity_type", entityTypeName);
+    qs.set("entity_id", entityId);
+    qs.set("logged_on", loggedOn);
+    const res = await fetch(`/api/usage-capture/log?${qs.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setLoadingSavedByEntity((prev) => ({ ...prev, [entityId]: false }));
+      return null;
+    }
+    const next = json?.exists ? (json.usage_log as SavedUsageLog) : null;
+    setSavedLogsByEntity((prev) => ({ ...prev, [entityId]: next }));
+    setLoadingSavedByEntity((prev) => ({ ...prev, [entityId]: false }));
+    return next;
+  }
+
+  async function openEdit(entity: Entity) {
+    setEditingEntity(entity);
+    setEditLoading(true);
+    setErrorMsg("");
+    const token = await getTokenOrRedirect();
+    if (!token) {
+      setEditLoading(false);
+      setEditingEntity(null);
+      return;
+    }
+    const cached = savedLogsByEntity[entity.id];
+    const usageLog = cached === undefined ? await fetchSavedLog(token, entity.id) : cached;
+    if (!usageLog) {
+      setErrorMsg("No se encontró registro guardado para esa entidad y fecha.");
+      setEditLoading(false);
+      setEditingEntity(null);
+      return;
+    }
+    setEditMainDraft(
+      usageLog.value != null && Number.isFinite(Number(usageLog.value))
+        ? String(usageLog.value)
+        : String(usageLog.value_text ?? "")
+    );
+    const nextFieldDraft: Record<string, string> = {};
+    for (const fv of usageLog.field_values ?? []) {
+      nextFieldDraft[String(fv.usage_field_id)] = String(fv.value ?? "");
+    }
+    setEditFieldDraft(nextFieldDraft);
+    setEditLoading(false);
+  }
+
+  async function saveEdit() {
+    if (!editingEntity) return;
+    setEditSaving(true);
+    setErrorMsg("");
+    setOkMsg("");
+
+    const token = await getTokenOrRedirect();
+    if (!token) {
+      setEditSaving(false);
+      return;
+    }
+
+    const parsed = parseRawValue(editMainDraft);
+    if (parsed.error) {
+      setErrorMsg(parsed.error);
+      setEditSaving(false);
+      return;
+    }
+
+    const fieldValues = (editingEntity.fields ?? [])
+      .map((f) => {
+        const raw = String(editFieldDraft[f.id] ?? "").trim();
+        if (!raw) return null;
+        if (f.field_type === "number") return { usage_field_id: f.id, value: Number(raw) };
+        if (f.field_type === "boolean") return { usage_field_id: f.id, value: raw === "true" };
+        return { usage_field_id: f.id, value: raw };
+      })
+      .filter(Boolean) as Array<{ usage_field_id: string; value: string | number | boolean }>;
+
+    const payload: Record<string, unknown> = {
+      entity_type: entityTypeName,
+      entity_id: editingEntity.id,
+      logged_on: loggedOn,
+      field_values: fieldValues,
+    };
+    if (parsed.value != null) payload.value = parsed.value;
+    else if (parsed.valueText) payload.value_text = parsed.valueText;
+
+    const res = await fetch("/api/usage-capture/log", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setErrorMsg(json.error || "No se pudo actualizar el registro.");
+      setEditSaving(false);
+      return;
+    }
+
+    await fetchSavedLog(token, editingEntity.id);
+    setOkMsg(`Registro actualizado para ${editingEntity.name}.`);
+    setEditSaving(false);
+    setEditingEntity(null);
+    setEditMainDraft("");
+    setEditFieldDraft({});
+  }
+
+  useEffect(() => {
+    void (async () => {
+      if (registeredPagedEntities.length === 0) return;
+      const missing = registeredPagedEntities
+        .map((e) => e.id)
+        .filter((id) => savedLogsByEntity[id] === undefined && !loadingSavedByEntity[id]);
+      if (missing.length === 0) return;
+      const token = await getTokenOrRedirect();
+      if (!token) return;
+      await Promise.all(missing.map((entityId) => fetchSavedLog(token, entityId)));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registeredPagedEntities, loggedOn, entityTypeName]);
 
   async function saveBulkPending() {
     setBusy(true);
@@ -396,13 +561,41 @@ export default function FocusedUsageCapturePage() {
       {okMsg ? <div className="app-alert app-alert-success">{okMsg}</div> : null}
 
       <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base">Pendientes del día ({pendingEntities.length})</CardTitle></CardHeader>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Registro de uso · {loggedOn}</CardTitle>
+          <div className="mt-2 inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab("pending")}
+              className={[
+                "rounded-md px-3 py-1.5 text-xs font-medium transition",
+                activeTab === "pending"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-600 hover:text-slate-800",
+              ].join(" ")}
+            >
+              Pendientes ({pendingEntities.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("registered")}
+              className={[
+                "rounded-md px-3 py-1.5 text-xs font-medium transition",
+                activeTab === "registered"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-600 hover:text-slate-800",
+              ].join(" ")}
+            >
+              Registrados ({registeredEntities.length})
+            </button>
+          </div>
+        </CardHeader>
         <CardContent className="pt-0">
           {loading ? (
             <div className="flex justify-center py-6"><Loader label="Cargando..." /></div>
           ) : entities.length === 0 ? (
             <p className="app-empty">No hay entidades disponibles para este tipo.</p>
-          ) : (
+          ) : activeTab === "pending" ? (
             <div className="grid gap-3">
               <div className="grid items-end gap-2 md:grid-cols-[220px_minmax(220px,1fr)]">
                 <MarkedDatePicker
@@ -779,11 +972,193 @@ export default function FocusedUsageCapturePage() {
                   <Button onClick={() => void saveBulkPending()} disabled={busy || filteredPendingEntities.length === 0} className="w-auto justify-self-start">
                     {busy ? "Guardando..." : "Guardar lote"}
                   </Button>
+              </>
+            </div>
+          ) : (
+            <div className="grid gap-2">
+              {registeredEntities.length === 0 ? (
+                <p className="app-empty">No hay registros guardados para {loggedOn}.</p>
+              ) : (
+                <>
+                  {registeredPagedEntities.map((e) => {
+                    const saved = savedLogsByEntity[e.id];
+                    const isLoadingSaved = Boolean(loadingSavedByEntity[e.id]);
+                    const mainValue = saved
+                      ? (saved.value != null && Number.isFinite(Number(saved.value))
+                        ? String(saved.value)
+                        : String(saved.value_text ?? "—"))
+                      : "—";
+                    return (
+                      <div key={`saved-${e.id}`} className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-slate-900">{e.name}</div>
+                            <div className="text-xs text-slate-600">
+                              {isLoadingSaved ? "Cargando registro..." : `Valor guardado: ${mainValue}`}
+                            </div>
+                            {!isLoadingSaved && saved?.field_values?.length ? (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {saved.field_values.slice(0, 6).map((fv) => {
+                                  const f = (e.fields ?? []).find((x) => x.id === fv.usage_field_id);
+                                  return (
+                                    <span key={`${e.id}-${fv.usage_field_id}`} className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[11px] text-slate-600">
+                                      {f?.name ?? "Campo"}: {fv.value}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={busy || isLoadingSaved}
+                            onClick={() => void openEdit(e)}
+                          >
+                            Editar
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    <div>
+                      Mostrando {registeredPageStart + 1}-{Math.min(registeredPageStart + registeredPageSize, registeredEntities.length)} de{" "}
+                      {registeredEntities.length}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setRegisteredPage(1)}
+                        disabled={safeRegisteredPage <= 1}
+                        className="rounded border border-slate-300 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        «
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRegisteredPage((p) => Math.max(1, p - 1))}
+                        disabled={safeRegisteredPage <= 1}
+                        className="rounded border border-slate-300 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        ‹
+                      </button>
+                      <span className="px-2">Página {safeRegisteredPage} de {registeredTotalPages}</span>
+                      <button
+                        type="button"
+                        onClick={() => setRegisteredPage((p) => Math.min(registeredTotalPages, p + 1))}
+                        disabled={safeRegisteredPage >= registeredTotalPages}
+                        className="rounded border border-slate-300 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        ›
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRegisteredPage(registeredTotalPages)}
+                        disabled={safeRegisteredPage >= registeredTotalPages}
+                        className="rounded border border-slate-300 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        »
+                      </button>
+                    </div>
+                  </div>
                 </>
+              )}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {editingEntity ? (
+        <div className="fixed inset-0 z-[150] bg-slate-900/40 px-4 py-6" onClick={() => !editSaving && setEditingEntity(null)}>
+          <div className="mx-auto mt-8 w-full max-w-2xl rounded-xl border border-slate-200 bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">Editar registro guardado</h3>
+                <p className="text-xs text-slate-500">{editingEntity.name} · {loggedOn}</p>
+              </div>
+              <Button type="button" variant="outline" size="sm" disabled={editSaving} onClick={() => setEditingEntity(null)}>
+                Cerrar
+              </Button>
+            </div>
+            {editLoading ? (
+              <div className="flex justify-center py-8"><Loader label="Cargando registro..." /></div>
+            ) : (
+              <div className="grid gap-3">
+                <div className="grid gap-1">
+                  <label className="text-xs text-[var(--muted-foreground)]">Valor principal</label>
+                  <Input
+                    value={editMainDraft}
+                    onChange={(e) => setEditMainDraft(e.target.value)}
+                    placeholder={editingEntity.usage_unit_visible && editingEntity.usage_unit_name ? `Valor (${editingEntity.usage_unit_name})` : "Valor"}
+                    disabled={editSaving}
+                  />
+                </div>
+                {(editingEntity.fields ?? []).length > 0 ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {editingEntity.fields.map((f) => {
+                      const opts = fieldOptions(f);
+                      if (opts.length > 0) {
+                        return (
+                          <div key={f.id} className="grid gap-1">
+                            <label className="text-xs text-[var(--muted-foreground)]">{f.name}</label>
+                            <select
+                              value={editFieldDraft[f.id] ?? ""}
+                              onChange={(e) => setEditFieldDraft((prev) => ({ ...prev, [f.id]: e.target.value }))}
+                              className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
+                              disabled={editSaving}
+                            >
+                              <option value="">(vacío)</option>
+                              {opts.map((opt) => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      }
+                      if (f.field_type === "boolean") {
+                        return (
+                          <div key={f.id} className="grid gap-1">
+                            <label className="text-xs text-[var(--muted-foreground)]">{f.name}</label>
+                            <select
+                              value={editFieldDraft[f.id] ?? ""}
+                              onChange={(e) => setEditFieldDraft((prev) => ({ ...prev, [f.id]: e.target.value }))}
+                              className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
+                              disabled={editSaving}
+                            >
+                              <option value="">(vacío)</option>
+                              <option value="true">Sí</option>
+                              <option value="false">No</option>
+                            </select>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={f.id} className="grid gap-1">
+                          <label className="text-xs text-[var(--muted-foreground)]">{f.name}</label>
+                          <Input
+                            type={f.field_type === "number" ? "number" : f.field_type === "date" ? "date" : "text"}
+                            value={editFieldDraft[f.id] ?? ""}
+                            onChange={(e) => setEditFieldDraft((prev) => ({ ...prev, [f.id]: e.target.value }))}
+                            disabled={editSaving}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                <div className="flex items-center gap-2">
+                  <Button type="button" onClick={() => void saveEdit()} disabled={editSaving}>
+                    {editSaving ? "Guardando..." : "Guardar cambios"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
