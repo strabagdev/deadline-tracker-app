@@ -322,6 +322,10 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const mode = String(url.searchParams.get("mode") ?? "analytics").toLowerCase();
     const statusRaw = String(url.searchParams.get("status") ?? "").trim();
+    const query = String(url.searchParams.get("q") ?? "").trim();
+    const queryNeedle = query.toLowerCase();
+    const entityTypeIdFilter = String(url.searchParams.get("entity_type_id") ?? "").trim();
+    const secondaryFilter = String(url.searchParams.get("secondary") ?? "").trim();
     const statuses = Array.from(
       new Set(
         statusRaw
@@ -441,6 +445,7 @@ export async function GET(req: Request) {
         .from("deadlines")
         .select("id, entity_id, next_due_date, deadline_types(name, measure_by)")
         .eq("organization_id", orgId)
+        .eq("is_current", true)
         .in("entity_id", entityIds)
         .not("next_due_date", "is", null);
       if (deadlinesErr) throw deadlinesErr;
@@ -495,9 +500,46 @@ export async function GET(req: Request) {
     const latestUsageOut: Record<string, { value: number; logged_at: string; logged_on: string | null }> = latestUsageByEntity;
     let entitiesOut = resultEntities;
     let filteredCount = resultEntities.length;
+    const statusCounts: Record<Status, number> = { red: 0, orange: 0, yellow: 0, green: 0, none: 0 };
+    let secondaryOptions: Array<{ value: string; count: number }> = [];
 
     if (mode === "operations") {
       let filtered = resultEntities;
+      if (entityTypeIdFilter) {
+        filtered = filtered.filter((e) => String(e.entity_type_id ?? "") === entityTypeIdFilter);
+      }
+      if (secondaryFilter) {
+        filtered = filtered.filter((e) =>
+          (e.card_fields ?? []).some((f) => String(f.value_text ?? "").trim() === secondaryFilter)
+        );
+      }
+      if (queryNeedle) {
+        filtered = filtered.filter((e) => {
+          const name = String(e.name ?? "").toLowerCase();
+          const typeName = String(e.entity_types?.name ?? "").toLowerCase();
+          const nearestName = String(e.nearest_forecast?.deadline_name ?? "").toLowerCase();
+          return name.includes(queryNeedle) || typeName.includes(queryNeedle) || nearestName.includes(queryNeedle);
+        });
+      }
+
+      const secondaryCountsMap = new Map<string, number>();
+      for (const e of filtered) {
+        const risk = (e.nearest_forecast?.risk_level ?? "none") as Status;
+        statusCounts[risk] += 1;
+
+        const values = new Set(
+          (e.card_fields ?? [])
+            .map((f) => String(f.value_text ?? "").trim())
+            .filter((v) => v.length > 0)
+        );
+        for (const value of values) {
+          secondaryCountsMap.set(value, (secondaryCountsMap.get(value) ?? 0) + 1);
+        }
+      }
+      secondaryOptions = Array.from(secondaryCountsMap.entries())
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, "es", { sensitivity: "base" }));
+
       if (statuses.length > 0) {
         filtered = filtered.filter((e) => statuses.includes((e.nearest_forecast?.risk_level ?? "none") as Status));
       }
@@ -536,6 +578,8 @@ export async function GET(req: Request) {
         filtered_count: filteredCount,
         page: pageSize > 0 ? page : 1,
         page_size: pageSize > 0 ? pageSize : null,
+        status_counts: statusCounts,
+        secondary_options: secondaryOptions,
       },
       entities: entitiesOut,
       latest_usage_by_entity: latestUsageFiltered,

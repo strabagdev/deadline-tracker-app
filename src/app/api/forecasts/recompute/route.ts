@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getOrgAccess } from "@/lib/server/orgAccess";
+import { canViewModule, getOrgAccess } from "@/lib/server/orgAccess";
 
 type DeadlineRow = {
   id: string;
@@ -86,6 +86,11 @@ export async function POST(req: Request) {
     }
 
     const orgId = access.organizationId;
+    const canForecast = await canViewModule(db, orgId, access.role, access.memberTypeId, "forecast");
+    if (!canForecast) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
+    }
+
     const now = new Date();
     const { data: settingsData, error: settingsErr } = await db
       .from("organization_settings")

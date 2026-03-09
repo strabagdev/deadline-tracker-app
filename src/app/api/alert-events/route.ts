@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getOrgAccess } from "@/lib/server/orgAccess";
+import { canViewModule, getOrgAccess } from "@/lib/server/orgAccess";
 
 type ForecastRow = {
   organization_id: string;
@@ -11,8 +11,8 @@ type ForecastRow = {
   days_remaining: number | null;
   entities?: { name: string | null } | { name: string | null }[] | null;
   deadlines?:
-    | { deadline_types?: { name: string | null } | { name: string | null }[] | null }
-    | { deadline_types?: { name: string | null } | { name: string | null }[] | null }[]
+    | { is_current?: boolean | null; deadline_types?: { name: string | null; is_active?: boolean | null } | { name: string | null; is_active?: boolean | null }[] | null }
+    | { is_current?: boolean | null; deadline_types?: { name: string | null; is_active?: boolean | null } | { name: string | null; is_active?: boolean | null }[] | null }[]
     | null;
 };
 
@@ -56,6 +56,14 @@ function eventMessage(
   return `${entityName}: ${deadlineName} requiere revisión.`;
 }
 
+function severityPriority(level: string) {
+  if (level === "red") return 0;
+  if (level === "orange") return 1;
+  if (level === "yellow") return 2;
+  if (level === "green") return 3;
+  return 4;
+}
+
 export async function POST(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
@@ -69,6 +77,11 @@ export async function POST(req: Request) {
     }
 
     const orgId = access.organizationId;
+    const canAlerts = await canViewModule(db, orgId, access.role, access.memberTypeId, "alerts");
+    if (!canAlerts) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
+    }
+
     const nowIso = new Date().toISOString();
     const EVENT_TYPE = "forecast_risk";
     const { data: settingsData, error: settingsErr } = await db
@@ -93,13 +106,18 @@ export async function POST(req: Request) {
         risk_level,
         days_remaining,
         entities(name),
-        deadlines(deadline_types(name))
+        deadlines(is_current, deadline_types(name, is_active))
       `
       )
       .eq("organization_id", orgId);
     if (forecastErr) throw forecastErr;
 
     const candidates = ((forecastData ?? []) as ForecastRow[])
+      .filter((r) => {
+        const deadline = pickOne(r.deadlines);
+        const deadlineType = pickOne(deadline?.deadline_types ?? null);
+        return Boolean(deadline?.is_current) && deadlineType?.is_active !== false;
+      })
       .filter((r) => r.risk_level === "red" || r.risk_level === "orange" || r.risk_level === "yellow")
       .map((r) => {
         const entity = pickOne(r.entities);
@@ -199,6 +217,11 @@ export async function GET(req: Request) {
     }
 
     const orgId = access.organizationId;
+    const canAlerts = await canViewModule(db, orgId, access.role, access.memberTypeId, "alerts");
+    if (!canAlerts) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
+    }
+
     const EVENT_TYPE = "forecast_risk";
 
     const { data: activeData, error: activeErr } = await db
@@ -221,7 +244,6 @@ export async function GET(req: Request) {
       .eq("organization_id", orgId)
       .eq("event_type", EVENT_TYPE)
       .is("resolved_at", null)
-      .order("severity", { ascending: false })
       .order("last_seen_at", { ascending: false })
       .limit(200);
     if (activeErr) throw activeErr;
@@ -253,6 +275,11 @@ export async function GET(req: Request) {
         last_seen_at: r.last_seen_at,
         resolved_at: r.resolved_at,
       };
+    }).sort((a, b) => {
+      const pa = severityPriority(a.severity);
+      const pb = severityPriority(b.severity);
+      if (pa !== pb) return pa - pb;
+      return new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime();
     });
 
     const recent_resolved = (recentResolvedData ?? []).map((r) => ({

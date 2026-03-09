@@ -37,6 +37,11 @@ type DashboardMeta = {
   active_org_id: string;
   role: string;
   entity_count_in_org: number;
+  filtered_count?: number;
+  page?: number;
+  page_size?: number | null;
+  status_counts?: Partial<Record<Status, number>>;
+  secondary_options?: Array<{ value: string; count: number }>;
 };
 
 type Status = "red" | "orange" | "yellow" | "green" | "none";
@@ -173,21 +178,7 @@ export default function OperationsPage() {
     [semaphore.label_green, semaphore.label_yellow, semaphore.label_orange, semaphore.label_red]
   );
 
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    const handler = () => {
-      void load();
-    };
-    window.addEventListener("dashboard-refresh", handler);
-    return () => window.removeEventListener("dashboard-refresh", handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function load() {
+  const load = React.useCallback(async () => {
     setLoading(true);
     setErrorMsg("");
 
@@ -198,7 +189,13 @@ export default function OperationsPage() {
       return;
     }
 
-    const res = await fetch("/api/dashboard?mode=operations", { headers: { Authorization: `Bearer ${token}` } });
+    const params = new URLSearchParams({ mode: "operations", page: String(page), page_size: String(pageSize) });
+    if (filterStatus !== "all") params.set("status", filterStatus);
+    if (filterEntityType !== "all") params.set("entity_type_id", filterEntityType);
+    if (filterSecondary !== "all") params.set("secondary", filterSecondary);
+    if (q.trim()) params.set("q", q.trim());
+
+    const res = await fetch(`/api/dashboard?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
       setErrorMsg(json.error || "No se pudo cargar operaciones");
@@ -228,7 +225,20 @@ export default function OperationsPage() {
     }
 
     setLoading(false);
-  }
+  }, [filterEntityType, filterSecondary, filterStatus, page, pageSize, q, router]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    const handler = () => {
+      void load();
+    };
+    window.addEventListener("dashboard-refresh", handler);
+    return () => window.removeEventListener("dashboard-refresh", handler);
+  }, [load]);
 
   const entityTypeOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -269,81 +279,46 @@ export default function OperationsPage() {
     });
   }, [entities, usage, semaphore.label_green, semaphore.label_orange, semaphore.label_red, semaphore.label_yellow]);
 
-  const rowsForStatusCounts = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return computedAll.filter((r) => {
-      if (filterEntityType !== "all" && r.entity.entity_type_id !== filterEntityType) return false;
-      if (filterSecondary !== "all") {
-        const hasSecondary = (r.entity.card_fields ?? []).some(
-          (f) => String(f.value_text ?? "").trim() === filterSecondary
-        );
-        if (!hasSecondary) return false;
-      }
-      if (needle) {
-        const name = r.entity.name.toLowerCase();
-        const typeName = (r.entity.entity_types?.name ?? "").toLowerCase();
-        const nearestName = (r.nearest?.typeName ?? "").toLowerCase();
-        if (!name.includes(needle) && !typeName.includes(needle) && !nearestName.includes(needle)) return false;
-      }
-      return true;
-    });
-  }, [computedAll, filterEntityType, filterSecondary, q]);
-
   const statusCounts = useMemo(() => {
-    let red = 0,
-      orange = 0,
-      yellow = 0,
-      green = 0,
-      none = 0;
+    const fromMeta = meta?.status_counts;
+    if (fromMeta) {
+      const red = Number(fromMeta.red ?? 0);
+      const orange = Number(fromMeta.orange ?? 0);
+      const yellow = Number(fromMeta.yellow ?? 0);
+      const green = Number(fromMeta.green ?? 0);
+      const none = Number(fromMeta.none ?? 0);
+      return { red, orange, yellow, green, none, total: red + orange + yellow + green + none };
+    }
 
-    for (const r of rowsForStatusCounts) {
+    let red = 0;
+    let orange = 0;
+    let yellow = 0;
+    let green = 0;
+    let none = 0;
+    for (const r of computedAll) {
       if (r.status === "red") red++;
       else if (r.status === "orange") orange++;
       else if (r.status === "yellow") yellow++;
       else if (r.status === "green") green++;
       else none++;
     }
-
-    return { red, orange, yellow, green, none, total: rowsForStatusCounts.length };
-  }, [rowsForStatusCounts]);
+    return { red, orange, yellow, green, none, total: computedAll.length };
+  }, [computedAll, meta?.status_counts]);
 
   const secondaryFilterOptions = useMemo(() => {
+    if (Array.isArray(meta?.secondary_options)) {
+      return meta.secondary_options;
+    }
     const counts = new Map<string, number>();
     for (const row of computedAll) {
-      const values = new Set(
-        (row.entity.card_fields ?? [])
-          .map((f) => String(f.value_text ?? "").trim())
-          .filter((v) => v.length > 0)
-      );
-      for (const value of values) {
-        counts.set(value, (counts.get(value) ?? 0) + 1);
-      }
+      const values = new Set((row.entity.card_fields ?? []).map((f) => String(f.value_text ?? "").trim()).filter((v) => v.length > 0));
+      for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
     }
-    return Array.from(counts.entries())
-      .map(([value, count]) => ({ value, count }))
-      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
-  }, [computedAll]);
+    return Array.from(counts.entries()).map(([value, count]) => ({ value, count })).sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, "es", { sensitivity: "base" }));
+  }, [computedAll, meta?.secondary_options]);
 
   const rows = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    const out = computedAll.filter((r) => {
-      if (filterEntityType !== "all" && r.entity.entity_type_id !== filterEntityType) return false;
-      if (filterStatus !== "all" && r.status !== filterStatus) return false;
-      if (filterSecondary !== "all") {
-        const hasSecondary = (r.entity.card_fields ?? []).some(
-          (f) => String(f.value_text ?? "").trim() === filterSecondary
-        );
-        if (!hasSecondary) return false;
-      }
-      if (needle) {
-        const name = r.entity.name.toLowerCase();
-        const typeName = (r.entity.entity_types?.name ?? "").toLowerCase();
-        const nearestName = (r.nearest?.typeName ?? "").toLowerCase();
-        if (!name.includes(needle) && !typeName.includes(needle) && !nearestName.includes(needle)) return false;
-      }
-      return true;
-    });
-
+    const out = [...computedAll];
     out.sort((a, b) => {
       const pa = statusPriority(a.status);
       const pb = statusPriority(b.status);
@@ -357,17 +332,14 @@ export default function OperationsPage() {
     });
 
     return out;
-  }, [computedAll, filterEntityType, filterSecondary, filterStatus, q]);
+  }, [computedAll]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [filterEntityType, filterSecondary, filterStatus, q, pageSize]);
-
-  const totalRowsForPagination = rows.length;
-  const totalPages = Math.max(1, Math.ceil(totalRowsForPagination / pageSize));
-  const safePage = Math.min(page, totalPages);
-  const pageStart = (safePage - 1) * pageSize;
-  const pagedRows = rows.slice(pageStart, pageStart + pageSize);
+  const totalRowsForPagination = Math.max(0, Number(meta?.filtered_count ?? rows.length));
+  const effectivePageSize = Number(meta?.page_size ?? pageSize);
+  const totalPages = Math.max(1, Math.ceil(totalRowsForPagination / Math.max(1, effectivePageSize)));
+  const safePage = Math.min(Number(meta?.page ?? page), totalPages);
+  const pageStart = totalRowsForPagination === 0 ? 0 : (safePage - 1) * effectivePageSize;
+  const pagedRows = rows;
   const groupedPagedRows = useMemo(() => {
     const map = new Map<string, typeof pagedRows>();
     for (const row of pagedRows) {
@@ -450,6 +422,7 @@ export default function OperationsPage() {
                 variant="outline"
                 onClick={() => {
                   setFilterSecondary("all");
+                  setPage(1);
                   setSecondaryMenuOpen(false);
                 }}
                 className={cn(
@@ -469,6 +442,7 @@ export default function OperationsPage() {
                   variant="outline"
                   onClick={() => {
                     setFilterSecondary(opt.value);
+                    setPage(1);
                     setSecondaryMenuOpen(false);
                   }}
                   className={cn(
@@ -504,7 +478,10 @@ export default function OperationsPage() {
                     key={s.key}
                     size="sm"
                     variant="outline"
-                    onClick={() => setFilterStatus(s.key)}
+                    onClick={() => {
+                      setFilterStatus(s.key);
+                      setPage(1);
+                    }}
                     className={statusChipClasses(s.key, filterStatus === s.key)}
                     title={s.title}
                   >
@@ -539,14 +516,20 @@ export default function OperationsPage() {
                 <Input
                   id="dashboard_search"
                   value={q}
-                  onChange={(e) => setQ(e.target.value)}
+                  onChange={(e) => {
+                    setQ(e.target.value);
+                    setPage(1);
+                  }}
                   placeholder="Buscar por nombre, tipo o vencimiento..."
                 />
                 <select
                   id="dashboard_page_size"
                   aria-label="Filas por página"
                   value={String(pageSize)}
-                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
                   className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
                 >
                   <option value="25">25 / página</option>
@@ -560,6 +543,7 @@ export default function OperationsPage() {
                     setFilterEntityType("all");
                     setFilterStatus("all");
                     setFilterSecondary("all");
+                    setPage(1);
                   }}
                   disabled={!hasActiveFilters}
                 >
@@ -579,7 +563,10 @@ export default function OperationsPage() {
             id="dashboard_type_quick"
             aria-label="Filtrar por tipo"
             value={filterEntityType}
-            onChange={(e) => setFilterEntityType(e.target.value)}
+            onChange={(e) => {
+              setFilterEntityType(e.target.value);
+              setPage(1);
+            }}
             className="h-[var(--control-h)] min-w-[170px] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
           >
             <option value="all">Todos los tipos</option>
@@ -677,8 +664,8 @@ export default function OperationsPage() {
                               <div className="mt-0.5 truncate text-[11px] text-slate-500">{e.entity_types?.name ?? "Sin tipo"}</div>
                               {cardFields.length > 0 ? (
                                 <div className="mt-1 flex flex-wrap gap-1">
-                                  {cardFields.slice(0, 3).map((field) => (
-                                    <Badge key={`${e.id}-${field.name}`} variant="outline" className="bg-white text-[10px] font-normal text-slate-600">
+                                  {cardFields.slice(0, 3).map((field, idx) => (
+                                    <Badge key={`${e.id}-${field.name}-${field.value_text}-${idx}`} variant="outline" className="bg-white text-[10px] font-normal text-slate-600">
                                       {field.value_text}
                                     </Badge>
                                   ))}
@@ -776,8 +763,8 @@ export default function OperationsPage() {
                             </div>
                             {cardFields.length > 0 ? (
                               <div className="mt-1 flex flex-wrap gap-1">
-                                {cardFields.slice(0, 2).map((field) => (
-                                  <Badge key={`${e.id}-${field.name}`} variant="outline" className="bg-slate-50 text-[10px] font-normal text-slate-600">
+                                {cardFields.slice(0, 2).map((field, idx) => (
+                                  <Badge key={`${e.id}-${field.name}-${field.value_text}-${idx}`} variant="outline" className="bg-slate-50 text-[10px] font-normal text-slate-600">
                                     {field.value_text}
                                   </Badge>
                                 ))}
@@ -800,7 +787,7 @@ export default function OperationsPage() {
 
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2">
               <div className="text-xs text-slate-500">
-                Mostrando {totalRowsForPagination === 0 ? 0 : pageStart + 1}-{Math.min(pageStart + pageSize, totalRowsForPagination)} de {totalRowsForPagination}
+                Mostrando {totalRowsForPagination === 0 ? 0 : pageStart + 1}-{Math.min(pageStart + effectivePageSize, totalRowsForPagination)} de {totalRowsForPagination}
               </div>
               <div className="flex items-center gap-1.5">
                 <Button

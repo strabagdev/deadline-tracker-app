@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getOrgAccess } from "@/lib/server/orgAccess";
+import { canViewModule, getOrgAccess } from "@/lib/server/orgAccess";
 
 type ForecastRowRaw = {
   entity_id: string;
@@ -24,8 +24,8 @@ type ForecastRowRaw = {
       }[]
     | null;
   deadlines?:
-    | { deadline_types?: { name: string | null } | { name: string | null }[] | null }
-    | { deadline_types?: { name: string | null } | { name: string | null }[] | null }[]
+    | { is_current?: boolean | null; deadline_types?: { name: string | null; is_active?: boolean | null } | { name: string | null; is_active?: boolean | null }[] | null }
+    | { is_current?: boolean | null; deadline_types?: { name: string | null; is_active?: boolean | null } | { name: string | null; is_active?: boolean | null }[] | null }[]
     | null;
 };
 
@@ -52,6 +52,11 @@ export async function GET(req: Request) {
     }
 
     const orgId = access.organizationId;
+    const canForecast = await canViewModule(db, orgId, access.role, access.memberTypeId, "forecast");
+    if (!canForecast) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
+    }
+
     const { data, error } = await db
       .from("deadline_forecasts")
       .select(
@@ -64,7 +69,7 @@ export async function GET(req: Request) {
         risk_score,
         computed_at,
         entities(name, entity_type_id, entity_types(id, name)),
-        deadlines(deadline_types(name))
+        deadlines(is_current, deadline_types(name, is_active))
       `
       )
       .eq("organization_id", orgId)
@@ -78,6 +83,9 @@ export async function GET(req: Request) {
       const entityType = pickOne(entity?.entity_types ?? null);
       const deadline = pickOne(r.deadlines);
       const deadlineType = pickOne(deadline?.deadline_types ?? null);
+      const isCurrent = Boolean(deadline?.is_current);
+      const deadlineTypeActive = deadlineType?.is_active !== false;
+      if (!isCurrent || !deadlineTypeActive) return null;
       return {
         entity_id: r.entity_id,
         entity_name: entity?.name ?? "Entidad",
@@ -91,7 +99,19 @@ export async function GET(req: Request) {
         risk_score: Number(r.risk_score ?? 0),
         computed_at: r.computed_at,
       };
-    });
+    }).filter((r): r is {
+      entity_id: string;
+      entity_name: string;
+      entity_type_id: string | null;
+      entity_type_name: string;
+      deadline_id: string;
+      deadline_name: string;
+      forecast_due_date: string | null;
+      days_remaining: number | null;
+      risk_level: "green" | "yellow" | "orange" | "red" | "none";
+      risk_score: number;
+      computed_at: string;
+    } => Boolean(r));
 
     const nearestByEntity = new Map<string, (typeof rows)[number]>();
     for (const row of rows) {

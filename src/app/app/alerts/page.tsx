@@ -80,7 +80,10 @@ export default function AlertsPage() {
     setLoading(true);
     setErrorMsg("");
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
     const res = await fetch("/api/alert-events", {
       headers: { Authorization: `Bearer ${token}` },
@@ -117,7 +120,10 @@ export default function AlertsPage() {
     setBusy(true);
     setErrorMsg("");
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch("/api/alert-events", {
       method: "POST",

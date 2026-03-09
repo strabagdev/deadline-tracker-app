@@ -98,6 +98,7 @@ export default function ForecastPage() {
     const { data } = await supabaseAuth.auth.getSession();
     const token = data.session?.access_token;
     if (!token) {
+      setLoading(false);
       window.location.href = "/login";
       return;
     }
@@ -139,6 +140,7 @@ export default function ForecastPage() {
     const { data } = await supabaseAuth.auth.getSession();
     const token = data.session?.access_token;
     if (!token) {
+      setBusy(false);
       window.location.href = "/login";
       return;
     }
