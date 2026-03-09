@@ -16,6 +16,7 @@ export default function AppHeader() {
       const token = data.session?.access_token;
 
       if (!token) {
+        setLoading(false);
         router.replace("/login");
         return;
       }
@@ -33,6 +34,7 @@ export default function AppHeader() {
 
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
+        setLoading(false);
         router.replace("/select-org");
         return;
       }

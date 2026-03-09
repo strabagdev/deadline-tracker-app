@@ -31,6 +31,12 @@ type NavItem = {
   icon: React.ReactNode;
 };
 
+type TypeNavItem = {
+  href: string;
+  label: string;
+  moduleKey: "entity_types" | "deadline_types" | "usage_units";
+};
+
 function IconTraffic({ className = "h-4 w-4" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
@@ -179,6 +185,33 @@ function NavLink({ href, label, icon }: { href: string; label: string; icon: Rea
   );
 }
 
+function NavActionButton({
+  label,
+  icon,
+  active,
+  onClick,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-9 w-9 items-center justify-center rounded-xl border bg-transparent text-sm text-slate-700 transition-colors sm:h-10 sm:w-10",
+        active ? "border-slate-300 text-slate-900" : "border-transparent hover:border-slate-300"
+      )}
+    >
+      {icon}
+    </button>
+  );
+}
+
 const NAV_ITEMS: NavItem[] = [
   { href: "/app", label: "Dashboard", moduleKey: "analytics_dashboard", icon: <IconHome /> },
   { href: "/app/operations", label: "Operaciones", moduleKey: "operations_dashboard", icon: <IconEntities /> },
@@ -189,10 +222,13 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/app/bi-integrations", label: "Integraciones BI", moduleKey: "bi_integrations", icon: <IconReport /> },
   { href: "/app/reports/usage", label: "Reportes uso", moduleKey: "reports_usage", icon: <IconReport /> },
   { href: "/app/settings/semaphore", label: "Semáforo", moduleKey: "semaphore", icon: <IconTraffic /> },
-  { href: "/app/entity-types", label: "Tipos entidad", moduleKey: "entity_types", icon: <IconTag /> },
-  { href: "/app/deadline-types", label: "Tipos vencimiento", moduleKey: "deadline_types", icon: <IconTag /> },
-  { href: "/app/usage-units", label: "Unidades uso", moduleKey: "usage_units", icon: <IconTag /> },
   { href: "/app/users", label: "Usuarios", moduleKey: "users", icon: <IconUsers /> },
+];
+
+const TYPE_NAV_ITEMS: TypeNavItem[] = [
+  { href: "/app/entity-types", label: "Tipos entidad", moduleKey: "entity_types" },
+  { href: "/app/deadline-types", label: "Tipos vencimiento", moduleKey: "deadline_types" },
+  { href: "/app/usage-units", label: "Unidades uso", moduleKey: "usage_units" },
 ];
 
 function getModuleByPath(pathname: string): ModuleKey | null {
@@ -239,6 +275,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [allowedModules, setAllowedModules] = React.useState<Set<string> | null>(null);
   const [moduleAccessLoaded, setModuleAccessLoaded] = React.useState(false);
   const [mobileHeaderMenuOpen, setMobileHeaderMenuOpen] = React.useState(false);
+  const [typesModalOpen, setTypesModalOpen] = React.useState(false);
   const [frontendRev, setFrontendRev] = React.useState("...");
   const [backendRev, setBackendRev] = React.useState("...");
   const [deployEnv, setDeployEnv] = React.useState("...");
@@ -360,6 +397,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     setMobileHeaderMenuOpen(false);
+    setTypesModalOpen(false);
   }, [pathname]);
 
   React.useEffect(() => {
@@ -388,6 +426,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (!allowedModules) return NAV_ITEMS;
     return NAV_ITEMS.filter((item) => allowedModules.has(item.moduleKey));
   }, [allowedModules, isSuperAdmin, moduleAccessLoaded]);
+
+  const visibleTypeNavItems = React.useMemo(() => {
+    if (!moduleAccessLoaded && !isSuperAdmin) return [];
+    if (!allowedModules) return TYPE_NAV_ITEMS;
+    return TYPE_NAV_ITEMS.filter((item) => allowedModules.has(item.moduleKey));
+  }, [allowedModules, isSuperAdmin, moduleAccessLoaded]);
+
+  const isTypesRoute =
+    pathname.startsWith("/app/entity-types") ||
+    pathname.startsWith("/app/deadline-types") ||
+    pathname.startsWith("/app/usage-units");
 
 
   async function logout() {
@@ -508,6 +557,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   {visibleNavItems.map((item) => (
                     <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} />
                   ))}
+                  {visibleTypeNavItems.length > 0 ? (
+                    <NavActionButton
+                      label="Tipos"
+                      icon={<IconTag />}
+                      active={isTypesRoute}
+                      onClick={() => setTypesModalOpen(true)}
+                    />
+                  ) : null}
                 </nav>
                 <div className="hidden min-w-0 items-center gap-2 lg:flex lg:flex-nowrap">
                   <Button
@@ -575,6 +632,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     <span className="truncate">{item.label}</span>
                   </Link>
                 ))}
+                {visibleTypeNavItems.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileHeaderMenuOpen(false);
+                      setTypesModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg border border-transparent px-2 py-2 text-sm text-slate-700 hover:border-slate-300"
+                  >
+                    <IconTag />
+                    <span className="truncate">Tipos</span>
+                  </button>
+                ) : null}
               </div>
             </div>
             <div className="mt-3 border-t pt-3">
@@ -613,6 +683,44 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           </aside>
+        </div>
+      ) : null}
+
+      {typesModalOpen ? (
+        <div className="fixed inset-0 z-[130] bg-slate-900/40 px-4 py-6" onClick={() => setTypesModalOpen(false)}>
+          <div
+            className="mx-auto mt-10 w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">Tipos</h3>
+                <p className="text-xs text-slate-500">Elige el módulo de tipos al que quieres ir.</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 bg-transparent"
+                onClick={() => setTypesModalOpen(false)}
+              >
+                Cerrar
+              </Button>
+            </div>
+            <div className="grid gap-2">
+              {visibleTypeNavItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setTypesModalOpen(false)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  <IconTag className="h-4 w-4" />
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
       ) : null}
 

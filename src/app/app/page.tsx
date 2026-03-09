@@ -198,6 +198,7 @@ export default function AnalyticsDashboardPage() {
     const { data } = await supabaseAuth.auth.getSession();
     const token = data.session?.access_token;
     if (!token) {
+      setLoading(false);
       router.replace("/login");
       return;
     }
