@@ -124,6 +124,74 @@ function buildPrintHtml(
 </html>`;
 }
 
+function buildTimelinePrintHtml(
+  timelineRows: Array<{
+    entity_id: string;
+    entity_name: string;
+    usage_unit_name: string;
+    usage_unit_visible: boolean;
+    valuesByBucket: Record<string, string>;
+  }>,
+  timelineColumns: string[],
+  hasUnitColumn: boolean,
+  title: string,
+  subtitle: string
+) {
+  const timeHead = timelineColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join("");
+  const tableRows = timelineRows
+    .map((r) => {
+      const timeCells = timelineColumns
+        .map((c) => `<td>${escapeHtml(r.valuesByBucket[c] ?? "—")}</td>`)
+        .join("");
+      const unitCell = hasUnitColumn
+        ? `<td>${escapeHtml(r.usage_unit_visible === false ? "" : (r.usage_unit_name || "—"))}</td>`
+        : "";
+      return `<tr>
+        <td>${escapeHtml(r.entity_name)}</td>
+        ${unitCell}
+        ${timeCells}
+      </tr>`;
+    })
+    .join("");
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${escapeHtml(title)}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; color: #0f172a; }
+      h1 { font-size: 20px; margin: 0 0 6px; }
+      p { margin: 0 0 16px; color: #475569; font-size: 12px; }
+      table { width: 100%; border-collapse: collapse; font-size: 11px; }
+      th, td { border: 1px solid #cbd5e1; padding: 6px 8px; vertical-align: top; text-align: left; }
+      th { background: #f1f5f9; white-space: nowrap; }
+    </style>
+  </head>
+  <body>
+    <h1>${escapeHtml(title)}</h1>
+    <p>${escapeHtml(subtitle)}</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Entidad</th>
+          ${hasUnitColumn ? "<th>Unidad</th>" : ""}
+          ${timeHead}
+        </tr>
+      </thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+  </body>
+</html>`;
+}
+
+function toTimeBucket(loggedOn: string, granularity: "day" | "month") {
+  const raw = String(loggedOn ?? "").trim();
+  if (!raw) return "";
+  if (granularity === "day") return raw;
+  return raw.slice(0, 7);
+}
+
 export default function UsageReportsPage() {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -141,6 +209,8 @@ export default function UsageReportsPage() {
   const [singleDate, setSingleDate] = useState("");
   const [entityTypeId, setEntityTypeId] = useState("all");
   const [q, setQ] = useState("");
+  const [viewMode, setViewMode] = useState<"detail" | "timeline">("detail");
+  const [timelineGranularity, setTimelineGranularity] = useState<"day" | "month">("day");
 
   function hasValidServerFilters() {
     if (dateMode === "single") return Boolean(singleDate);
@@ -304,42 +374,111 @@ export default function UsageReportsPage() {
     () => filteredRows.some((r) => r.usage_unit_visible !== false),
     [filteredRows]
   );
+  const timelineColumns = useMemo(() => {
+    const values = Array.from(
+      new Set(
+        filteredRows
+          .map((r) => toTimeBucket(r.logged_on, timelineGranularity))
+          .filter((v) => v.length > 0)
+      )
+    );
+    return values.sort((a, b) => a.localeCompare(b));
+  }, [filteredRows, timelineGranularity]);
+  const timelineRows = useMemo(() => {
+    const byEntity = new Map<
+      string,
+      {
+        entity_id: string;
+        entity_name: string;
+        usage_unit_name: string;
+        usage_unit_visible: boolean;
+        valuesByBucket: Record<string, { valueDisplay: string; loggedAt: string }>;
+      }
+    >();
+    for (const row of filteredRows) {
+      const bucket = toTimeBucket(row.logged_on, timelineGranularity);
+      if (!bucket) continue;
+      const current = byEntity.get(row.entity_id) ?? {
+        entity_id: row.entity_id,
+        entity_name: row.entity_name,
+        usage_unit_name: row.usage_unit_name,
+        usage_unit_visible: row.usage_unit_visible !== false,
+        valuesByBucket: {},
+      };
+      const prev = current.valuesByBucket[bucket];
+      const prevTime = prev?.loggedAt ? Date.parse(prev.loggedAt) : Number.NEGATIVE_INFINITY;
+      const nextTime = row.logged_at ? Date.parse(row.logged_at) : Number.NEGATIVE_INFINITY;
+      if (!prev || nextTime >= prevTime) {
+        current.valuesByBucket[bucket] = { valueDisplay: row.value_display, loggedAt: row.logged_at };
+      }
+      byEntity.set(row.entity_id, current);
+    }
+    return Array.from(byEntity.values())
+      .sort((a, b) => a.entity_name.localeCompare(b.entity_name, "es", { sensitivity: "base" }))
+      .map((item) => ({
+        entity_id: item.entity_id,
+        entity_name: item.entity_name,
+        usage_unit_name: item.usage_unit_name,
+        usage_unit_visible: item.usage_unit_visible,
+        valuesByBucket: Object.fromEntries(
+          Object.entries(item.valuesByBucket).map(([bucket, payload]) => [bucket, payload.valueDisplay])
+        ),
+      }));
+  }, [filteredRows, timelineGranularity]);
+  const hasUnitColumnTimeline = useMemo(
+    () => timelineRows.some((r) => r.usage_unit_visible !== false),
+    [timelineRows]
+  );
 
   async function exportExcel() {
     setBusy(true);
     try {
-      const csvRows = [
-        [
+      const csvRows: string[][] = [];
+      if (viewMode === "detail") {
+        csvRows.push([
           "Entidad",
           ...entityProfileColumns,
           "Fecha",
           "Valor",
           ...(hasUnitColumn ? ["Unidad"] : []),
           ...dynamicColumns,
-        ],
-      ];
-      for (const r of filteredRows) {
-        csvRows.push([
-          r.entity_name,
-          ...entityProfileColumns.map((col) => {
-            const found = r.entity_profile_values.find((fv) => fv.name === col);
-            return found?.value ?? "";
-          }),
-          formatBusinessDate(r.logged_on),
-          r.value_display,
-          ...(hasUnitColumn ? [r.usage_unit_visible === false ? "" : (r.usage_unit_name || "")] : []),
-          ...dynamicColumns.map((col) => {
-            const found = r.field_values.find((fv) => fv.name === col);
-            return found?.value ?? "";
-          }),
         ]);
+        for (const r of filteredRows) {
+          csvRows.push([
+            r.entity_name,
+            ...entityProfileColumns.map((col) => {
+              const found = r.entity_profile_values.find((fv) => fv.name === col);
+              return found?.value ?? "";
+            }),
+            formatBusinessDate(r.logged_on),
+            r.value_display,
+            ...(hasUnitColumn ? [r.usage_unit_visible === false ? "" : (r.usage_unit_name || "")] : []),
+            ...dynamicColumns.map((col) => {
+              const found = r.field_values.find((fv) => fv.name === col);
+              return found?.value ?? "";
+            }),
+          ]);
+        }
+      } else {
+        csvRows.push([
+          "Entidad",
+          ...(hasUnitColumnTimeline ? ["Unidad"] : []),
+          ...timelineColumns,
+        ]);
+        for (const r of timelineRows) {
+          csvRows.push([
+            r.entity_name,
+            ...(hasUnitColumnTimeline ? [r.usage_unit_visible === false ? "" : (r.usage_unit_name || "")] : []),
+            ...timelineColumns.map((bucket) => r.valuesByBucket[bucket] ?? ""),
+          ]);
+        }
       }
       const csv = toCsv(csvRows);
-      const xml = csvToSpreadsheetXml(csv, "ReporteUso");
+      const xml = csvToSpreadsheetXml(csv, viewMode === "detail" ? "ReporteUsoDetalle" : "ReporteUsoHorizontal");
       const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8;" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = "reporte_uso.xls";
+      a.download = viewMode === "detail" ? "reporte_uso_detalle.xls" : "reporte_uso_horizontal.xls";
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -354,8 +493,21 @@ export default function UsageReportsPage() {
     try {
       const subtitle = `Filtro: ${entityTypeId === "all" ? "Todos los tipos" : "Tipo específico"} · Fecha: ${
         dateMode === "single" ? (singleDate || "—") : `${dateFrom || "—"} a ${dateTo || "—"}`
-      } · Registros: ${filteredRows.length}`;
-      const html = buildPrintHtml(filteredRows, entityProfileColumns, dynamicColumns, "Reporte de Valores de Uso", subtitle);
+      } · ${
+        viewMode === "detail"
+          ? `Registros: ${filteredRows.length}`
+          : `Entidades: ${timelineRows.length} · Eje tiempo: ${timelineGranularity === "day" ? "Día" : "Mes"}`
+      }`;
+      const html =
+        viewMode === "detail"
+          ? buildPrintHtml(filteredRows, entityProfileColumns, dynamicColumns, "Reporte de Valores de Uso", subtitle)
+          : buildTimelinePrintHtml(
+              timelineRows,
+              timelineColumns,
+              hasUnitColumnTimeline,
+              "Reporte de Valores de Uso (Horizontal)",
+              subtitle
+            );
       const win = window.open("", "_blank");
       if (!win) {
         setErrorMsg("No se pudo abrir la ventana de impresión. Revisa el bloqueo de popups.");
@@ -399,7 +551,7 @@ export default function UsageReportsPage() {
           <CardTitle className="text-base">Filtros</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="grid gap-2 md:grid-cols-[220px_170px_170px_170px_minmax(220px,1fr)]">
+          <div className="grid gap-2 md:grid-cols-[220px_170px_170px_170px_170px_170px_minmax(220px,1fr)]">
             <select
               value={entityTypeId}
               onChange={(e) => setEntityTypeId(e.target.value)}
@@ -430,6 +582,23 @@ export default function UsageReportsPage() {
             ) : (
               <MarkedDatePicker value={dateTo} onChange={setDateTo} label="Hasta" />
             )}
+            <select
+              value={viewMode}
+              onChange={(e) => setViewMode(e.target.value as "detail" | "timeline")}
+              className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
+            >
+              <option value="detail">Vista detalle</option>
+              <option value="timeline">Vista horizontal</option>
+            </select>
+            <select
+              value={timelineGranularity}
+              onChange={(e) => setTimelineGranularity(e.target.value as "day" | "month")}
+              disabled={viewMode !== "timeline"}
+              className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <option value="day">Eje por día</option>
+              <option value="month">Eje por mes</option>
+            </select>
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por entidad, valor o campo..." />
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -439,7 +608,11 @@ export default function UsageReportsPage() {
             <Button variant="outline" size="sm" onClick={() => void exportPdf()} disabled={loading || busy || filteredRows.length === 0}>
               Exportar PDF
             </Button>
-            <span className="text-xs text-[var(--muted-foreground)]">Registros: {filteredRows.length}</span>
+            <span className="text-xs text-[var(--muted-foreground)]">
+              {viewMode === "detail"
+                ? `Registros: ${filteredRows.length}`
+                : `Entidades: ${timelineRows.length} · Columnas tiempo: ${timelineColumns.length}`}
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -457,7 +630,7 @@ export default function UsageReportsPage() {
             <p className="app-empty">Selecciona fecha exacta o rango para cargar resultados automáticamente.</p>
           ) : filteredRows.length === 0 ? (
             <p className="app-empty">No hay registros para los filtros seleccionados.</p>
-          ) : (
+          ) : viewMode === "detail" ? (
             <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[color:var(--border)]">
               <table className="min-w-[980px] w-full border-collapse text-sm">
                 <thead>
@@ -496,6 +669,43 @@ export default function UsageReportsPage() {
                       </tr>
                     );
                   })}
+                </tbody>
+              </table>
+            </div>
+          ) : timelineRows.length === 0 || timelineColumns.length === 0 ? (
+            <p className="app-empty">No hay datos para mostrar en vista horizontal con los filtros actuales.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[color:var(--border)]">
+              <table className="w-full min-w-[980px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b bg-[var(--muted)] text-[11px] text-[var(--muted-foreground)]">
+                    <th className="px-3 py-2 text-left font-medium">Entidad</th>
+                    {hasUnitColumnTimeline ? (
+                      <th className="px-3 py-2 text-left font-medium">Unidad</th>
+                    ) : null}
+                    {timelineColumns.map((bucket) => (
+                      <th key={`bucket-${bucket}`} className="px-3 py-2 text-left font-medium whitespace-nowrap">
+                        {bucket}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {timelineRows.map((row) => (
+                    <tr key={`timeline-${row.entity_id}`} className="border-b">
+                      <td className="px-3 py-2 font-medium text-[var(--foreground)]">{row.entity_name}</td>
+                      {hasUnitColumnTimeline ? (
+                        <td className="px-3 py-2 text-[var(--muted-foreground)]">
+                          {row.usage_unit_visible === false ? "" : (row.usage_unit_name || "—")}
+                        </td>
+                      ) : null}
+                      {timelineColumns.map((bucket) => (
+                        <td key={`${row.entity_id}-${bucket}`} className="px-3 py-2 text-[var(--muted-foreground)] whitespace-nowrap">
+                          {row.valuesByBucket[bucket] ?? "—"}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
