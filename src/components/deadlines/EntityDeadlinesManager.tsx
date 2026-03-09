@@ -239,7 +239,10 @@ export default function EntityDeadlinesManager({
 
   async function loadTypes() {
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      setUsageLogsBusy(false);
+      return;
+    }
 
     const res = await fetch("/api/deadline-types?active=1", {
       headers: { Authorization: `Bearer ${token}` },
@@ -259,7 +262,10 @@ export default function EntityDeadlinesManager({
 
   async function loadUsageUnits() {
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      setUsageLogsBusy(false);
+      return;
+    }
 
     const res = await fetch("/api/usage-units?active=1", {
       headers: { Authorization: `Bearer ${token}` },
@@ -277,7 +283,10 @@ export default function EntityDeadlinesManager({
 
   async function loadDeadlines() {
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      setUsageLogsBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/deadlines?entity_id=${encodeURIComponent(entityId)}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -293,7 +302,10 @@ export default function EntityDeadlinesManager({
 
   async function loadUsageLogs(limit = 10) {
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      setUsageLogsBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/usage-logs?entity_id=${encodeURIComponent(entityId)}&limit=${limit}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -411,7 +423,10 @@ export default function EntityDeadlinesManager({
     setUsageLogsMsg("");
 
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      setUsageLogsBusy(false);
+      return;
+    }
 
     const valueNum = Number(usageLogValue);
     if (!Number.isFinite(valueNum)) {
@@ -448,7 +463,10 @@ export default function EntityDeadlinesManager({
     setUsageLogsMsg("");
 
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      setUsageLogsBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/usage-logs?id=${encodeURIComponent(id)}`, {
       method: "DELETE",

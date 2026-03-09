@@ -32,7 +32,10 @@ export default function UsageCapturePage() {
     setLoading(true);
     setErrorMsg("");
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
     const moduleRes = await fetch("/api/me/module-access", {
       headers: { Authorization: `Bearer ${token}` },
@@ -48,6 +51,7 @@ export default function UsageCapturePage() {
       ? moduleJson.allowed_modules.map((m: unknown) => String(m))
       : [];
     if (!allowedModules.includes("usage_capture")) {
+      setLoading(false);
       router.replace("/app");
       return;
     }

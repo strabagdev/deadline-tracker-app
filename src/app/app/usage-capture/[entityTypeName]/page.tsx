@@ -220,7 +220,10 @@ export default function FocusedUsageCapturePage() {
     setLoading(true);
     setErrorMsg("");
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
     const moduleRes = await fetch("/api/me/module-access", {
       headers: { Authorization: `Bearer ${token}` },
@@ -235,6 +238,7 @@ export default function FocusedUsageCapturePage() {
       ? moduleJson.allowed_modules.map((m: unknown) => String(m))
       : [];
     if (!allowedModules.includes("usage_capture")) {
+      setLoading(false);
       router.replace("/app");
       return;
     }
@@ -293,9 +297,12 @@ export default function FocusedUsageCapturePage() {
     setOkMsg("");
 
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
-    const candidates = pendingEntities
+    const candidates = filteredPendingEntities
       .map((e) => {
         const rawValue = String(bulkDraftByEntity[e.id] ?? "").trim();
         const dynamic = (e.fields ?? [])

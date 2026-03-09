@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getOrgAccess } from "@/lib/server/orgAccess";
+import { canViewModule, getOrgAccess } from "@/lib/server/orgAccess";
 import {
   handleUsageLogsDelete,
   handleUsageLogsGet,
@@ -204,6 +204,14 @@ export async function GET(req: Request) {
         { status: access.error === "no active organization" ? 400 : 403 }
       );
     }
+    const [canUsageCapture, canEntities, canReportsUsage] = await Promise.all([
+      canViewModule(db, access.organizationId, access.role, access.memberTypeId, "usage_capture"),
+      canViewModule(db, access.organizationId, access.role, access.memberTypeId, "entities"),
+      canViewModule(db, access.organizationId, access.role, access.memberTypeId, "reports_usage"),
+    ]);
+    if (!canUsageCapture && !canEntities && !canReportsUsage) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
+    }
     const response = await handleUsageLogsGet(access.organizationId, req.url, makeRepo(db));
     return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
@@ -231,6 +239,13 @@ export async function POST(req: Request) {
         { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
         { status: access.error === "no active organization" ? 400 : 403 }
       );
+    }
+    const [canUsageCapture, canEntities] = await Promise.all([
+      canViewModule(db, access.organizationId, access.role, access.memberTypeId, "usage_capture"),
+      canViewModule(db, access.organizationId, access.role, access.memberTypeId, "entities"),
+    ]);
+    if (!canUsageCapture && !canEntities) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
     const body = await req.json().catch(() => ({}));
     const response = await handleUsageLogsPost(access.organizationId, body, makeRepo(db));
@@ -267,6 +282,13 @@ export async function DELETE(req: Request) {
         { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
         { status: access.error === "no active organization" ? 400 : 403 }
       );
+    }
+    const [canUsageCapture, canEntities] = await Promise.all([
+      canViewModule(db, access.organizationId, access.role, access.memberTypeId, "usage_capture"),
+      canViewModule(db, access.organizationId, access.role, access.memberTypeId, "entities"),
+    ]);
+    if (!canUsageCapture && !canEntities) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
     const response = await handleUsageLogsDelete(access.organizationId, req.url, makeRepo(db));
     const entityId = typeof response.body?.entity_id === "string" ? response.body.entity_id : "";

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getAdminOrgAccess } from "@/lib/server/orgAccess";
+import { canViewModule, getOrgAccess, isAdminRole } from "@/lib/server/orgAccess";
 import { BI_DATASETS, isBiDatasetKey } from "@/lib/reporting/datasets";
 
 export const runtime = "nodejs";
@@ -63,12 +63,22 @@ export async function GET(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-    const access = await getAdminOrgAccess(db, user.id);
+    const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
       return NextResponse.json(
         { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
         { status: access.error === "no active organization" ? 400 : 403 }
       );
+    }
+    const canBiIntegrations = await canViewModule(
+      db,
+      access.organizationId,
+      access.role,
+      access.memberTypeId,
+      "bi_integrations"
+    );
+    if (!canBiIntegrations || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
 
     const { data, error } = await db
@@ -100,12 +110,22 @@ export async function POST(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-    const access = await getAdminOrgAccess(db, user.id);
+    const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
       return NextResponse.json(
         { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
         { status: access.error === "no active organization" ? 400 : 403 }
       );
+    }
+    const canBiIntegrations = await canViewModule(
+      db,
+      access.organizationId,
+      access.role,
+      access.memberTypeId,
+      "bi_integrations"
+    );
+    if (!canBiIntegrations || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
 
     const body = await req.json().catch(() => ({}));
@@ -163,12 +183,22 @@ export async function PUT(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-    const access = await getAdminOrgAccess(db, user.id);
+    const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
       return NextResponse.json(
         { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
         { status: access.error === "no active organization" ? 400 : 403 }
       );
+    }
+    const canBiIntegrations = await canViewModule(
+      db,
+      access.organizationId,
+      access.role,
+      access.memberTypeId,
+      "bi_integrations"
+    );
+    if (!canBiIntegrations || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
 
     const id = String(new URL(req.url).searchParams.get("id") ?? "").trim();
@@ -212,12 +242,22 @@ export async function DELETE(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-    const access = await getAdminOrgAccess(db, user.id);
+    const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
       return NextResponse.json(
         { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
         { status: access.error === "no active organization" ? 400 : 403 }
       );
+    }
+    const canBiIntegrations = await canViewModule(
+      db,
+      access.organizationId,
+      access.role,
+      access.memberTypeId,
+      "bi_integrations"
+    );
+    if (!canBiIntegrations || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
 
     const id = String(new URL(req.url).searchParams.get("id") ?? "").trim();

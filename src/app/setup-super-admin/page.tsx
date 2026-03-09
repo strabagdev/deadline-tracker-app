@@ -48,6 +48,7 @@ export default function SetupSuperAdminPage() {
     }
 
     if (json.has_super_admin) {
+      setLoading(false);
       router.replace("/login");
       return;
     }

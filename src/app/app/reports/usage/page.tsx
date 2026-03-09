@@ -184,7 +184,10 @@ export default function UsageReportsPage() {
     setLoading(true);
     setErrorMsg("");
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
     const qs = new URLSearchParams();
     if (dateMode === "single") {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getAdminOrgAccess, getErrorMessage } from "@/lib/server/adminOrgAccess";
+import { canViewModule, getOrgAccess, isAdminRole } from "@/lib/server/orgAccess";
 import { createClient } from "@supabase/supabase-js";
 import { findAuthUserIdByEmail } from "@/lib/server/authAdmin";
 import { getPublicAppOrigin } from "@/lib/server/publicAppOrigin";
@@ -14,6 +14,11 @@ type MemberListRow = {
   profiles?: { email?: string | null } | { email?: string | null }[] | null;
   organization_member_types?: { name?: string | null } | { name?: string | null }[] | null;
 };
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return "error";
+}
 
 /*
   Este endpoint:
@@ -28,13 +33,19 @@ export async function GET(req: Request) {
   try {
     const { user: requester } = await requireAuthUser(req);
     const db = createDataServerClient();
-
-    const ctx = await getAdminOrgAccess(db, requester.id);
-    if ("error" in ctx) {
-      return NextResponse.json({ error: ctx.error, code: "FORBIDDEN" }, { status: 403 });
+    const access = await getOrgAccess(db, requester.id);
+    if ("error" in access) {
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
+    }
+    const canUsers = await canViewModule(db, access.organizationId, access.role, access.memberTypeId, "users");
+    if (!canUsers || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
 
-    const { organizationId } = ctx;
+    const organizationId = access.organizationId;
 
     const { data: rows, error: listErr } = await db
       .from("organization_members")
@@ -69,13 +80,19 @@ export async function POST(req: Request) {
   try {
     const { user: requester } = await requireAuthUser(req);
     const db = createDataServerClient();
-
-    const ctx = await getAdminOrgAccess(db, requester.id);
-    if ("error" in ctx) {
-      return NextResponse.json({ error: ctx.error, code: "FORBIDDEN" }, { status: 403 });
+    const access = await getOrgAccess(db, requester.id);
+    if ("error" in access) {
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
+    }
+    const canUsers = await canViewModule(db, access.organizationId, access.role, access.memberTypeId, "users");
+    if (!canUsers || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
 
-    const { organizationId } = ctx;
+    const organizationId = access.organizationId;
 
     const body = await req.json();
     const email = String(body.email || "").trim().toLowerCase();

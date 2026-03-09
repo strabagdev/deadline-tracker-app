@@ -189,7 +189,10 @@ export default function EntityDetailPage() {
     setMsg("");
 
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const payload = {
       name: draftName.trim(),
@@ -242,7 +245,10 @@ export default function EntityDetailPage() {
     setMsg("");
 
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/entities?id=${encodeURIComponent(entity.id)}`, {
       method: "DELETE",

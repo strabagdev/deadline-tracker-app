@@ -99,7 +99,10 @@ export default function UsersAdminPage() {
     setMessage("");
 
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
     await Promise.all([loadRole(token), loadMembers(token), loadMemberTypes(token)]);
     setLoading(false);
@@ -165,7 +168,10 @@ export default function UsersAdminPage() {
     setMessage("");
 
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) {
@@ -211,7 +217,10 @@ export default function UsersAdminPage() {
     setMessage("");
 
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch("/api/admin/members/remove", {
       method: "POST",
@@ -281,7 +290,10 @@ export default function UsersAdminPage() {
     setError("");
     setMessage("");
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch("/api/admin/member-types", {
       method: "POST",
@@ -313,7 +325,10 @@ export default function UsersAdminPage() {
     setBusy(true);
     setError("");
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/admin/member-types?id=${encodeURIComponent(id)}`, {
       method: "DELETE",
@@ -343,7 +358,10 @@ export default function UsersAdminPage() {
     setError("");
     setMessage("");
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/admin/member-types?id=${encodeURIComponent(id)}`, {
       method: "PUT",

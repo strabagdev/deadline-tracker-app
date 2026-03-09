@@ -66,7 +66,10 @@ export default function BiIntegrationsPage() {
     setLoading(true);
     setErrorMsg("");
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
     const accessResult = await fetchJsonWithTimeout(
       "/api/me/module-access",
@@ -86,6 +89,7 @@ export default function BiIntegrationsPage() {
     }
     const allowed = Array.isArray(accessJson.allowed_modules) ? accessJson.allowed_modules.map((v: unknown) => String(v)) : [];
     if (!allowed.includes("bi_integrations")) {
+      setLoading(false);
       router.replace("/app");
       return;
     }
@@ -124,7 +128,10 @@ export default function BiIntegrationsPage() {
     setErrorMsg("");
     setOkMsg("");
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch("/api/reporting/endpoints", {
       method: "POST",
@@ -152,7 +159,10 @@ export default function BiIntegrationsPage() {
     setErrorMsg("");
     setOkMsg("");
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/reporting/endpoints?id=${encodeURIComponent(endpoint.id)}`, {
       method: "PUT",
@@ -174,7 +184,10 @@ export default function BiIntegrationsPage() {
     setErrorMsg("");
     setOkMsg("");
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/reporting/endpoints?id=${encodeURIComponent(endpointId)}`, {
       method: "PUT",
@@ -198,7 +211,10 @@ export default function BiIntegrationsPage() {
     setErrorMsg("");
     setOkMsg("");
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/reporting/endpoints?id=${encodeURIComponent(endpointId)}`, {
       method: "DELETE",

@@ -254,6 +254,7 @@ export default function EntitiesPage() {
     const { data } = await supabaseAuth.auth.getSession();
     const token = data.session?.access_token;
     if (!token) {
+      setTypesLoading(false);
       router.replace("/login");
       return;
     }
@@ -288,11 +289,12 @@ export default function EntitiesPage() {
     const { data } = await supabaseAuth.auth.getSession();
     const token = data.session?.access_token;
     if (!token) {
+      setLoading(false);
       router.replace("/login");
       return;
     }
 
-    const res = await fetch("/api/dashboard", { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch("/api/dashboard?mode=operations", { headers: { Authorization: `Bearer ${token}` } });
     const json = await res.json().catch(() => ({}));
 
     if (!res.ok) {
@@ -342,6 +344,7 @@ export default function EntitiesPage() {
     const { data } = await supabaseAuth.auth.getSession();
     const token = data.session?.access_token;
     if (!token) {
+      setCreating(false);
       router.replace("/login");
       return;
     }

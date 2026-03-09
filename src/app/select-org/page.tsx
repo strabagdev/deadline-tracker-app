@@ -57,7 +57,10 @@ export default function SelectOrgPage() {
     setError("");
 
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
     const superRes = await fetch("/api/platform/super-admin/status", {
       headers: { Authorization: `Bearer ${token}` },
@@ -140,7 +143,10 @@ export default function SelectOrgPage() {
     setError("");
 
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch("/api/orgs/set-active", {
       method: "POST",

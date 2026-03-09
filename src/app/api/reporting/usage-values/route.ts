@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getOrgAccess } from "@/lib/server/orgAccess";
+import { canViewModule, getOrgAccess } from "@/lib/server/orgAccess";
 
 type UsageFieldValueJoin = {
   usage_field_id: string;
@@ -77,6 +77,10 @@ function renderFieldValue(v: UsageFieldValueJoin) {
   return "—";
 }
 
+function isIsoDateOnly(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
 export async function GET(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
@@ -90,11 +94,26 @@ export async function GET(req: Request) {
     }
 
     const orgId = access.organizationId;
+    const canReportsUsage = await canViewModule(db, orgId, access.role, access.memberTypeId, "reports_usage");
+    if (!canReportsUsage) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
+    }
+
     const url = new URL(req.url);
     const entityTypeId = String(url.searchParams.get("entity_type_id") ?? "all").trim();
     const dateFrom = String(url.searchParams.get("date_from") ?? "").trim();
     const dateTo = String(url.searchParams.get("date_to") ?? "").trim();
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 1000), 1), 5000);
+
+    if (dateFrom && !isIsoDateOnly(dateFrom)) {
+      return NextResponse.json({ error: "date_from must be YYYY-MM-DD", code: "BAD_REQUEST" }, { status: 400 });
+    }
+    if (dateTo && !isIsoDateOnly(dateTo)) {
+      return NextResponse.json({ error: "date_to must be YYYY-MM-DD", code: "BAD_REQUEST" }, { status: 400 });
+    }
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      return NextResponse.json({ error: "date_from must be <= date_to", code: "BAD_REQUEST" }, { status: 400 });
+    }
 
     let query = db
       .from("usage_logs")

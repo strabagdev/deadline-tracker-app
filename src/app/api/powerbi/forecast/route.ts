@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getOrgAccess } from "@/lib/server/orgAccess";
+import { canViewModule, getOrgAccess } from "@/lib/server/orgAccess";
 import { isSuperAdmin } from "@/lib/server/superAdmin";
 
 type ForecastPowerBiRow = {
@@ -90,6 +90,16 @@ export async function GET(req: Request) {
             { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
             { status: access.error === "no active organization" ? 400 : 403 }
           );
+        }
+        const canForecast = await canViewModule(
+          db,
+          access.organizationId,
+          access.role,
+          access.memberTypeId,
+          "forecast"
+        );
+        if (!canForecast) {
+          return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
         }
         orgId = access.organizationId;
       }

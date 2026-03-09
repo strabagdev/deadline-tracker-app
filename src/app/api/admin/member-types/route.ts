@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getOrgAccess } from "@/lib/server/orgAccess";
+import { canViewModule, getOrgAccess, isAdminRole } from "@/lib/server/orgAccess";
 import { MODULE_KEYS, USAGE_CAPTURE_SUBMODULE_PREFIX } from "@/lib/access/moduleKeys";
 
 function getErrorMessage(error: unknown): string {
@@ -30,6 +30,10 @@ export async function GET(req: Request) {
         { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
         { status: access.error === "no active organization" ? 400 : 403 }
       );
+    }
+    const canUsers = await canViewModule(db, access.organizationId, access.role, access.memberTypeId, "users");
+    if (!canUsers || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
 
     const { data: types, error: typesErr } = await db
@@ -94,6 +98,10 @@ export async function POST(req: Request) {
         { status: access.error === "no active organization" ? 400 : 403 }
       );
     }
+    const canUsers = await canViewModule(db, access.organizationId, access.role, access.memberTypeId, "users");
+    if (!canUsers || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
+    }
     if (access.role !== "owner") {
       return NextResponse.json({ error: "owner only", code: "FORBIDDEN" }, { status: 403 });
     }
@@ -151,6 +159,10 @@ export async function PUT(req: Request) {
         { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
         { status: access.error === "no active organization" ? 400 : 403 }
       );
+    }
+    const canUsers = await canViewModule(db, access.organizationId, access.role, access.memberTypeId, "users");
+    if (!canUsers || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
     if (access.role !== "owner") {
       return NextResponse.json({ error: "owner only", code: "FORBIDDEN" }, { status: 403 });
@@ -237,6 +249,10 @@ export async function DELETE(req: Request) {
         { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
         { status: access.error === "no active organization" ? 400 : 403 }
       );
+    }
+    const canUsers = await canViewModule(db, access.organizationId, access.role, access.memberTypeId, "users");
+    if (!canUsers || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
     if (access.role !== "owner") {
       return NextResponse.json({ error: "owner only", code: "FORBIDDEN" }, { status: 403 });

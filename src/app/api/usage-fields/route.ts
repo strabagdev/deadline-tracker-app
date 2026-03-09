@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getAdminOrgAccess, getOrgAccess } from "@/lib/server/orgAccess";
+import { canViewModule, getOrgAccess, isAdminRole } from "@/lib/server/orgAccess";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
@@ -30,6 +30,16 @@ export async function GET(req: Request) {
         { status: access.error === "no active organization" ? 400 : 403 }
       );
     }
+    const canUsageUnits = await canViewModule(
+      db,
+      access.organizationId,
+      access.role,
+      access.memberTypeId,
+      "usage_units"
+    );
+    if (!canUsageUnits) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
+    }
 
     const usageUnitId = new URL(req.url).searchParams.get("usage_unit_id");
     if (!usageUnitId) return NextResponse.json({ error: "usage_unit_id required", code: "BAD_REQUEST" }, { status: 400 });
@@ -52,12 +62,22 @@ export async function POST(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-    const access = await getAdminOrgAccess(db, user.id);
+    const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      const status = access.error === "no active organization" ? 400 : 403;
-      const error = access.error === "forbidden" ? "admin required" : access.error;
-      const code = access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN";
-      return NextResponse.json({ error, code }, { status });
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
+    }
+    const canUsageUnits = await canViewModule(
+      db,
+      access.organizationId,
+      access.role,
+      access.memberTypeId,
+      "usage_units"
+    );
+    if (!canUsageUnits || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
 
     const body = await req.json().catch(() => ({}));
@@ -99,12 +119,22 @@ export async function PUT(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-    const access = await getAdminOrgAccess(db, user.id);
+    const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      const status = access.error === "no active organization" ? 400 : 403;
-      const error = access.error === "forbidden" ? "admin required" : access.error;
-      const code = access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN";
-      return NextResponse.json({ error, code }, { status });
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
+    }
+    const canUsageUnits = await canViewModule(
+      db,
+      access.organizationId,
+      access.role,
+      access.memberTypeId,
+      "usage_units"
+    );
+    if (!canUsageUnits || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
 
     const id = new URL(req.url).searchParams.get("id");
@@ -164,12 +194,22 @@ export async function DELETE(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-    const access = await getAdminOrgAccess(db, user.id);
+    const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      const status = access.error === "no active organization" ? 400 : 403;
-      const error = access.error === "forbidden" ? "admin required" : access.error;
-      const code = access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN";
-      return NextResponse.json({ error, code }, { status });
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
+    }
+    const canUsageUnits = await canViewModule(
+      db,
+      access.organizationId,
+      access.role,
+      access.memberTypeId,
+      "usage_units"
+    );
+    if (!canUsageUnits || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
 
     const id = new URL(req.url).searchParams.get("id");

@@ -19,7 +19,7 @@ const MEASURE_BY_OPTIONS = [
   { value: "usage", label: "Por uso" },
 ] as const;
 
-async function getTokenOrRedirect(router: any) {
+async function getTokenOrRedirect(router: { replace: (href: string) => void }) {
   const { data } = await supabaseAuth.auth.getSession();
   const token = data.session?.access_token;
   if (!token) {
@@ -61,7 +61,10 @@ export default function DeadlineTypesPage() {
     setMsg("");
 
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
     const res = await fetch("/api/deadline-types", {
       headers: { Authorization: `Bearer ${token}` },
@@ -100,7 +103,10 @@ export default function DeadlineTypesPage() {
     setMsg("");
 
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch("/api/deadline-types", {
       method: "POST",
@@ -139,7 +145,10 @@ export default function DeadlineTypesPage() {
     setMsg("");
 
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/deadline-types?id=${encodeURIComponent(editingId)}`, {
       method: "PUT",
@@ -174,7 +183,10 @@ export default function DeadlineTypesPage() {
     setMsg("");
 
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/deadline-types?id=${encodeURIComponent(id)}`, {
       method: "DELETE",
@@ -236,7 +248,7 @@ export default function DeadlineTypesPage() {
             <label>Medición</label>
             <select
               value={measureBy}
-              onChange={(e) => setMeasureBy(e.target.value as any)}
+              onChange={(e) => setMeasureBy(e.target.value as "date" | "usage")}
               style={{ width: "100%", padding: 10, marginTop: 6 }}
               disabled={busy}
             >
@@ -331,7 +343,7 @@ export default function DeadlineTypesPage() {
                           <label>Medición</label>
                           <select
                             value={editMeasureBy}
-                            onChange={(e) => setEditMeasureBy(e.target.value as any)}
+                            onChange={(e) => setEditMeasureBy(e.target.value as "date" | "usage")}
                             style={{ width: "100%", padding: 10, marginTop: 6 }}
                             disabled={busy}
                           >

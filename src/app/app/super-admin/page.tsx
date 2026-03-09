@@ -154,7 +154,10 @@ export default function SuperAdminPage() {
     setOk("");
 
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch("/api/platform/admin/orgs/create", {
       method: "POST",
@@ -197,7 +200,10 @@ export default function SuperAdminPage() {
     setOk("");
 
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch("/api/platform/admin/orgs/delete", {
       method: "DELETE",
@@ -234,7 +240,10 @@ export default function SuperAdminPage() {
     }
 
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch("/api/platform/admin/orgs", {
       method: "PUT",
@@ -280,7 +289,10 @@ export default function SuperAdminPage() {
     setOk("");
 
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch("/api/platform/admin/orgs", {
       method: "DELETE",
@@ -324,7 +336,10 @@ export default function SuperAdminPage() {
     }
 
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch("/api/platform/admin/invite", {
       method: "POST",
@@ -371,7 +386,10 @@ export default function SuperAdminPage() {
     }
 
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBrandingBusy(false);
+      return;
+    }
 
     const form = new FormData();
     form.append("file", platformLogoFile);
@@ -405,7 +423,10 @@ export default function SuperAdminPage() {
     setOk("");
 
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setBrandingBusy(false);
+      return;
+    }
 
     const res = await fetch("/api/platform/branding", {
       method: "DELETE",

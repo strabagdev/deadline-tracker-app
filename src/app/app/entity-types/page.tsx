@@ -114,7 +114,10 @@ export default function EntityTypesPage() {
   async function loadTypes() {
     setMsg("");
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch("/api/entity-types", {
       headers: { Authorization: `Bearer ${token}` },
@@ -133,7 +136,10 @@ export default function EntityTypesPage() {
     setBusy(true);
     setMsg("");
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const name = newTypeName.trim();
     if (!name) {
@@ -166,7 +172,10 @@ export default function EntityTypesPage() {
   async function loadFields(entityTypeId: string) {
     setMsg("");
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(
       `/api/entity-fields?entity_type_id=${encodeURIComponent(entityTypeId)}`,
@@ -195,7 +204,10 @@ export default function EntityTypesPage() {
     setBusy(true);
     setMsg("");
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const name = newFieldName.trim();
     if (!name) {
@@ -257,7 +269,10 @@ export default function EntityTypesPage() {
     setMsg("");
 
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/entity-fields?id=${encodeURIComponent(editingFieldId)}`, {
       method: "PUT",
@@ -287,7 +302,10 @@ export default function EntityTypesPage() {
     setBusy(true);
     setMsg("");
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/entity-fields?id=${encodeURIComponent(fieldId)}`, {
       method: "DELETE",

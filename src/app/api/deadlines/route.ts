@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getOrgAccess } from "@/lib/server/orgAccess";
+import { canViewModule, getOrgAccess, isAdminRole } from "@/lib/server/orgAccess";
 import {
   computeDateStatus,
   computeUsageStatus,
@@ -560,6 +560,10 @@ export async function GET(req: Request) {
         { status: access.error === "no active organization" ? 400 : 403 }
       );
     }
+    const canEntities = await canViewModule(db, access.organizationId, access.role, access.memberTypeId, "entities");
+    if (!canEntities) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
+    }
     const orgId = access.organizationId;
 
     const url = new URL(req.url);
@@ -630,6 +634,10 @@ export async function POST(req: Request) {
         { status: access.error === "no active organization" ? 400 : 403 }
       );
     }
+    const canEntities = await canViewModule(db, access.organizationId, access.role, access.memberTypeId, "entities");
+    if (!canEntities || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
+    }
     const body = await req.json().catch(() => ({}));
     const response = await handleDeadlinesPost(access.organizationId, body, makeDeadlinesRepo(db, user.id));
     const entityId = typeof response.body?.entity_id === "string" ? response.body.entity_id : "";
@@ -663,6 +671,10 @@ export async function PUT(req: Request) {
         { status: access.error === "no active organization" ? 400 : 403 }
       );
     }
+    const canEntities = await canViewModule(db, access.organizationId, access.role, access.memberTypeId, "entities");
+    if (!canEntities || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
+    }
     const body = await req.json().catch(() => ({}));
     const response = await handleDeadlinesPut(access.organizationId, body, makeDeadlinesRepo(db, user.id));
     const entityId = typeof response.body?.entity_id === "string" ? response.body.entity_id : "";
@@ -695,6 +707,10 @@ export async function DELETE(req: Request) {
         { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
         { status: access.error === "no active organization" ? 400 : 403 }
       );
+    }
+    const canEntities = await canViewModule(db, access.organizationId, access.role, access.memberTypeId, "entities");
+    if (!canEntities || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
     const url = new URL(req.url);
     const id = String(url.searchParams.get("id") ?? "").trim();

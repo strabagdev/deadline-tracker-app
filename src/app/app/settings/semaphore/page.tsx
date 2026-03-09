@@ -97,7 +97,10 @@ export default function SemaphoreSettingsPage() {
     setOkMsg("");
 
     const token = await getTokenOrRedirect();
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
     const res = await fetch("/api/settings/semaphore", {
       headers: { Authorization: `Bearer ${token}` },

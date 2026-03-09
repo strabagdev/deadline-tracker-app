@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getAdminOrgAccess, getErrorMessage } from "@/lib/server/adminOrgAccess";
+import { canViewModule, getOrgAccess, isAdminRole } from "@/lib/server/orgAccess";
 
 type MemberRow = {
   user_id: string;
@@ -20,13 +20,18 @@ export async function GET(req: Request) {
   try {
     const { user: requester } = await requireAuthUser(req);
     const db = createDataServerClient();
-
-    const ctx = await getAdminOrgAccess(db, requester.id);
-    if ("error" in ctx) {
-      return NextResponse.json({ error: ctx.error, code: "FORBIDDEN" }, { status: 403 });
+    const access = await getOrgAccess(db, requester.id);
+    if ("error" in access) {
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
     }
-
-    const { organizationId } = ctx;
+    const canUsers = await canViewModule(db, access.organizationId, access.role, access.memberTypeId, "users");
+    if (!canUsers || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
+    }
+    const organizationId = access.organizationId;
 
     const { data: members, error: memErr } = await db
       .from("organization_members")
@@ -63,6 +68,9 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ organization_id: organizationId, members: enriched });
   } catch (error: unknown) {
-    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "error", code: "INTERNAL_ERROR" },
+      { status: 500 }
+    );
   }
 }

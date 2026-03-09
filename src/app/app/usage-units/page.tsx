@@ -142,7 +142,10 @@ export default function UsageUnitsPage() {
   async function loadUnits() {
     setMsg("");
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch("/api/usage-units", {
       headers: { Authorization: `Bearer ${token}` },
@@ -161,7 +164,10 @@ export default function UsageUnitsPage() {
     setBusy(true);
     setMsg("");
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const name = newUnitName.trim();
     if (!name) {
@@ -197,7 +203,10 @@ export default function UsageUnitsPage() {
     setBusy(true);
     setMsg("");
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/usage-units?id=${encodeURIComponent(unitId)}&hard=1`, {
       method: "DELETE",
@@ -238,7 +247,10 @@ export default function UsageUnitsPage() {
     setBusy(true);
     setMsg("");
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/usage-units?id=${encodeURIComponent(editingUnitId)}`, {
       method: "PUT",
@@ -265,7 +277,10 @@ export default function UsageUnitsPage() {
     setBusy(true);
     setMsg("");
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const suggestedValues = selectedSuggestedValuesDraft
       .split(",")
@@ -297,7 +312,10 @@ export default function UsageUnitsPage() {
     setBusy(true);
     setMsg("");
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/usage-units?id=${encodeURIComponent(unitId)}`, {
       method: "PUT",
@@ -325,7 +343,10 @@ export default function UsageUnitsPage() {
   async function loadFields(usageUnitId: string) {
     setMsg("");
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/usage-fields?usage_unit_id=${encodeURIComponent(usageUnitId)}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -347,7 +368,10 @@ export default function UsageUnitsPage() {
     setBusy(true);
     setMsg("");
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const name = newFieldName.trim();
     const options = newFieldOptions
@@ -407,7 +431,10 @@ export default function UsageUnitsPage() {
     setBusy(true);
     setMsg("");
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/usage-fields?id=${encodeURIComponent(editingFieldId)}`, {
       method: "PUT",
@@ -442,7 +469,10 @@ export default function UsageUnitsPage() {
     setBusy(true);
     setMsg("");
     const token = await getTokenOrRedirect(router);
-    if (!token) return;
+    if (!token) {
+      setBusy(false);
+      return;
+    }
 
     const res = await fetch(`/api/usage-fields?id=${encodeURIComponent(fieldId)}`, {
       method: "DELETE",

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getOrgAccess, isAdminRole } from "@/lib/server/orgAccess";
+import { canViewModule, getOrgAccess, isAdminRole } from "@/lib/server/orgAccess";
 import {
   handleEntitiesDelete,
   handleEntitiesPost,
@@ -266,6 +266,13 @@ export async function POST(req: Request) {
         { status: access.error === "no active organization" ? 400 : 403 }
       );
     }
+    const canEntities = await canViewModule(db, access.organizationId, access.role, access.memberTypeId, "entities");
+    if (!canEntities) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
+    }
+    if (!isAdminRole(access.role)) {
+      return NextResponse.json({ error: "admin/owner only", code: "FORBIDDEN" }, { status: 403 });
+    }
     const body = await req.json().catch(() => ({}));
     const response = await handleEntitiesPost(access.organizationId, body, makeRepo(db));
     return NextResponse.json(response.body, { status: response.status });
@@ -284,6 +291,13 @@ export async function PUT(req: Request) {
         { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
         { status: access.error === "no active organization" ? 400 : 403 }
       );
+    }
+    const canEntities = await canViewModule(db, access.organizationId, access.role, access.memberTypeId, "entities");
+    if (!canEntities) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
+    }
+    if (!isAdminRole(access.role)) {
+      return NextResponse.json({ error: "admin/owner only", code: "FORBIDDEN" }, { status: 403 });
     }
     const url = new URL(req.url);
     const id = url.searchParams.get("id");

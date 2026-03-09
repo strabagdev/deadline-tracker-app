@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getAdminOrgAccess, getOrgAccess } from "@/lib/server/orgAccess";
+import { canViewModule, getOrgAccess, isAdminRole } from "@/lib/server/orgAccess";
 
 function getErrorMessage(err: unknown) {
   return err instanceof Error ? err.message : "error";
@@ -43,6 +43,16 @@ export async function GET(req: Request) {
         { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
         { status: access.error === "no active organization" ? 400 : 403 }
       );
+    }
+    const canSemaphore = await canViewModule(
+      db,
+      access.organizationId,
+      access.role,
+      access.memberTypeId,
+      "semaphore"
+    );
+    if (!canSemaphore) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
 
     const { data, error } = await db
@@ -110,12 +120,22 @@ export async function PUT(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-    const access = await getAdminOrgAccess(db, user.id);
+    const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
-      const status = access.error === "no active organization" ? 400 : 403;
-      const error = access.error === "forbidden" ? "admin/owner only" : access.error;
-      const code = access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN";
-      return NextResponse.json({ error, code }, { status });
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
+    }
+    const canSemaphore = await canViewModule(
+      db,
+      access.organizationId,
+      access.role,
+      access.memberTypeId,
+      "semaphore"
+    );
+    if (!canSemaphore || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;

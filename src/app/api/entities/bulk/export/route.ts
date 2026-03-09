@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { getAdminOrgAccess } from "@/lib/server/orgAccess";
+import { canViewModule, getOrgAccess, isAdminRole } from "@/lib/server/orgAccess";
 import { toCsv } from "@/lib/csv/simpleCsv";
 
 function getErrorMessage(error: unknown): string {
@@ -50,12 +50,16 @@ export async function GET(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-    const access = await getAdminOrgAccess(db, user.id);
+    const access = await getOrgAccess(db, user.id);
     if ("error" in access) {
       return NextResponse.json(
         { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
         { status: access.error === "no active organization" ? 400 : 403 }
       );
+    }
+    const canEntities = await canViewModule(db, access.organizationId, access.role, access.memberTypeId, "entities");
+    if (!canEntities || !isAdminRole(access.role)) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
     const orgId = access.organizationId;
     const url = new URL(req.url);

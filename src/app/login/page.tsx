@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -263,12 +264,12 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto mt-10 w-full max-w-md px-4">
+    <main className="mx-auto mt-6 w-full max-w-md px-2 sm:mt-10 sm:px-4">
       <Card>
         <CardHeader className="space-y-2">
           {platformLogoUrl ? (
             <div className="flex justify-center pb-2">
-              <img
+              <Image
                 src={platformLogoUrl}
                 alt="Logo plataforma"
                 width={110}
