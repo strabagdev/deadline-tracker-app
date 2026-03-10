@@ -86,11 +86,14 @@ export default function UsersAdminPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
+  const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
   const [inviteRole, setInviteRole] = useState<Role>("member");
   const [memberTypeId, setMemberTypeId] = useState<string>("");
 
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [inviteCooldownUntil, setInviteCooldownUntil] = useState<number>(0);
+  const [nowTs, setNowTs] = useState(() => Date.now());
 
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -148,6 +151,7 @@ export default function UsersAdminPage() {
     () => summarizeMemberType(selectedEditMemberType, usageCaptureSubmodules),
     [selectedEditMemberType, usageCaptureSubmodules]
   );
+  const canInviteEmail = nowTs >= inviteCooldownUntil;
 
   async function getTokenOrRedirect() {
     const { data } = await supabaseAuth.auth.getSession();
@@ -241,6 +245,12 @@ export default function UsersAdminPage() {
     }
   }, [editCompatibleMemberTypes, editMemberTypeId]);
 
+  useEffect(() => {
+    if (inviteCooldownUntil <= nowTs) return;
+    const id = window.setInterval(() => setNowTs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [inviteCooldownUntil, nowTs]);
+
   async function invite() {
     setBusy(true);
     setError("");
@@ -252,9 +262,15 @@ export default function UsersAdminPage() {
       return;
     }
 
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail) {
+    if (!normalizedEmail) {
       setError("Email requerido");
+      setBusy(false);
+      return;
+    }
+
+    if (!canInviteEmail) {
+      const seconds = Math.max(1, Math.ceil((inviteCooldownUntil - Date.now()) / 1000));
+      setError(`Espera ${seconds}s antes de reenviar la invitación a ${normalizedEmail}.`);
       setBusy(false);
       return;
     }
@@ -265,17 +281,25 @@ export default function UsersAdminPage() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ email: cleanEmail, role: inviteRole, member_type_id: memberTypeId || null }),
+      body: JSON.stringify({ email: normalizedEmail, role: inviteRole, member_type_id: memberTypeId || null }),
     });
 
     const json = await res.json().catch(() => ({}));
 
     if (!res.ok) {
+      if (json.code === "INVITE_EMAIL_COOLDOWN") {
+        const cooldownUntil = new Date(String(json.cooldown_until ?? "")).getTime();
+        if (Number.isFinite(cooldownUntil)) {
+          setInviteCooldownUntil(cooldownUntil);
+          setNowTs(Date.now());
+        }
+      }
       setError(json.error || "No se pudo invitar");
       setBusy(false);
       return;
     }
 
+    setInviteCooldownUntil(0);
     setMessage(
       json.delivery === "existing_user_linked"
         ? "Usuario existente vinculado a la organización. No se envió correo de invitación."
@@ -548,12 +572,20 @@ export default function UsersAdminPage() {
             <label>Email</label>
             <input
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setError("");
+              }}
               placeholder="persona@empresa.com"
               type="email"
               style={{ width: "100%", padding: 10, marginTop: 6 }}
               disabled={busy}
             />
+            {!canInviteEmail && normalizedEmail ? (
+              <div style={{ marginTop: 6, fontSize: 12, color: "#92400e" }}>
+                Supabase enfrió este correo. Reintenta en {Math.max(1, Math.ceil((inviteCooldownUntil - nowTs) / 1000))}s.
+              </div>
+            ) : null}
           </div>
 
           <div>
@@ -603,8 +635,8 @@ export default function UsersAdminPage() {
             ) : null}
           </div>
 
-          <button onClick={invite} disabled={busy} style={{ padding: 12, width: "100%" }}>
-            {busy ? "Invitando..." : "Invitar"}
+          <button onClick={invite} disabled={busy || !canInviteEmail} style={{ padding: 12, width: "100%" }}>
+            {busy ? "Invitando..." : !canInviteEmail ? `Espera ${Math.max(1, Math.ceil((inviteCooldownUntil - nowTs) / 1000))}s` : "Invitar"}
           </button>
         </div>
       </section>

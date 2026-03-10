@@ -15,9 +15,45 @@ type MemberListRow = {
   organization_member_types?: { name?: string | null } | { name?: string | null }[] | null;
 };
 
+type InviteCooldownRow = {
+  cooldown_until: string;
+  last_error?: string | null;
+};
+
+const INVITE_EMAIL_COOLDOWN_MS = 75_000;
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return "error";
+}
+
+function isInviteRateLimitError(raw: string) {
+  const lower = raw.toLowerCase();
+  return lower.includes("rate limit") || lower.includes("too many requests") || lower.includes("429");
+}
+
+function getRetrySecondsFromMessage(raw: string): number | null {
+  const lower = raw.toLowerCase();
+  const match = lower.match(/(\d+)\s*seconds?/);
+  if (!match) return null;
+  const seconds = Number(match[1]);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+}
+
+function buildCooldownResponse(email: string, cooldownUntilIso: string, reason?: string | null) {
+  const retryMs = new Date(cooldownUntilIso).getTime() - Date.now();
+  const retrySeconds = Math.max(1, Math.ceil(retryMs / 1000));
+  return NextResponse.json(
+    {
+      error: `Espera ${retrySeconds}s antes de reenviar la invitación a ${email}.`,
+      code: "INVITE_EMAIL_COOLDOWN",
+      email,
+      cooldown_until: cooldownUntilIso,
+      retry_seconds: retrySeconds,
+      provider_error: reason ?? null,
+    },
+    { status: 429 }
+  );
 }
 
 /*
@@ -107,6 +143,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "invalid role", code: "BAD_REQUEST" }, { status: 400 });
     }
 
+    const existingAuthUserId = await findAuthUserIdByEmail(email);
+
     let effectiveRole = role;
     let effectiveMemberTypeId: string | null = memberTypeId || null;
     if (memberTypeId) {
@@ -129,28 +167,66 @@ export async function POST(req: Request) {
       effectiveMemberTypeId = String(mt.id);
     }
 
-    const supabaseAuthAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_AUTH_URL!,
-      process.env.SUPABASE_AUTH_SERVICE_ROLE_KEY!
-    );
+    let invitedUserId = existingAuthUserId;
+    const inviteDelivery: "email_sent" | "existing_user_linked" = existingAuthUserId ? "existing_user_linked" : "email_sent";
 
-    const redirectTo = `${getPublicAppOrigin(req)}/auth/callback`;
-    const { data: inviteData, error: inviteErr } =
-      await supabaseAuthAdmin.auth.admin.inviteUserByEmail(email, {
-        redirectTo,
-        data: { needs_temp_password: true },
-      });
+    if (!existingAuthUserId) {
+      const { data: cooldownRow, error: cooldownReadErr } = await db
+        .from("organization_invite_email_cooldowns")
+        .select("cooldown_until, last_error")
+        .eq("organization_id", organizationId)
+        .eq("email", email)
+        .maybeSingle<InviteCooldownRow>();
+      if (cooldownReadErr) throw cooldownReadErr;
 
-    let invitedUserId = inviteData.user?.id ?? null;
-    let inviteDelivery: "email_sent" | "existing_user_linked" = "email_sent";
-    if (inviteErr) {
-      // Si ya existe en Auth, reusamos profile para asignar membership en la org.
-      if (inviteErr.message.toLowerCase().includes("already")) {
-        invitedUserId = await findAuthUserIdByEmail(email);
-        inviteDelivery = "existing_user_linked";
-      } else {
+      if (cooldownRow) {
+        const cooldownUntilTs = new Date(cooldownRow.cooldown_until).getTime();
+        if (Number.isFinite(cooldownUntilTs) && cooldownUntilTs > Date.now()) {
+          return buildCooldownResponse(email, cooldownRow.cooldown_until, cooldownRow.last_error);
+        }
+      }
+
+      const supabaseAuthAdmin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_AUTH_URL!,
+        process.env.SUPABASE_AUTH_SERVICE_ROLE_KEY!
+      );
+
+      const redirectTo = `${getPublicAppOrigin(req)}/auth/callback`;
+      const { data: inviteData, error: inviteErr } =
+        await supabaseAuthAdmin.auth.admin.inviteUserByEmail(email, {
+          redirectTo,
+          data: { needs_temp_password: true },
+        });
+
+      if (inviteErr) {
+        if (isInviteRateLimitError(inviteErr.message)) {
+          const retrySeconds = getRetrySecondsFromMessage(inviteErr.message);
+          const cooldownUntil = new Date(Date.now() + (retrySeconds ? retrySeconds * 1000 + 2_000 : INVITE_EMAIL_COOLDOWN_MS)).toISOString();
+          const { error: cooldownWriteErr } = await db.from("organization_invite_email_cooldowns").upsert(
+            {
+              organization_id: organizationId,
+              email,
+              cooldown_until: cooldownUntil,
+              last_error: inviteErr.message,
+              last_requested_by: requester.id,
+            },
+            { onConflict: "organization_id,email" }
+          );
+          if (cooldownWriteErr) throw cooldownWriteErr;
+          return buildCooldownResponse(email, cooldownUntil, inviteErr.message);
+        }
+
         return NextResponse.json({ error: inviteErr.message, code: "BAD_REQUEST" }, { status: 400 });
       }
+
+      invitedUserId = inviteData.user?.id ?? null;
+
+      const { error: cooldownClearErr } = await db
+        .from("organization_invite_email_cooldowns")
+        .delete()
+        .eq("organization_id", organizationId)
+        .eq("email", email);
+      if (cooldownClearErr) throw cooldownClearErr;
     }
 
     if (!invitedUserId) {
