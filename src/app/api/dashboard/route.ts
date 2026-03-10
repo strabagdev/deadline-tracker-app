@@ -200,7 +200,14 @@ async function getDynamicDistributionByEntityType(
   const fields = (fieldsData ?? []) as Array<{ id: string; entity_type_id: string | null; name: string | null; analytics_mode: string | null }>;
   if (fields.length === 0) return out;
 
-  const fieldsById = new Map(
+  const fieldsById = new Map<
+    string,
+    {
+      entity_type_id: string;
+      name: string;
+      analytics_mode: "distribution" | "trend" | "count";
+    }
+  >(
     fields.map((f) => [
       String(f.id),
       {
@@ -265,19 +272,13 @@ async function getDynamicDistributionByEntityType(
     const fieldKey = `${entityTypeId}::${fieldId}`;
     const entry =
       bucket.get(fieldKey) ??
-      ({
+      {
         entityTypeId,
         fieldId,
         fieldName: field.name,
         analyticsMode: field.analytics_mode,
         values: new Map<string, number>(),
-      } satisfies {
-        entityTypeId: string;
-        fieldId: string;
-        fieldName: string;
-        analyticsMode: "distribution" | "trend" | "count";
-        values: Map<string, number>;
-      });
+      };
     entry.values.set(value, (entry.values.get(value) ?? 0) + 1);
     bucket.set(fieldKey, entry);
   }
