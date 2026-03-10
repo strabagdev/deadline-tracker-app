@@ -20,6 +20,7 @@ type MemberRow = {
 type MemberType = {
   id: string;
   name: string;
+  base_role: Role;
   is_active: boolean;
   is_system: boolean;
   created_at: string;
@@ -66,9 +67,12 @@ export default function UsersAdminPage() {
   const [usageCaptureSubmodules, setUsageCaptureSubmodules] = useState<UsageCaptureSubmodule[]>([]);
 
   const [newTypeName, setNewTypeName] = useState("");
+  const [newTypeBaseRole, setNewTypeBaseRole] = useState<Role>("member");
   const [newTypeModules, setNewTypeModules] = useState<string[]>(["analytics_dashboard", "operations_dashboard", "forecast", "alerts", "reports_usage"]);
+  const [showCreateTypeForm, setShowCreateTypeForm] = useState(false);
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
   const [editTypeName, setEditTypeName] = useState("");
+  const [editTypeBaseRole, setEditTypeBaseRole] = useState<Role>("member");
   const [editTypeModules, setEditTypeModules] = useState<string[]>([]);
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [editMemberRole, setEditMemberRole] = useState<Role>("member");
@@ -84,6 +88,14 @@ export default function UsersAdminPage() {
   const activeMemberTypes = useMemo(
     () => memberTypes.filter((t) => t.is_active).sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" })),
     [memberTypes]
+  );
+  const inviteCompatibleMemberTypes = useMemo(
+    () => activeMemberTypes.filter((t) => t.base_role === inviteRole),
+    [activeMemberTypes, inviteRole]
+  );
+  const editCompatibleMemberTypes = useMemo(
+    () => activeMemberTypes.filter((t) => t.base_role === editMemberRole),
+    [activeMemberTypes, editMemberRole]
   );
 
   async function getTokenOrRedirect() {
@@ -165,6 +177,18 @@ export default function UsersAdminPage() {
       setMemberTypeId(String(list.find((x) => x.is_active)?.id ?? list[0].id));
     }
   }
+
+  useEffect(() => {
+    if (memberTypeId && !inviteCompatibleMemberTypes.some((t) => t.id === memberTypeId)) {
+      setMemberTypeId("");
+    }
+  }, [inviteCompatibleMemberTypes, memberTypeId]);
+
+  useEffect(() => {
+    if (editMemberTypeId && !editCompatibleMemberTypes.some((t) => t.id === editMemberTypeId)) {
+      setEditMemberTypeId("");
+    }
+  }, [editCompatibleMemberTypes, editMemberTypeId]);
 
   async function invite() {
     setBusy(true);
@@ -310,12 +334,14 @@ export default function UsersAdminPage() {
     if (t.is_system) return;
     setEditingTypeId(t.id);
     setEditTypeName(t.name);
+    setEditTypeBaseRole(t.base_role);
     setEditTypeModules(t.modules.filter((m) => m.can_view).map((m) => m.module_key));
   }
 
   function cancelEditMemberType() {
     setEditingTypeId(null);
     setEditTypeName("");
+    setEditTypeBaseRole("member");
     setEditTypeModules([]);
   }
 
@@ -353,7 +379,7 @@ export default function UsersAdminPage() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ name, modules: newTypeModules }),
+      body: JSON.stringify({ name, base_role: newTypeBaseRole, modules: newTypeModules }),
     });
 
     const json = await res.json().catch(() => ({}));
@@ -364,6 +390,8 @@ export default function UsersAdminPage() {
     }
 
     setNewTypeName("");
+    setNewTypeBaseRole("member");
+    setShowCreateTypeForm(false);
     setMessage("Tipo de miembro creado.");
     await loadMemberTypes(token);
     setBusy(false);
@@ -421,7 +449,7 @@ export default function UsersAdminPage() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ name, modules: editTypeModules }),
+      body: JSON.stringify({ name, base_role: editTypeBaseRole, modules: editTypeModules }),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -459,10 +487,25 @@ export default function UsersAdminPage() {
       )}
 
       <section style={{ marginTop: 16, border: "1px solid #eee", padding: 12 }}>
-        <h3 style={{ marginTop: 0 }}>Invitar usuario</h3>
-        <p style={{ marginTop: 4, opacity: 0.75 }}>
-          La invitación define el acceso base. Los permisos finos se pueden ajustar después por miembro.
-        </p>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div>
+            <h3 style={{ marginTop: 0 }}>Invitar usuario</h3>
+            <p style={{ marginTop: 4, opacity: 0.75 }}>
+              La invitación define el acceso base. Los permisos finos se pueden ajustar después por miembro.
+            </p>
+          </div>
+          {canManageTypes ? (
+            <button
+              type="button"
+              onClick={() => router.push("/app/users/test-invite")}
+              disabled={busy}
+              style={{ padding: 10 }}
+              title="Enviar una invitación de prueba desde Supabase"
+            >
+              Probar envío de correo
+            </button>
+          ) : null}
+        </div>
 
         <div style={{ display: "grid", gap: 10 }}>
           <div>
@@ -501,7 +544,7 @@ export default function UsersAdminPage() {
               disabled={busy}
             >
               <option value="">Sin plantilla</option>
-              {activeMemberTypes.map((t) => (
+              {inviteCompatibleMemberTypes.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
                 </option>
@@ -517,57 +560,92 @@ export default function UsersAdminPage() {
 
       {canManageTypes ? (
         <section style={{ marginTop: 16, border: "1px solid #eee", padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>Tipos de miembro (owner)</h3>
-
-          <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
-            <input
-              value={newTypeName}
-              onChange={(e) => setNewTypeName(e.target.value)}
-              placeholder="Ej: Operador, Auditor"
-              style={{ width: "100%", padding: 10 }}
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+            <h3 style={{ marginTop: 0, marginBottom: 0 }}>Tipos de miembro (owner)</h3>
+            <button
+              onClick={() => setShowCreateTypeForm((v) => !v)}
               disabled={busy}
-            />
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8 }}>
-              {MODULE_KEYS.map((m) => (
-                <label key={m} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                  <input
-                    type="checkbox"
-                    checked={newTypeModules.includes(m)}
-                    onChange={() => toggleNewTypeModule(m)}
-                    disabled={busy}
-                  />
-                  {m}
-                </label>
-              ))}
-            </div>
-            {newTypeModules.includes("usage_capture") && usageCaptureSubmodules.length > 0 ? (
-              <div style={{ display: "grid", gap: 6, padding: 8, border: "1px solid #eee", borderRadius: 8 }}>
-                <div style={{ fontSize: 12, opacity: 0.8 }}>Submódulos captura enfocada (tipos de entidad)</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8 }}>
-                  {usageCaptureSubmodules.map((s) => (
-                    <label key={s.module_key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                      <input
-                        type="checkbox"
-                        checked={newTypeModules.includes(s.module_key)}
-                        onChange={() => toggleNewTypeModule(s.module_key)}
-                        disabled={busy}
-                      />
-                      {s.entity_type_name}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            <button onClick={createMemberType} disabled={busy} style={{ padding: 10, width: 220 }}>
-              Crear tipo
+              style={{ padding: 10 }}
+            >
+              {showCreateTypeForm ? "Ocultar creación" : "Nueva plantilla"}
             </button>
           </div>
+
+          {showCreateTypeForm ? (
+            <div style={{ display: "grid", gap: 10, marginTop: 12, marginBottom: 12 }}>
+              <input
+                value={newTypeName}
+                onChange={(e) => setNewTypeName(e.target.value)}
+                placeholder="Ej: Operador, Auditor"
+                style={{ width: "100%", padding: 10 }}
+                disabled={busy}
+              />
+              <div>
+                <label>Rol base de la plantilla</label>
+                <select
+                  value={newTypeBaseRole}
+                  onChange={(e) => setNewTypeBaseRole(e.target.value as Role)}
+                  style={{ width: "100%", padding: 10, marginTop: 6 }}
+                  disabled={busy}
+                >
+                  <option value="viewer">viewer</option>
+                  <option value="member">member</option>
+                  <option value="admin">admin</option>
+                  <option value="owner">owner</option>
+                </select>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8 }}>
+                {MODULE_KEYS.map((m) => (
+                  <label key={m} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={newTypeModules.includes(m)}
+                      onChange={() => toggleNewTypeModule(m)}
+                      disabled={busy}
+                    />
+                    {m}
+                  </label>
+                ))}
+              </div>
+              {newTypeModules.includes("usage_capture") && usageCaptureSubmodules.length > 0 ? (
+                <div style={{ display: "grid", gap: 6, padding: 8, border: "1px solid #eee", borderRadius: 8 }}>
+                  <div style={{ fontSize: 12, opacity: 0.8 }}>Submódulos captura enfocada (tipos de entidad)</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8 }}>
+                    {usageCaptureSubmodules.map((s) => (
+                      <label key={s.module_key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                        <input
+                          type="checkbox"
+                          checked={newTypeModules.includes(s.module_key)}
+                          onChange={() => toggleNewTypeModule(s.module_key)}
+                          disabled={busy}
+                        />
+                        {s.entity_type_name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button onClick={createMemberType} disabled={busy} style={{ padding: 10, width: 220 }}>
+                  Crear tipo
+                </button>
+                <button
+                  onClick={() => setShowCreateTypeForm(false)}
+                  disabled={busy}
+                  style={{ padding: 10 }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
                   <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Tipo</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Rol base</th>
                   <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Módulos visibles</th>
                   <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Acción</th>
                 </tr>
@@ -587,6 +665,23 @@ export default function UsersAdminPage() {
                         <>
                           {t.name} {t.is_system ? "(sistema)" : ""} {t.is_active ? "" : "[inactivo]"}
                         </>
+                      )}
+                    </td>
+                    <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
+                      {editingTypeId === t.id ? (
+                        <select
+                          value={editTypeBaseRole}
+                          onChange={(e) => setEditTypeBaseRole(e.target.value as Role)}
+                          style={{ width: "100%", padding: 8 }}
+                          disabled={busy}
+                        >
+                          <option value="viewer">viewer</option>
+                          <option value="member">member</option>
+                          <option value="admin">admin</option>
+                          <option value="owner">owner</option>
+                        </select>
+                      ) : (
+                        t.base_role
                       )}
                     </td>
                     <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8, fontSize: 12 }}>
@@ -720,7 +815,7 @@ export default function UsersAdminPage() {
                             disabled={busy}
                           >
                             <option value="">Sin plantilla</option>
-                            {activeMemberTypes.map((t) => (
+                            {editCompatibleMemberTypes.map((t) => (
                               <option key={t.id} value={t.id}>
                                 {t.name}
                               </option>

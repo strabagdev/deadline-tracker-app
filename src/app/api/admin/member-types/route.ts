@@ -2,7 +2,15 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { canViewModule, getOrgAccess, isAdminRole } from "@/lib/server/orgAccess";
-import { MODULE_KEYS, USAGE_CAPTURE_SUBMODULE_PREFIX } from "@/lib/access/moduleKeys";
+import {
+  MODULE_KEYS,
+  MEMBER_TYPE_ROLE_PREFIX,
+  USAGE_CAPTURE_SUBMODULE_PREFIX,
+  decodeMemberTypeBaseRole,
+  encodeMemberTypeBaseRole,
+  inferMemberTypeBaseRole,
+  isBaseRole,
+} from "@/lib/access/moduleKeys";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
@@ -51,6 +59,7 @@ export async function GET(req: Request) {
 
     const typeIds = (types ?? []).map((t) => String(t.id));
     let modulesByType: Record<string, Array<{ module_key: string; can_view: boolean }>> = {};
+    const baseRoleByType: Record<string, "owner" | "admin" | "member" | "viewer" | null> = {};
     if (typeIds.length > 0) {
       const { data: modules, error: modErr } = await db
         .from("organization_member_type_modules")
@@ -61,9 +70,15 @@ export async function GET(req: Request) {
       modulesByType = {};
       for (const row of modules ?? []) {
         const k = String(row.member_type_id);
+        const moduleKey = String(row.module_key);
+        const baseRole = decodeMemberTypeBaseRole(moduleKey);
+        if (baseRole) {
+          baseRoleByType[k] = baseRole;
+          continue;
+        }
         if (!modulesByType[k]) modulesByType[k] = [];
         modulesByType[k].push({
-          module_key: String(row.module_key),
+          module_key: moduleKey,
           can_view: Boolean(row.can_view),
         });
       }
@@ -79,6 +94,7 @@ export async function GET(req: Request) {
       })),
       member_types: (types ?? []).map((t) => ({
         ...t,
+        base_role: baseRoleByType[String(t.id)] ?? inferMemberTypeBaseRole(String(t.name ?? "")) ?? "member",
         modules: modulesByType[String(t.id)] ?? [],
       })),
     });
@@ -108,7 +124,11 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
     const name = String(body?.name ?? "").trim();
+    const baseRoleRaw = String(body?.base_role ?? "member").trim().toLowerCase();
     if (!name) return NextResponse.json({ error: "name required", code: "BAD_REQUEST" }, { status: 400 });
+    if (!isBaseRole(baseRoleRaw)) {
+      return NextResponse.json({ error: "invalid base_role", code: "BAD_REQUEST" }, { status: 400 });
+    }
     const { data: entityTypes, error: etErr } = await db
       .from("entity_types")
       .select("id")
@@ -133,7 +153,7 @@ export async function POST(req: Request) {
 
     if (memberTypeId && modules.length > 0) {
       const { error: modErr } = await db.from("organization_member_type_modules").insert(
-        modules.map((m: string) => ({
+        [encodeMemberTypeBaseRole(baseRoleRaw), ...modules].map((m: string) => ({
           organization_id: access.organizationId,
           member_type_id: memberTypeId,
           module_key: m,
@@ -141,6 +161,14 @@ export async function POST(req: Request) {
         }))
       );
       if (modErr) throw modErr;
+    } else if (memberTypeId) {
+      const { error: roleErr } = await db.from("organization_member_type_modules").insert({
+        organization_id: access.organizationId,
+        member_type_id: memberTypeId,
+        module_key: encodeMemberTypeBaseRole(baseRoleRaw),
+        can_view: true,
+      });
+      if (roleErr) throw roleErr;
     }
 
     return NextResponse.json({ id: memberTypeId }, { status: 201 });
@@ -174,6 +202,7 @@ export async function PUT(req: Request) {
     const body = await req.json().catch(() => ({}));
     const name = body?.name != null ? String(body.name).trim() : null;
     const isActive = body?.is_active != null ? Boolean(body.is_active) : null;
+    const baseRoleRaw = body?.base_role != null ? String(body.base_role).trim().toLowerCase() : null;
     const modulesRaw = Array.isArray(body?.modules) ? body.modules : null;
     const { data: entityTypes, error: etErr } = await db
       .from("entity_types")
@@ -188,6 +217,9 @@ export async function PUT(req: Request) {
       patch.name = name;
     }
     if (isActive != null) patch.is_active = isActive;
+    if (baseRoleRaw != null && !isBaseRole(baseRoleRaw)) {
+      return NextResponse.json({ error: "invalid base_role", code: "BAD_REQUEST" }, { status: 400 });
+    }
 
     const { data: typeRow, error: typeErr } = await db
       .from("organization_member_types")
@@ -220,17 +252,30 @@ export async function PUT(req: Request) {
         .eq("member_type_id", id);
       if (delErr) throw delErr;
 
-      if (modules.length > 0) {
-        const { error: insModErr } = await db.from("organization_member_type_modules").insert(
-          modules.map((m: string) => ({
-            organization_id: access.organizationId,
-            member_type_id: id,
-            module_key: m,
-            can_view: true,
-          }))
-        );
-        if (insModErr) throw insModErr;
-      }
+      const effectiveBaseRole = (baseRoleRaw ?? inferMemberTypeBaseRole(String(typeRow.name ?? "")) ?? "member") as "owner" | "admin" | "member" | "viewer";
+      const nextModuleRows = [encodeMemberTypeBaseRole(effectiveBaseRole), ...modules].map((m: string) => ({
+        organization_id: access.organizationId,
+        member_type_id: id,
+        module_key: m,
+        can_view: true,
+      }));
+      const { error: insModErr } = await db.from("organization_member_type_modules").insert(nextModuleRows);
+      if (insModErr) throw insModErr;
+    } else if (baseRoleRaw != null) {
+      const { error: delRoleErr } = await db
+        .from("organization_member_type_modules")
+        .delete()
+        .eq("organization_id", access.organizationId)
+        .eq("member_type_id", id)
+        .like("module_key", `${MEMBER_TYPE_ROLE_PREFIX}%`);
+      if (delRoleErr) throw delRoleErr;
+      const { error: insRoleErr } = await db.from("organization_member_type_modules").insert({
+        organization_id: access.organizationId,
+        member_type_id: id,
+        module_key: encodeMemberTypeBaseRole(baseRoleRaw),
+        can_view: true,
+      });
+      if (insRoleErr) throw insRoleErr;
     }
 
     return NextResponse.json({ ok: true });
