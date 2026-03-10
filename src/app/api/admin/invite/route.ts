@@ -4,7 +4,9 @@ import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { canViewModule, getOrgAccess, isAdminRole } from "@/lib/server/orgAccess";
 import { createClient } from "@supabase/supabase-js";
 import { findAuthUserIdByEmail } from "@/lib/server/authAdmin";
-import { getPublicAppOrigin } from "@/lib/server/publicAppOrigin";
+import { getPublicAppUrl } from "@/lib/server/publicAppOrigin";
+import { AuthEmailProviderError, isResendConfigured, sendAuthEmail } from "@/lib/server/authEmail";
+import type { GenerateLinkResponse } from "@supabase/auth-js";
 
 type MemberListRow = {
   user_id: string;
@@ -129,6 +131,12 @@ export async function POST(req: Request) {
     }
 
     const organizationId = access.organizationId;
+    const { data: org, error: orgErr } = await db
+      .from("organizations")
+      .select("id,name")
+      .eq("id", organizationId)
+      .maybeSingle();
+    if (orgErr) throw orgErr;
 
     const body = await req.json();
     const email = String(body.email || "").trim().toLowerCase();
@@ -191,12 +199,33 @@ export async function POST(req: Request) {
         process.env.SUPABASE_AUTH_SERVICE_ROLE_KEY!
       );
 
-      const redirectTo = `${getPublicAppOrigin(req)}/auth/callback`;
-      const { data: inviteData, error: inviteErr } =
-        await supabaseAuthAdmin.auth.admin.inviteUserByEmail(email, {
+      const redirectTo = getPublicAppUrl(req, "/auth/callback");
+      const shouldUseResend = isResendConfigured();
+      let inviteData: { user: { id?: string | null } | null; properties?: GenerateLinkResponse["data"]["properties"] | null } = { user: null };
+      let inviteErr: { message: string } | null = null;
+
+      if (shouldUseResend) {
+        const result = await supabaseAuthAdmin.auth.admin.generateLink({
+          type: "invite",
+          email,
+          options: {
+            redirectTo,
+            data: { needs_temp_password: true },
+          },
+        });
+        inviteData = {
+          user: result.data.user,
+          properties: result.data.properties,
+        };
+        inviteErr = result.error;
+      } else {
+        const result = await supabaseAuthAdmin.auth.admin.inviteUserByEmail(email, {
           redirectTo,
           data: { needs_temp_password: true },
         });
+        inviteData = { user: result.data.user };
+        inviteErr = result.error;
+      }
 
       if (inviteErr) {
         if (isInviteRateLimitError(inviteErr.message)) {
@@ -217,6 +246,40 @@ export async function POST(req: Request) {
         }
 
         return NextResponse.json({ error: inviteErr.message, code: "BAD_REQUEST" }, { status: 400 });
+      }
+
+      if (shouldUseResend) {
+        const actionLink = inviteData.properties?.action_link ?? "";
+        if (!actionLink) {
+          return NextResponse.json({ error: "No se pudo generar el enlace de invitación", code: "BAD_REQUEST" }, { status: 400 });
+        }
+        try {
+          await sendAuthEmail({
+            kind: "invite",
+            to: email,
+            actionUrl: actionLink,
+            organizationName: org?.name ?? null,
+          });
+        } catch (sendError: unknown) {
+          const message = sendError instanceof Error ? sendError.message : "Failed to send invite email";
+          const providerError = sendError instanceof AuthEmailProviderError ? sendError : null;
+          if (providerError?.status === 429) {
+            const cooldownUntil = new Date(Date.now() + INVITE_EMAIL_COOLDOWN_MS).toISOString();
+            const { error: cooldownWriteErr } = await db.from("organization_invite_email_cooldowns").upsert(
+              {
+                organization_id: organizationId,
+                email,
+                cooldown_until: cooldownUntil,
+                last_error: message,
+                last_requested_by: requester.id,
+              },
+              { onConflict: "organization_id,email" }
+            );
+            if (cooldownWriteErr) throw cooldownWriteErr;
+            return buildCooldownResponse(email, cooldownUntil, message);
+          }
+          return NextResponse.json({ error: message, code: "BAD_REQUEST" }, { status: 400 });
+        }
       }
 
       invitedUserId = inviteData.user?.id ?? null;

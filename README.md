@@ -1,36 +1,142 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Deadline Tracker
 
-## Getting Started
+Aplicación Next.js con Supabase Auth para acceso por invitación, restablecimiento de contraseña y membresías por organización.
 
-First, run the development server:
+## Desarrollo
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Variables de entorno
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Define la URL pública de la app con una de estas variables:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```env
+SITE_URL=https://tu-dominio.com
+APP_URL=https://tu-dominio.com
+```
 
-## Learn More
+Compatibilidad heredada:
 
-To learn more about Next.js, take a look at the following resources:
+```env
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Prioridad actual en servidor:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. `SITE_URL`
+2. `APP_URL`
+3. `NEXT_PUBLIC_APP_URL`
+4. origen inferido del request
 
-## Deploy on Vercel
+Para Resend:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```env
+RESEND_API_KEY=re_xxxxxxxxx
+RESEND_FROM_EMAIL=no-reply@tu-dominio.com
+RESEND_FROM_NAME=Deadline Tracker
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Supabase Auth en este proyecto
+
+Usos actuales detectados:
+
+- `inviteUserByEmail`
+  - [src/app/api/admin/invite/route.ts](/home/dannysilver/dev2026/deadline-tracker/src/app/api/admin/invite/route.ts)
+  - [src/app/api/platform/admin/invite/route.ts](/home/dannysilver/dev2026/deadline-tracker/src/app/api/platform/admin/invite/route.ts)
+- `resetPasswordForEmail`
+  - [src/app/api/auth/password-reset/request/route.ts](/home/dannysilver/dev2026/deadline-tracker/src/app/api/auth/password-reset/request/route.ts)
+- `signInWithOtp`
+  - no se usa actualmente
+- `signUp`
+  - no se usa actualmente
+
+### `redirectTo`
+
+Todos los flujos que envían correo desde Supabase Auth quedaron centralizados así:
+
+- invitaciones: `SITE_URL|APP_URL|NEXT_PUBLIC_APP_URL + /auth/callback`
+- reset password: `SITE_URL|APP_URL|NEXT_PUBLIC_APP_URL + /reset-password`
+
+Helper usado:
+
+- [publicAppOrigin.ts](/home/dannysilver/dev2026/deadline-tracker/src/lib/server/publicAppOrigin.ts)
+
+### Resend + Supabase Auth
+
+Cuando `RESEND_API_KEY` y `RESEND_FROM_EMAIL` están configuradas:
+
+- las invitaciones generan el link con `auth.admin.generateLink({ type: "invite" })`
+- el reset password genera el link con `auth.admin.generateLink({ type: "recovery" })`
+- el correo se envía con Resend desde la app
+
+Cuando Resend no está configurado:
+
+- se mantiene el envío nativo de Supabase Auth
+
+## Callback de autenticación
+
+La ruta que recibe magic links e invitaciones ya existe:
+
+- [src/app/auth/callback/page.tsx](/home/dannysilver/dev2026/deadline-tracker/src/app/auth/callback/page.tsx)
+
+Qué hace:
+
+1. Lee `code` o `token_hash` desde la URL.
+2. Intercambia/verifica el token con Supabase Auth.
+3. Sincroniza perfil local.
+4. Provisiona contraseña provisoria si corresponde a una invitación.
+5. Redirige a `select-org`, `setup-super-admin` o `app/super-admin`.
+
+## SMTP externo en Supabase
+
+Este proyecto sigue usando Supabase Auth para:
+
+- invitaciones
+- magic links
+- recovery / reset password
+
+Este proyecto ahora puede enviar correos de invitación y recovery con Resend desde la app, pero también puedes seguir usando SMTP externo en Supabase Dashboard si prefieres que Supabase entregue sus propias plantillas.
+
+Si quieres usar tu propio proveedor SMTP (por ejemplo Resend), configúralo directamente en Supabase Dashboard:
+
+1. Abre tu proyecto en Supabase.
+2. Ve a `Authentication`.
+3. Entra a `Email Settings` o `SMTP Settings`.
+4. Desactiva el proveedor por defecto si aplica.
+5. Configura tu SMTP externo con:
+   - host
+   - port
+   - username
+   - password / API key SMTP
+   - sender name
+   - sender email
+6. Guarda y prueba los templates de:
+   - Invite
+   - Magic Link
+   - Reset Password
+
+### Ejemplo con Resend SMTP
+
+Valores típicos:
+
+- host: `smtp.resend.com`
+- port: `465` o `587`
+- username: `resend`
+- password: API key SMTP de Resend
+
+Antes de probar:
+
+1. Verifica el dominio/remitente en Resend.
+2. Agrega en Supabase Auth las Redirect URLs válidas:
+   - `https://tu-dominio.com/auth/callback`
+   - `https://tu-dominio.com/reset-password`
+3. Asegúrate de que `SITE_URL` o `APP_URL` coincida con el dominio público real.
+
+## Notas operativas
+
+- Si cambias de dominio, actualiza `SITE_URL` / `APP_URL` y las Redirect URLs de Supabase Auth.
+- Si usas Vercel o un proxy, el servidor también puede inferir el host desde `x-forwarded-host` y `x-forwarded-proto`.
+- Si activas Resend en código, el SMTP configurado en Supabase ya no participa en invitaciones y recovery de este proyecto.

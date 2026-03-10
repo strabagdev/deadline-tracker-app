@@ -45,11 +45,6 @@ export default function LoginPage() {
 
   const canSendReset = nowTs > resetCooldownUntil;
 
-  function getBaseUrl() {
-    // Prioriza el origen real del browser para evitar links con host desactualizado.
-    return window.location.origin || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  }
-
   function humanizeAuthErrorMessage(raw: string) {
     const lower = raw.toLowerCase();
     if (lower.includes("rate limit") || lower.includes("too many requests") || lower.includes("429")) {
@@ -233,15 +228,11 @@ export default function LoginPage() {
     applyCooldownUntil(Date.now() + AUTH_EMAIL_COOLDOWN_MS);
 
     try {
-      const baseUrl = getBaseUrl();
-      const redirectTo = `${baseUrl}/reset-password`;
-
       const res = await fetch("/api/auth/password-reset/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: normalizedEmail,
-          redirectTo,
         }),
       });
 

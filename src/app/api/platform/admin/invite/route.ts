@@ -4,7 +4,9 @@ import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { isSuperAdmin } from "@/lib/server/superAdmin";
 import { createAuthAdminClient, findAuthUserIdByEmail } from "@/lib/server/authAdmin";
 import { parsePlatformInvitePayload } from "@/lib/api/platformAdminInput";
-import { getPublicAppOrigin } from "@/lib/server/publicAppOrigin";
+import { getPublicAppUrl } from "@/lib/server/publicAppOrigin";
+import { isResendConfigured, sendAuthEmail } from "@/lib/server/authEmail";
+import type { GenerateLinkResponse } from "@supabase/auth-js";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
@@ -36,11 +38,32 @@ export async function POST(req: Request) {
 
     const authAdmin = createAuthAdminClient();
 
-    const redirectTo = `${getPublicAppOrigin(req)}/auth/callback`;
-    const { data: inviteData, error: inviteErr } = await authAdmin.auth.admin.inviteUserByEmail(email, {
-      redirectTo,
-      data: { needs_temp_password: true },
-    });
+    const redirectTo = getPublicAppUrl(req, "/auth/callback");
+    const shouldUseResend = isResendConfigured();
+    let inviteData: { user: { id?: string | null } | null; properties?: GenerateLinkResponse["data"]["properties"] | null } = { user: null };
+    let inviteErr: { message: string } | null = null;
+    if (shouldUseResend) {
+      const result = await authAdmin.auth.admin.generateLink({
+        type: "invite",
+        email,
+        options: {
+          redirectTo,
+          data: { needs_temp_password: true },
+        },
+      });
+      inviteData = {
+        user: result.data.user,
+        properties: result.data.properties,
+      };
+      inviteErr = result.error;
+    } else {
+      const result = await authAdmin.auth.admin.inviteUserByEmail(email, {
+        redirectTo,
+        data: { needs_temp_password: true },
+      });
+      inviteData = { user: result.data.user };
+      inviteErr = result.error;
+    }
 
     let invitedUserId = inviteData.user?.id ?? null;
     if (inviteErr) {
@@ -54,6 +77,15 @@ export async function POST(req: Request) {
 
     if (!invitedUserId) {
       invitedUserId = await findAuthUserIdByEmail(email);
+    }
+
+    if (shouldUseResend && inviteData.properties?.action_link) {
+      await sendAuthEmail({
+        kind: "invite",
+        to: email,
+        actionUrl: inviteData.properties.action_link,
+        organizationName: org.name,
+      });
     }
 
     if (!invitedUserId) {
