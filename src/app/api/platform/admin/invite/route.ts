@@ -5,7 +5,7 @@ import { isSuperAdmin } from "@/lib/server/superAdmin";
 import { createAuthAdminClient, findAuthUserIdByEmail } from "@/lib/server/authAdmin";
 import { parsePlatformInvitePayload } from "@/lib/api/platformAdminInput";
 import { getPublicAppUrl } from "@/lib/server/publicAppOrigin";
-import { isResendConfigured, sendAuthEmail } from "@/lib/server/authEmail";
+import { ensureSupabaseRedirect, isResendConfigured, sendAuthEmail } from "@/lib/server/authEmail";
 import type { GenerateLinkResponse } from "@supabase/auth-js";
 
 function getErrorMessage(error: unknown): string {
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
       await sendAuthEmail({
         kind: "invite",
         to: email,
-        actionUrl: inviteData.properties.action_link,
+        actionUrl: ensureSupabaseRedirect(inviteData.properties.action_link, redirectTo),
         organizationName: org.name,
       });
     }

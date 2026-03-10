@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getPublicAppUrl } from "@/lib/server/publicAppOrigin";
 import { createAuthAdminClient } from "@/lib/server/authAdmin";
-import { isResendConfigured, sendAuthEmail } from "@/lib/server/authEmail";
+import { ensureSupabaseRedirect, isResendConfigured, sendAuthEmail } from "@/lib/server/authEmail";
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: error.message, code: "BAD_REQUEST" }, { status: 400 });
       }
 
-      const actionLink = data.properties?.action_link ?? "";
+      const actionLink = ensureSupabaseRedirect(data.properties?.action_link ?? "", redirectTo);
       if (!actionLink) {
         return NextResponse.json({ error: "No se pudo generar el enlace de recuperación", code: "BAD_REQUEST" }, { status: 400 });
       }

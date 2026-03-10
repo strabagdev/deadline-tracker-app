@@ -5,7 +5,7 @@ import { canViewModule, getOrgAccess, isAdminRole } from "@/lib/server/orgAccess
 import { createClient } from "@supabase/supabase-js";
 import { findAuthUserIdByEmail } from "@/lib/server/authAdmin";
 import { getPublicAppUrl } from "@/lib/server/publicAppOrigin";
-import { AuthEmailProviderError, isResendConfigured, sendAuthEmail } from "@/lib/server/authEmail";
+import { AuthEmailProviderError, ensureSupabaseRedirect, isResendConfigured, sendAuthEmail } from "@/lib/server/authEmail";
 import type { GenerateLinkResponse } from "@supabase/auth-js";
 
 type MemberListRow = {
@@ -249,7 +249,7 @@ export async function POST(req: Request) {
       }
 
       if (shouldUseResend) {
-        const actionLink = inviteData.properties?.action_link ?? "";
+        const actionLink = ensureSupabaseRedirect(inviteData.properties?.action_link ?? "", redirectTo);
         if (!actionLink) {
           return NextResponse.json({ error: "No se pudo generar el enlace de invitación", code: "BAD_REQUEST" }, { status: 400 });
         }

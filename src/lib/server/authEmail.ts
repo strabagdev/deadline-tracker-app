@@ -32,6 +32,16 @@ export function isResendConfigured() {
   return getResendConfig() !== null;
 }
 
+export function ensureSupabaseRedirect(actionUrl: string, redirectTo: string) {
+  try {
+    const url = new URL(actionUrl);
+    url.searchParams.set("redirect_to", redirectTo);
+    return url.toString();
+  } catch {
+    return actionUrl;
+  }
+}
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
