@@ -487,25 +487,10 @@ export default function UsersAdminPage() {
       )}
 
       <section style={{ marginTop: 16, border: "1px solid #eee", padding: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div>
-            <h3 style={{ marginTop: 0 }}>Invitar usuario</h3>
-            <p style={{ marginTop: 4, opacity: 0.75 }}>
-              La invitación define el acceso base. Los permisos finos se pueden ajustar después por miembro.
-            </p>
-          </div>
-          {canManageTypes ? (
-            <button
-              type="button"
-              onClick={() => router.push("/app/users/test-invite")}
-              disabled={busy}
-              style={{ padding: 10 }}
-              title="Enviar una invitación de prueba desde Supabase"
-            >
-              Probar envío de correo
-            </button>
-          ) : null}
-        </div>
+        <h3 style={{ marginTop: 0 }}>Invitar usuario</h3>
+        <p style={{ marginTop: 4, opacity: 0.75 }}>
+          La invitación define el acceso base. Los permisos finos se pueden ajustar después por miembro.
+        </p>
 
         <div style={{ display: "grid", gap: 10 }}>
           <div>
