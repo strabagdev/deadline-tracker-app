@@ -599,7 +599,7 @@ export default function OperationsPage() {
           </Button>
         </div>
         {loading ? (
-          <div className="flex justify-center py-6">
+          <div className="flex min-h-[60vh] items-center justify-center py-6">
             <Loader label="Cargando operaciones..." />
           </div>
         ) : rows.length === 0 ? (

@@ -323,7 +323,7 @@ export default function EntityDetailPage() {
       </section>
 
       {loading ? (
-        <div className="flex justify-center py-6">
+        <div className="flex min-h-[60vh] items-center justify-center py-6">
           <Loader label="Cargando entidad..." />
         </div>
       ) : msg ? (

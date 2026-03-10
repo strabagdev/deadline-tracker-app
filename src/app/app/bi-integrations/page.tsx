@@ -285,7 +285,7 @@ export default function BiIntegrationsPage() {
         </CardHeader>
         <CardContent className="pt-0">
           {loading ? (
-            <div className="flex justify-center py-6">
+            <div className="flex min-h-[60vh] items-center justify-center py-6">
               <Loader label="Cargando integraciones..." />
             </div>
           ) : endpoints.length === 0 ? (

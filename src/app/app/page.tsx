@@ -393,7 +393,7 @@ export default function AnalyticsDashboardPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-[1400px] px-4 py-4">
+      <main className="mx-auto flex min-h-[60vh] max-w-[1400px] items-center justify-center px-4 py-4">
         <Loader label="Cargando dashboard analítico..." />
       </main>
     );

@@ -284,7 +284,7 @@ export default function DeadlineTypesPage() {
         <h3 style={{ marginTop: 0 }}>Listado</h3>
 
         {loading ? (
-          <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
+          <div style={{ display: "flex", minHeight: "60vh", alignItems: "center", justifyContent: "center", padding: "12px 0" }}>
             <Loader label="Cargando tipos..." />
           </div>
         ) : items.length === 0 ? (

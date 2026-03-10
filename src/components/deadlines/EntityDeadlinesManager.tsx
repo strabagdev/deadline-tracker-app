@@ -898,9 +898,11 @@ export default function EntityDeadlinesManager({
       {sectionExpanded && editMsg ? <p className="mt-1 whitespace-pre-wrap text-sm text-rose-600">{editMsg}</p> : null}
 
       {!sectionExpanded ? null : !loadedDetails ? (
-        <p className="text-sm text-slate-500">Cargando datos de vencimientos...</p>
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <Loader label="Cargando datos de vencimientos..." />
+        </div>
       ) : loading ? (
-        <div className="flex justify-center py-3">
+        <div className="flex min-h-[50vh] items-center justify-center py-3">
           <Loader label="Cargando vencimientos..." />
         </div>
       ) : deadlines.length === 0 ? (

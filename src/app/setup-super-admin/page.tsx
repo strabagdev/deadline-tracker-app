@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Loader } from "@/components/ui/loader";
 
 type PublicStatusResponse = {
   has_super_admin?: boolean;
@@ -88,7 +89,13 @@ export default function SetupSuperAdminPage() {
     setTimeout(() => router.replace("/login"), 900);
   }
 
-  if (loading) return <p style={{ padding: 16 }}>Validando setup inicial...</p>;
+  if (loading) {
+    return (
+      <main style={{ minHeight: "100vh", padding: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Loader label="Validando setup inicial..." />
+      </main>
+    );
+  }
 
   return (
     <main style={{ maxWidth: 680, margin: "40px auto", padding: 16 }}>

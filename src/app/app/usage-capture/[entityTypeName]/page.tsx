@@ -592,7 +592,7 @@ export default function FocusedUsageCapturePage() {
         </CardHeader>
         <CardContent className="pt-0">
           {loading ? (
-            <div className="flex justify-center py-6"><Loader label="Cargando..." /></div>
+            <div className="flex min-h-[60vh] items-center justify-center py-6"><Loader label="Cargando..." /></div>
           ) : entities.length === 0 ? (
             <p className="app-empty">No hay entidades disponibles para este tipo.</p>
           ) : activeTab === "pending" ? (

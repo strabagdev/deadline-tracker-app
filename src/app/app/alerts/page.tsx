@@ -170,7 +170,7 @@ export default function AlertsPage() {
       {errorMsg ? <p className="whitespace-pre-wrap text-sm text-rose-600">{errorMsg}</p> : null}
 
       {loading ? (
-        <div className="flex justify-center py-8">
+        <div className="flex min-h-[60vh] items-center justify-center py-8">
           <Loader label="Cargando alertas..." />
         </div>
       ) : (

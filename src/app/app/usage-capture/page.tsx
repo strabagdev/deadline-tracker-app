@@ -115,7 +115,7 @@ export default function UsageCapturePage() {
         <CardHeader className="pb-2"><CardTitle className="text-base">Tipos disponibles</CardTitle></CardHeader>
         <CardContent className="pt-0">
           {loading ? (
-            <div className="flex justify-center py-6"><Loader label="Cargando..." /></div>
+            <div className="flex min-h-[60vh] items-center justify-center py-6"><Loader label="Cargando..." /></div>
           ) : sortedTypes.length === 0 ? (
             <p className="text-sm text-slate-500">No hay tipos de entidad disponibles.</p>
           ) : (

@@ -9,7 +9,7 @@ type LoaderProps = {
 function sizeClass(size: LoaderProps["size"]) {
   if (size === "sm") return "h-4 w-4 border-2";
   if (size === "lg") return "h-8 w-8 border-[3px]";
-  return "h-6 w-6 border-2";
+  return "h-7 w-7 border-[3px]";
 }
 
 export function Loader({ label = "Cargando", className, size = "md" }: LoaderProps) {
@@ -22,7 +22,7 @@ export function Loader({ label = "Cargando", className, size = "md" }: LoaderPro
         )}
         aria-hidden
       />
-      <span className="text-sm">{label}</span>
+      <span className={size === "md" ? "text-base" : "text-sm"}>{label}</span>
     </span>
   );
 }

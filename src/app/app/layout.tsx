@@ -726,11 +726,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       <div className="app-content flex-1">
         {isSuperAdminLockedOutRoute ? (
-          <div className="flex justify-center p-4">
+          <div className="flex min-h-[60vh] items-center justify-center p-4">
             <Loader label="Redirigiendo al panel global..." />
           </div>
         ) : !isSuperAdmin && !moduleAccessLoaded ? (
-          <div className="flex justify-center p-4">
+          <div className="flex min-h-[60vh] items-center justify-center p-4">
             <Loader label="Cargando permisos..." />
           </div>
         ) : (

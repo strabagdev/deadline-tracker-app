@@ -169,7 +169,7 @@ export default function SelectOrgPage() {
 
   if (loading)
     return (
-      <div style={{ padding: 16, display: "flex", justifyContent: "center" }}>
+      <div style={{ minHeight: "100vh", padding: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Loader label="Cargando organizaciones..." />
       </div>
     );

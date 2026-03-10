@@ -386,10 +386,8 @@ export default function UsersAdminPage() {
 
   if (loading) {
     return (
-      <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
-        <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
+      <main style={{ minHeight: "60vh", padding: 16, maxWidth: 980, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Loader label="Cargando usuarios..." />
-        </div>
       </main>
     );
   }

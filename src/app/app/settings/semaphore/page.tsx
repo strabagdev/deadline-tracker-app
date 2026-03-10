@@ -214,7 +214,7 @@ export default function SemaphoreSettingsPage() {
         </CardHeader>
         <CardContent className="pt-1">
           {loading ? (
-            <div className="flex justify-center py-8">
+            <div className="flex min-h-[60vh] items-center justify-center py-8">
               <Loader label="Cargando configuración..." />
             </div>
           ) : (

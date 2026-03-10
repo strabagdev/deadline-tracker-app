@@ -36,13 +36,6 @@ function todayInput() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function defaultFromInput() {
-  const d = new Date();
-  d.setDate(d.getDate() - 30);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
 function formatBusinessDate(dateText: string) {
   return String(dateText ?? "").trim() || "—";
 }
@@ -185,11 +178,43 @@ function buildTimelinePrintHtml(
 </html>`;
 }
 
-function toTimeBucket(loggedOn: string, granularity: "day" | "month") {
+function toTimeBucket(loggedOn: string) {
   const raw = String(loggedOn ?? "").trim();
-  if (!raw) return "";
-  if (granularity === "day") return raw;
-  return raw.slice(0, 7);
+  return raw || "";
+}
+
+function parseIsoDate(dateText: string) {
+  const clean = String(dateText ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(clean)) return null;
+  const [y, m, d] = clean.split("-").map((n) => Number(n));
+  if (![y, m, d].every((n) => Number.isFinite(n))) return null;
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+function toIsoDateUtc(d: Date) {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+function getWeekRangeFromDate(dateValue: string) {
+  const base = parseIsoDate(dateValue);
+  if (!base) return null;
+  const day = base.getUTCDay() || 7;
+  const from = new Date(base);
+  from.setUTCDate(base.getUTCDate() - day + 1);
+  const to = new Date(from);
+  to.setUTCDate(from.getUTCDate() + 6);
+  return { from: toIsoDateUtc(from), to: toIsoDateUtc(to) };
+}
+
+function getMonthRangeFromDate(dateValue: string) {
+  const base = parseIsoDate(dateValue);
+  if (!base) return null;
+  const year = base.getUTCFullYear();
+  const month = base.getUTCMonth() + 1;
+  const from = `${year}-${String(month).padStart(2, "0")}-01`;
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const to = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  return { from, to };
 }
 
 export default function UsageReportsPage() {
@@ -203,19 +228,28 @@ export default function UsageReportsPage() {
   const [orderedEntityProfileColumns, setOrderedEntityProfileColumns] = useState<string[]>([]);
   const [orderedUsageFieldColumns, setOrderedUsageFieldColumns] = useState<string[]>([]);
 
-  const [dateMode, setDateMode] = useState<"range" | "single">("single");
-  const [dateFrom, setDateFrom] = useState(defaultFromInput());
-  const [dateTo, setDateTo] = useState(todayInput());
-  const [singleDate, setSingleDate] = useState("");
+  const [periodMode, setPeriodMode] = useState<"daily" | "weekly" | "monthly">("daily");
+  const [dailyDate, setDailyDate] = useState(todayInput());
+  const [weeklyReferenceDate, setWeeklyReferenceDate] = useState(todayInput());
+  const [monthlyReferenceDate, setMonthlyReferenceDate] = useState(todayInput());
   const [entityTypeId, setEntityTypeId] = useState("all");
   const [q, setQ] = useState("");
   const [viewMode, setViewMode] = useState<"detail" | "timeline">("detail");
-  const [timelineGranularity, setTimelineGranularity] = useState<"day" | "month">("day");
+
+  function getPeriodRange() {
+    if (periodMode === "daily") {
+      const day = String(dailyDate ?? "").trim();
+      if (!day) return null;
+      return { from: day, to: day };
+    }
+    if (periodMode === "weekly") return getWeekRangeFromDate(weeklyReferenceDate);
+    return getMonthRangeFromDate(monthlyReferenceDate);
+  }
 
   function hasValidServerFilters() {
-    if (dateMode === "single") return Boolean(singleDate);
-    return Boolean(dateFrom || dateTo);
+    return Boolean(getPeriodRange());
   }
+  const selectedPeriodRange = getPeriodRange();
 
   async function getTokenOrRedirect() {
     const { data } = await supabaseAuth.auth.getSession();
@@ -260,15 +294,9 @@ export default function UsageReportsPage() {
     }
 
     const qs = new URLSearchParams();
-    if (dateMode === "single") {
-      if (singleDate) {
-        qs.set("date_from", singleDate);
-        qs.set("date_to", singleDate);
-      }
-    } else {
-      if (dateFrom) qs.set("date_from", dateFrom);
-      if (dateTo) qs.set("date_to", dateTo);
-    }
+    const periodRange = getPeriodRange();
+    if (periodRange?.from) qs.set("date_from", periodRange.from);
+    if (periodRange?.to) qs.set("date_to", periodRange.to);
     if (entityTypeId && entityTypeId !== "all") qs.set("entity_type_id", entityTypeId);
     qs.set("limit", "5000");
 
@@ -315,7 +343,7 @@ export default function UsageReportsPage() {
     }
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateMode, dateFrom, dateTo, singleDate, entityTypeId]);
+  }, [periodMode, dailyDate, weeklyReferenceDate, monthlyReferenceDate, entityTypeId]);
 
   const filteredRows = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -378,12 +406,12 @@ export default function UsageReportsPage() {
     const values = Array.from(
       new Set(
         filteredRows
-          .map((r) => toTimeBucket(r.logged_on, timelineGranularity))
+          .map((r) => toTimeBucket(r.logged_on))
           .filter((v) => v.length > 0)
       )
     );
     return values.sort((a, b) => a.localeCompare(b));
-  }, [filteredRows, timelineGranularity]);
+  }, [filteredRows]);
   const timelineRows = useMemo(() => {
     const byEntity = new Map<
       string,
@@ -396,7 +424,7 @@ export default function UsageReportsPage() {
       }
     >();
     for (const row of filteredRows) {
-      const bucket = toTimeBucket(row.logged_on, timelineGranularity);
+      const bucket = toTimeBucket(row.logged_on);
       if (!bucket) continue;
       const current = byEntity.get(row.entity_id) ?? {
         entity_id: row.entity_id,
@@ -424,7 +452,7 @@ export default function UsageReportsPage() {
           Object.entries(item.valuesByBucket).map(([bucket, payload]) => [bucket, payload.valueDisplay])
         ),
       }));
-  }, [filteredRows, timelineGranularity]);
+  }, [filteredRows]);
   const hasUnitColumnTimeline = useMemo(
     () => timelineRows.some((r) => r.usage_unit_visible !== false),
     [timelineRows]
@@ -491,12 +519,15 @@ export default function UsageReportsPage() {
   async function exportPdf() {
     setBusy(true);
     try {
+      const periodRange = getPeriodRange();
+      const dateLabel = periodRange ? `${periodRange.from} a ${periodRange.to}` : "—";
+      const periodLabel = periodMode === "daily" ? "Diario" : periodMode === "weekly" ? "Semanal" : "Mensual";
       const subtitle = `Filtro: ${entityTypeId === "all" ? "Todos los tipos" : "Tipo específico"} · Fecha: ${
-        dateMode === "single" ? (singleDate || "—") : `${dateFrom || "—"} a ${dateTo || "—"}`
+        dateLabel
       } · ${
         viewMode === "detail"
           ? `Registros: ${filteredRows.length}`
-          : `Entidades: ${timelineRows.length} · Eje tiempo: ${timelineGranularity === "day" ? "Día" : "Mes"}`
+          : `Entidades: ${timelineRows.length} · Periodicidad: ${periodLabel}`
       }`;
       const html =
         viewMode === "detail"
@@ -551,7 +582,7 @@ export default function UsageReportsPage() {
           <CardTitle className="text-base">Filtros</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="grid gap-2 md:grid-cols-[220px_170px_170px_170px_170px_170px_minmax(220px,1fr)]">
+          <div className="grid gap-2 md:grid-cols-[220px_170px_180px_240px_minmax(220px,1fr)]">
             <select
               value={entityTypeId}
               onChange={(e) => setEntityTypeId(e.target.value)}
@@ -565,42 +596,72 @@ export default function UsageReportsPage() {
               ))}
             </select>
             <select
-              value={dateMode}
-              onChange={(e) => setDateMode(e.target.value as "range" | "single")}
-              className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
-            >
-              <option value="range">Rango de fechas</option>
-              <option value="single">Fecha exacta</option>
-            </select>
-            {dateMode === "single" ? (
-              <Input type="date" value={singleDate} onChange={(e) => setSingleDate(e.target.value)} />
-            ) : (
-              <MarkedDatePicker value={dateFrom} onChange={setDateFrom} label="Desde" />
-            )}
-            {dateMode === "single" ? (
-              <div className="h-[var(--control-h)]" />
-            ) : (
-              <MarkedDatePicker value={dateTo} onChange={setDateTo} label="Hasta" />
-            )}
-            <select
               value={viewMode}
               onChange={(e) => setViewMode(e.target.value as "detail" | "timeline")}
               className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
             >
-              <option value="detail">Vista detalle</option>
+              <option value="detail">Vista vertical</option>
               <option value="timeline">Vista horizontal</option>
             </select>
             <select
-              value={timelineGranularity}
-              onChange={(e) => setTimelineGranularity(e.target.value as "day" | "month")}
-              disabled={viewMode !== "timeline"}
-              className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              value={periodMode}
+              onChange={(e) => setPeriodMode(e.target.value as "daily" | "weekly" | "monthly")}
+              className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
             >
-              <option value="day">Eje por día</option>
-              <option value="month">Eje por mes</option>
+              <option value="daily">Diario</option>
+              <option value="weekly">Semanal</option>
+              <option value="monthly">Mensual</option>
             </select>
+            <div className="grid gap-1">
+              <MarkedDatePicker
+                value={periodMode === "daily" ? dailyDate : periodMode === "weekly" ? weeklyReferenceDate : monthlyReferenceDate}
+                onChange={(value) => {
+                  if (periodMode === "daily") setDailyDate(value);
+                  else if (periodMode === "weekly") setWeeklyReferenceDate(value);
+                  else setMonthlyReferenceDate(value);
+                }}
+                highlightedDates={[]}
+                disabledDates={[]}
+                label={
+                  periodMode === "daily"
+                    ? "Fecha"
+                    : periodMode === "weekly"
+                      ? "Fecha de referencia (semana)"
+                      : "Fecha de referencia (mes)"
+                }
+                disabled={loading || busy}
+                showLegend={false}
+              />
+              {periodMode === "weekly" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={loading || busy}
+                  onClick={() => setWeeklyReferenceDate(todayInput())}
+                >
+                  Semana actual
+                </Button>
+              ) : null}
+              {periodMode === "monthly" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={loading || busy}
+                  onClick={() => setMonthlyReferenceDate(todayInput())}
+                >
+                  Mes actual
+                </Button>
+              ) : null}
+            </div>
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por entidad, valor o campo..." />
           </div>
+          {periodMode !== "daily" && selectedPeriodRange ? (
+            <div className="mt-1 text-xs text-[var(--muted-foreground)]">
+              Rango aplicado: {selectedPeriodRange.from} a {selectedPeriodRange.to}
+            </div>
+          ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => void exportExcel()} disabled={loading || busy || filteredRows.length === 0}>
               Exportar Excel
@@ -623,11 +684,11 @@ export default function UsageReportsPage() {
         </CardHeader>
         <CardContent className="pt-0">
           {loading ? (
-            <div className="flex justify-center py-6">
+            <div className="flex min-h-[60vh] items-center justify-center py-6">
               <Loader label="Cargando reporte..." />
             </div>
           ) : !hasSearched ? (
-            <p className="app-empty">Selecciona fecha exacta o rango para cargar resultados automáticamente.</p>
+            <p className="app-empty">Selecciona un filtro diario, semanal o mensual para cargar resultados automáticamente.</p>
           ) : filteredRows.length === 0 ? (
             <p className="app-empty">No hay registros para los filtros seleccionados.</p>
           ) : viewMode === "detail" ? (
