@@ -22,6 +22,9 @@ function getEnvOrigin() {
 }
 
 export function getPublicAppOrigin(req: Request): string {
+  const envOrigin = getEnvOrigin();
+  if (envOrigin) return envOrigin;
+
   const forwardedHost = String(req.headers.get("x-forwarded-host") ?? "")
     .split(",")[0]
     .trim();
@@ -36,9 +39,6 @@ export function getPublicAppOrigin(req: Request): string {
 
   const reqOrigin = safeOriginFromUrl(req.url);
   if (reqOrigin && !reqOrigin.includes("localhost")) return reqOrigin;
-
-  const envOrigin = getEnvOrigin();
-  if (envOrigin) return envOrigin;
 
   return reqOrigin || "http://localhost:3000";
 }
