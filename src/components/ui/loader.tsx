@@ -50,29 +50,12 @@ export function Loader({ label = "Cargando", className, size = "md", showLabel =
       >
         <span
           className={cn(
-            "absolute left-0 top-0 rounded-full bg-gradient-to-r from-slate-500 via-slate-700 to-slate-500 shadow-[0_0_16px_rgba(51,65,85,0.28)]",
+            "absolute inset-y-0 left-0 w-3/5 animate-pulse rounded-full bg-gradient-to-r from-slate-500 via-slate-700 to-slate-500 shadow-[0_0_16px_rgba(51,65,85,0.18)]",
             styles.fill
           )}
-          style={{
-            width: "42%",
-            animation: "loader-progress 1.25s ease-in-out infinite",
-          }}
         />
       </span>
       {showLabel ? <span className={cn("text-slate-500", styles.text)}>{label}</span> : null}
-      <style jsx>{`
-        @keyframes loader-progress {
-          0% {
-            transform: translateX(-110%);
-          }
-          50% {
-            transform: translateX(80%);
-          }
-          100% {
-            transform: translateX(220%);
-          }
-        }
-      `}</style>
     </span>
   );
 }
