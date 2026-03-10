@@ -90,6 +90,21 @@ function isoToLocalDateInput(iso: string) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+function formatDisplayDate(value: string | null | undefined) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "-";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [year, month, day] = raw.split("-");
+    return `${day} / ${month} / ${year}`;
+  }
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = String(date.getFullYear());
+  return `${day} / ${month} / ${year}`;
+}
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function computeAutoDailyAverageFromLogs(logs: UsageLogRow[]) {
@@ -185,7 +200,7 @@ export default function EntityDeadlinesManager({
   // usage logs
   const [usageLogs, setUsageLogs] = useState<UsageLogRow[]>([]);
   const [usageLogValue, setUsageLogValue] = useState<string>("");
-  const [usageLogLoggedAt, setUsageLogLoggedAt] = useState<string>(() => isoToLocalDateInput(new Date().toISOString()));
+  const [usageLogLoggedAt, setUsageLogLoggedAt] = useState<string>("");
   const [usageLogsBusy, setUsageLogsBusy] = useState(false);
   const [usageLogsMsg, setUsageLogsMsg] = useState<string>("");
   const [editingDeadlineId, setEditingDeadlineId] = useState<string>("");
@@ -197,7 +212,18 @@ export default function EntityDeadlinesManager({
   // form
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [deadlineTypeId, setDeadlineTypeId] = useState<string>("");
-  const selectedType = useMemo(() => types.find((t) => t.id === deadlineTypeId) || null, [types, deadlineTypeId]);
+  const assignedDeadlineTypeIds = useMemo(
+    () => new Set(deadlines.map((d) => String(d.deadline_type_id ?? "").trim()).filter((id) => id.length > 0)),
+    [deadlines]
+  );
+  const availableTypes = useMemo(
+    () => types.filter((t) => !assignedDeadlineTypeIds.has(String(t.id))),
+    [assignedDeadlineTypeIds, types]
+  );
+  const selectedType = useMemo(
+    () => availableTypes.find((t) => t.id === deadlineTypeId) || null,
+    [availableTypes, deadlineTypeId]
+  );
   const usageUnitNameSet = useMemo(() => new Set(usageUnits.map((u) => u.name)), [usageUnits]);
 
   const [lastDoneDate, setLastDoneDate] = useState<string>("");
@@ -225,6 +251,10 @@ export default function EntityDeadlinesManager({
     void bootstrap(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entityId]);
+
+  useEffect(() => {
+    setUsageLogLoggedAt((prev) => prev || isoToLocalDateInput(new Date().toISOString()));
+  }, []);
 
   async function bootstrap(loadDetails = true) {
     setLoading(true);
@@ -259,6 +289,12 @@ export default function EntityDeadlinesManager({
     if (list.length === 0) setDeadlineTypeId("");
     if (deadlineTypeId && !list.some((t) => t.id === deadlineTypeId)) setDeadlineTypeId("");
   }
+
+  useEffect(() => {
+    if (!deadlineTypeId) return;
+    const exists = availableTypes.some((t) => t.id === deadlineTypeId);
+    if (!exists) setDeadlineTypeId("");
+  }, [availableTypes, deadlineTypeId]);
 
   async function loadUsageUnits() {
     const token = await getToken();
@@ -612,7 +648,7 @@ export default function EntityDeadlinesManager({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="m-0 text-base font-semibold">Vencimientos</h3>
         <div className="flex items-center gap-2">
-          {types.length > 0 ? (
+          {availableTypes.length > 0 ? (
             <>
               <Button
                 onClick={() => {
@@ -747,6 +783,13 @@ export default function EntityDeadlinesManager({
               Crea al menos un tipo de vencimiento en <code>/app/deadline-types</code> para poder agregar vencimientos a esta entidad.
             </div>
           </div>
+        ) : availableTypes.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            <strong>Todos los tipos ya estan asignados.</strong>
+            <div className="mt-1 text-xs">
+              Si necesitas actualizar uno, usa <b>Editar</b> en la lista de vencimientos asignados.
+            </div>
+          </div>
         ) : (
           <>
             {showCreateForm ? (
@@ -762,7 +805,7 @@ export default function EntityDeadlinesManager({
                       disabled={createBusy}
                     >
                       <option value="">Selecciona un tipo…</option>
-                      {types.map((t) => (
+                      {availableTypes.map((t) => (
                         <option key={t.id} value={t.id}>
                           {t.name} ({t.measure_by === "date" ? "fecha" : "uso"})
                         </option>
@@ -928,7 +971,7 @@ export default function EntityDeadlinesManager({
                       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
                         <Badge variant="outline">{t?.measure_by === "date" ? "Por fecha" : "Por uso"}</Badge>
                         <Badge variant="outline">{t?.requires_document ? "Requiere doc" : "Sin doc"}</Badge>
-                        <span>{new Date(d.created_at).toLocaleDateString()}</span>
+                        <span>{formatDisplayDate(d.created_at)}</span>
                       </div>
                     </div>
                     <div className="grid gap-0.5 text-xs text-slate-600">
@@ -936,7 +979,7 @@ export default function EntityDeadlinesManager({
                         {t?.measure_by === "date" ? "Última realización" : "Último uso"}
                       </span>
                       <span className="text-sm text-slate-800">
-                        {t?.measure_by === "date" ? d.last_done_date ?? "-" : d.last_done_usage ?? "-"}
+                        {t?.measure_by === "date" ? formatDisplayDate(d.last_done_date) : d.last_done_usage ?? "-"}
                       </span>
                     </div>
                     <div className="grid gap-0.5 text-xs text-slate-600">
@@ -945,7 +988,7 @@ export default function EntityDeadlinesManager({
                       </span>
                       <span className="text-sm text-slate-800">
                         {t?.measure_by === "date"
-                          ? d.next_due_date ?? "-"
+                          ? formatDisplayDate(d.next_due_date)
                           : `${d.frequency ?? "-"} ${d.frequency_unit ?? ""}`.trim()}
                       </span>
                     </div>
@@ -955,7 +998,7 @@ export default function EntityDeadlinesManager({
                       </span>
                       <span className="text-sm text-slate-800">
                         {t?.measure_by === "date" ? (
-                          new Date(d.created_at).toLocaleDateString()
+                          formatDisplayDate(d.created_at)
                         ) : (
                           <>
                             {d.usage_daily_average ?? "-"}{" "}
@@ -998,7 +1041,7 @@ export default function EntityDeadlinesManager({
                     <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
                       <Badge variant="outline">{t?.measure_by === "date" ? "Por fecha" : "Por uso"}</Badge>
                       <Badge variant="outline">{t?.requires_document ? "Requiere doc" : "Sin doc"}</Badge>
-                      <span>{new Date(d.created_at).toLocaleDateString()}</span>
+                      <span>{formatDisplayDate(d.created_at)}</span>
                     </div>
                   </div>
                   {editingDeadlineId === d.id ? (
@@ -1042,7 +1085,7 @@ export default function EntityDeadlinesManager({
                           disabled={editBusy}
                         />
                       ) : (
-                        <span className="text-sm text-slate-800">{d.last_done_date ?? "-"}</span>
+                        <span className="text-sm text-slate-800">{formatDisplayDate(d.last_done_date)}</span>
                       )}
                     </div>
                   ) : null}
@@ -1059,7 +1102,7 @@ export default function EntityDeadlinesManager({
                           disabled={editBusy}
                         />
                       ) : (
-                        <span className="text-sm text-slate-800">{d.next_due_date ?? "-"}</span>
+                        <span className="text-sm text-slate-800">{formatDisplayDate(d.next_due_date)}</span>
                       )}
                     </div>
                   ) : null}

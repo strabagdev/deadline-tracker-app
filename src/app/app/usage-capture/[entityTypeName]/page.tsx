@@ -82,7 +82,7 @@ export default function FocusedUsageCapturePage() {
   const [entitySearch, setEntitySearch] = useState("");
   const [bulkDraftByEntity, setBulkDraftByEntity] = useState<Record<string, string>>({});
   const [bulkFieldDraftByEntity, setBulkFieldDraftByEntity] = useState<Record<string, Record<string, string>>>({});
-  const [loggedOn, setLoggedOn] = useState(todayDateInput());
+  const [loggedOn, setLoggedOn] = useState("");
   const [pendingPage, setPendingPage] = useState(1);
   const [registeredPage, setRegisteredPage] = useState(1);
   const [activeTab, setActiveTab] = useState<"pending" | "registered">("pending");
@@ -294,6 +294,9 @@ export default function FocusedUsageCapturePage() {
     setLoading(false);
   }
 
+  useEffect(() => {
+    setLoggedOn((prev) => prev || todayDateInput());
+  }, []);
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps

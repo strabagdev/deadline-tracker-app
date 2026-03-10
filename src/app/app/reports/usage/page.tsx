@@ -229,9 +229,9 @@ export default function UsageReportsPage() {
   const [orderedUsageFieldColumns, setOrderedUsageFieldColumns] = useState<string[]>([]);
 
   const [periodMode, setPeriodMode] = useState<"daily" | "weekly" | "monthly">("daily");
-  const [dailyDate, setDailyDate] = useState(todayInput());
-  const [weeklyReferenceDate, setWeeklyReferenceDate] = useState(todayInput());
-  const [monthlyReferenceDate, setMonthlyReferenceDate] = useState(todayInput());
+  const [dailyDate, setDailyDate] = useState("");
+  const [weeklyReferenceDate, setWeeklyReferenceDate] = useState("");
+  const [monthlyReferenceDate, setMonthlyReferenceDate] = useState("");
   const [entityTypeId, setEntityTypeId] = useState("all");
   const [q, setQ] = useState("");
   const [viewMode, setViewMode] = useState<"detail" | "timeline">("detail");
@@ -332,6 +332,13 @@ export default function UsageReportsPage() {
   useEffect(() => {
     void loadTypeOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const today = todayInput();
+    setDailyDate((prev) => prev || today);
+    setWeeklyReferenceDate((prev) => prev || today);
+    setMonthlyReferenceDate((prev) => prev || today);
   }, []);
 
   useEffect(() => {
