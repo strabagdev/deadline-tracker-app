@@ -5,6 +5,7 @@ import { canViewModule, getOrgAccess } from "@/lib/server/orgAccess";
 
 type DataClient = ReturnType<typeof createDataServerClient>;
 type Status = "green" | "yellow" | "orange" | "red" | "none";
+type AnalyticsMode = "distribution" | "trend" | "count";
 
 type EntityRow = {
   id: string;
@@ -32,10 +33,15 @@ type ForecastRow = {
 type DynamicFieldDistribution = {
   field_id: string;
   field_name: string;
-  analytics_mode: "distribution" | "trend" | "count";
+  analytics_mode: AnalyticsMode;
   total: number;
   values: Array<{ label: string; count: number }>;
 };
+
+function normalizeAnalyticsMode(value: string | null | undefined): AnalyticsMode {
+  if (value === "trend" || value === "count" || value === "distribution") return value;
+  return "distribution";
+}
 
 function parseTrendLabelTime(label: string): number | null {
   const raw = String(label ?? "").trim();
@@ -205,7 +211,7 @@ async function getDynamicDistributionByEntityType(
     {
       entity_type_id: string;
       name: string;
-      analytics_mode: "distribution" | "trend" | "count";
+      analytics_mode: AnalyticsMode;
     }
   >(
     fields.map((f) => [
@@ -213,10 +219,7 @@ async function getDynamicDistributionByEntityType(
       {
         entity_type_id: String(f.entity_type_id ?? ""),
         name: String(f.name ?? "Campo"),
-        analytics_mode:
-          f.analytics_mode === "trend" || f.analytics_mode === "count" || f.analytics_mode === "distribution"
-            ? f.analytics_mode
-            : "distribution",
+        analytics_mode: normalizeAnalyticsMode(f.analytics_mode),
       },
     ])
   );
@@ -254,7 +257,7 @@ async function getDynamicDistributionByEntityType(
       entityTypeId: string;
       fieldId: string;
       fieldName: string;
-      analyticsMode: "distribution" | "trend" | "count";
+      analyticsMode: AnalyticsMode;
       values: Map<string, number>;
     }
   >();
@@ -270,17 +273,18 @@ async function getDynamicDistributionByEntityType(
     const value = String(row.value_text ?? "").trim();
     if (!value) continue;
     const fieldKey = `${entityTypeId}::${fieldId}`;
-    const entry =
-      bucket.get(fieldKey) ??
-      {
+    let entry = bucket.get(fieldKey);
+    if (!entry) {
+      entry = {
         entityTypeId,
         fieldId,
         fieldName: field.name,
         analyticsMode: field.analytics_mode,
         values: new Map<string, number>(),
       };
+      bucket.set(fieldKey, entry);
+    }
     entry.values.set(value, (entry.values.get(value) ?? 0) + 1);
-    bucket.set(fieldKey, entry);
   }
 
   for (const entry of bucket.values()) {
