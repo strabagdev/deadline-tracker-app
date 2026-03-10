@@ -48,6 +48,40 @@ const MODULE_KEYS = [
   "users",
 ] as const;
 
+const MODULE_LABELS: Record<(typeof MODULE_KEYS)[number], string> = {
+  analytics_dashboard: "Dashboard analítico",
+  operations_dashboard: "Dashboard operativo",
+  forecast: "Pronóstico",
+  alerts: "Alertas",
+  entities: "Entidades",
+  reports_usage: "Reportes de uso",
+  semaphore: "Semáforo",
+  entity_types: "Tipos de entidad",
+  deadline_types: "Tipos de vencimiento",
+  usage_units: "Unidades de uso",
+  usage_capture: "Registro de uso",
+  bi_integrations: "Integraciones BI",
+  users: "Usuarios",
+};
+
+function summarizeMemberType(type: MemberType | null, usageCaptureSubmodules: UsageCaptureSubmodule[]) {
+  if (!type) return null;
+
+  const visibleModules = type.modules.filter((m) => m.can_view).map((m) => m.module_key);
+  const baseModules = visibleModules.filter((moduleKey) => !moduleKey.startsWith(USAGE_CAPTURE_SUBMODULE_PREFIX));
+  const usageSubmodules = usageCaptureSubmodules
+    .filter((submodule) => visibleModules.includes(submodule.module_key))
+    .map((submodule) => submodule.entity_type_name);
+
+  return {
+    baseRole: type.base_role,
+    baseModules: baseModules.map((moduleKey) =>
+      moduleKey in MODULE_LABELS ? MODULE_LABELS[moduleKey as keyof typeof MODULE_LABELS] : moduleKey
+    ),
+    usageSubmodules,
+  };
+}
+
 export default function UsersAdminPage() {
   const router = useRouter();
 
@@ -96,6 +130,23 @@ export default function UsersAdminPage() {
   const editCompatibleMemberTypes = useMemo(
     () => activeMemberTypes.filter((t) => t.base_role === editMemberRole),
     [activeMemberTypes, editMemberRole]
+  );
+  const selectedInviteMemberType = useMemo(
+    () => inviteCompatibleMemberTypes.find((t) => t.id === memberTypeId) ?? null,
+    [inviteCompatibleMemberTypes, memberTypeId]
+  );
+  const selectedEditMemberType = useMemo(
+    () => editCompatibleMemberTypes.find((t) => t.id === editMemberTypeId) ?? null,
+    [editCompatibleMemberTypes, editMemberTypeId]
+  );
+
+  const inviteMemberTypeSummary = useMemo(
+    () => summarizeMemberType(selectedInviteMemberType, usageCaptureSubmodules),
+    [selectedInviteMemberType, usageCaptureSubmodules]
+  );
+  const editMemberTypeSummary = useMemo(
+    () => summarizeMemberType(selectedEditMemberType, usageCaptureSubmodules),
+    [selectedEditMemberType, usageCaptureSubmodules]
   );
 
   async function getTokenOrRedirect() {
@@ -535,6 +586,21 @@ export default function UsersAdminPage() {
                 </option>
               ))}
             </select>
+            {inviteMemberTypeSummary ? (
+              <div style={{ marginTop: 8, padding: 10, border: "1px solid #eee", borderRadius: 8, background: "#fafafa" }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+                  Plantilla activa: {selectedInviteMemberType?.name} · rol base {inviteMemberTypeSummary.baseRole}
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.85 }}>
+                  Módulos: {inviteMemberTypeSummary.baseModules.join(", ") || "Sin módulos visibles"}
+                </div>
+                {inviteMemberTypeSummary.usageSubmodules.length > 0 ? (
+                  <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>
+                    Captura enfocada: {inviteMemberTypeSummary.usageSubmodules.join(", ")}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <button onClick={invite} disabled={busy} style={{ padding: 12, width: "100%" }}>
@@ -793,19 +859,36 @@ export default function UsersAdminPage() {
                       </td>
                       <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
                         {isEditing ? (
-                          <select
-                            value={editMemberTypeId}
-                            onChange={(e) => setEditMemberTypeId(e.target.value)}
-                            style={{ width: "100%", padding: 8 }}
-                            disabled={busy}
-                          >
-                            <option value="">Sin plantilla</option>
-                            {editCompatibleMemberTypes.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.name}
-                              </option>
-                            ))}
-                          </select>
+                          <div style={{ display: "grid", gap: 8 }}>
+                            <select
+                              value={editMemberTypeId}
+                              onChange={(e) => setEditMemberTypeId(e.target.value)}
+                              style={{ width: "100%", padding: 8 }}
+                              disabled={busy}
+                            >
+                              <option value="">Sin plantilla</option>
+                              {editCompatibleMemberTypes.map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  {t.name}
+                                </option>
+                              ))}
+                            </select>
+                            {editMemberTypeSummary ? (
+                              <div style={{ padding: 8, border: "1px solid #eee", borderRadius: 8, background: "#fafafa", fontSize: 12 }}>
+                                <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                                  {selectedEditMemberType?.name} · rol base {editMemberTypeSummary.baseRole}
+                                </div>
+                                <div>
+                                  Módulos: {editMemberTypeSummary.baseModules.join(", ") || "Sin módulos visibles"}
+                                </div>
+                                {editMemberTypeSummary.usageSubmodules.length > 0 ? (
+                                  <div style={{ marginTop: 4 }}>
+                                    Captura enfocada: {editMemberTypeSummary.usageSubmodules.join(", ")}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
                         ) : (
                           m.member_type_name || "—"
                         )}
