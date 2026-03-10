@@ -51,6 +51,7 @@ export default function UsersAdminPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<Role>("member");
   const [memberTypeId, setMemberTypeId] = useState<string>("");
 
   const [busy, setBusy] = useState(false);
@@ -69,6 +70,9 @@ export default function UsersAdminPage() {
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
   const [editTypeName, setEditTypeName] = useState("");
   const [editTypeModules, setEditTypeModules] = useState<string[]>([]);
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+  const [editMemberRole, setEditMemberRole] = useState<Role>("member");
+  const [editMemberTypeId, setEditMemberTypeId] = useState<string>("");
 
   useEffect(() => {
     void bootstrap();
@@ -180,18 +184,13 @@ export default function UsersAdminPage() {
       return;
     }
 
-    const selectedType = memberTypes.find((t) => t.id === memberTypeId) ?? null;
-    const fallbackRole: Role = (["owner", "admin", "member", "viewer"].includes((selectedType?.name ?? "").toLowerCase())
-      ? (selectedType?.name.toLowerCase() as Role)
-      : "member");
-
     const res = await fetch("/api/admin/invite", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ email: cleanEmail, role: fallbackRole, member_type_id: memberTypeId || null }),
+      body: JSON.stringify({ email: cleanEmail, role: inviteRole, member_type_id: memberTypeId || null }),
     });
 
     const json = await res.json().catch(() => ({}));
@@ -202,8 +201,61 @@ export default function UsersAdminPage() {
       return;
     }
 
-    setMessage("Invitación enviada y miembro registrado (si aplica).");
+    setMessage(
+      json.delivery === "existing_user_linked"
+        ? "Usuario existente vinculado a la organización. No se envió correo de invitación."
+        : "Invitación enviada por correo y acceso asignado."
+    );
     setEmail("");
+    setBusy(false);
+    await loadMembers(token);
+  }
+
+  function startEditMember(member: MemberRow) {
+    setEditingMemberId(member.user_id);
+    setEditMemberRole(member.role);
+    setEditMemberTypeId(String(member.member_type_id ?? ""));
+  }
+
+  function cancelEditMember() {
+    setEditingMemberId(null);
+    setEditMemberRole("member");
+    setEditMemberTypeId("");
+  }
+
+  async function saveMemberAccess(userId: string) {
+    setBusy(true);
+    setError("");
+    setMessage("");
+
+    const token = await getTokenOrRedirect();
+    if (!token) {
+      setBusy(false);
+      return;
+    }
+
+    const res = await fetch("/api/admin/members", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        role: editMemberRole,
+        member_type_id: editMemberTypeId || null,
+      }),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(json.error || "No se pudieron actualizar los permisos del miembro");
+      setBusy(false);
+      return;
+    }
+
+    setMessage("Permisos del miembro actualizados.");
+    cancelEditMember();
     setBusy(false);
     await loadMembers(token);
   }
@@ -408,6 +460,9 @@ export default function UsersAdminPage() {
 
       <section style={{ marginTop: 16, border: "1px solid #eee", padding: 12 }}>
         <h3 style={{ marginTop: 0 }}>Invitar usuario</h3>
+        <p style={{ marginTop: 4, opacity: 0.75 }}>
+          La invitación define el acceso base. Los permisos finos se pueden ajustar después por miembro.
+        </p>
 
         <div style={{ display: "grid", gap: 10 }}>
           <div>
@@ -423,13 +478,29 @@ export default function UsersAdminPage() {
           </div>
 
           <div>
-            <label>Tipo de miembro</label>
+            <label>Rol base</label>
+            <select
+              value={inviteRole}
+              onChange={(e) => setInviteRole(e.target.value as Role)}
+              style={{ width: "100%", padding: 10, marginTop: 6 }}
+              disabled={busy}
+            >
+              <option value="viewer">viewer</option>
+              <option value="member">member</option>
+              <option value="admin">admin</option>
+              {canManageTypes ? <option value="owner">owner</option> : null}
+            </select>
+          </div>
+
+          <div>
+            <label>Plantilla de permisos</label>
             <select
               value={memberTypeId}
               onChange={(e) => setMemberTypeId(e.target.value)}
               style={{ width: "100%", padding: 10, marginTop: 6 }}
               disabled={busy}
             >
+              <option value="">Sin plantilla</option>
               {activeMemberTypes.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
@@ -607,7 +678,7 @@ export default function UsersAdminPage() {
                 <tr>
                   <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Email</th>
                   <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Rol base</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Tipo miembro</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Plantilla permisos</th>
                   <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Creado</th>
                   <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Acciones</th>
                 </tr>
@@ -616,24 +687,84 @@ export default function UsersAdminPage() {
                 {members.map((m) => {
                   const display = m.email || m.user_id;
                   const isOwner = m.role === "owner";
+                  const isEditing = editingMemberId === m.user_id;
 
                   return (
                     <tr key={m.user_id}>
                       <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
                         {m.email || <span style={{ opacity: 0.6 }}>(sin email)</span>}
                       </td>
-                      <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>{m.role}</td>
-                      <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>{m.member_type_name || "—"}</td>
+                      <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
+                        {isEditing ? (
+                          <select
+                            value={editMemberRole}
+                            onChange={(e) => setEditMemberRole(e.target.value as Role)}
+                            style={{ width: "100%", padding: 8 }}
+                            disabled={busy}
+                          >
+                            <option value="viewer">viewer</option>
+                            <option value="member">member</option>
+                            <option value="admin">admin</option>
+                            {canManageTypes ? <option value="owner">owner</option> : null}
+                          </select>
+                        ) : (
+                          m.role
+                        )}
+                      </td>
+                      <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
+                        {isEditing ? (
+                          <select
+                            value={editMemberTypeId}
+                            onChange={(e) => setEditMemberTypeId(e.target.value)}
+                            style={{ width: "100%", padding: 8 }}
+                            disabled={busy}
+                          >
+                            <option value="">Sin plantilla</option>
+                            {activeMemberTypes.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          m.member_type_name || "—"
+                        )}
+                      </td>
                       <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>{new Date(m.created_at).toLocaleString()}</td>
                       <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
-                        <button
-                          onClick={() => removeAccess(m.user_id, display)}
-                          disabled={busy || isOwner}
-                          style={{ padding: 8 }}
-                          title={isOwner ? "No se puede remover al owner" : "Quitar acceso"}
-                        >
-                          Quitar acceso
-                        </button>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {isEditing ? (
+                            <>
+                              <button
+                                onClick={() => void saveMemberAccess(m.user_id)}
+                                disabled={busy}
+                                style={{ padding: 8 }}
+                              >
+                                Guardar
+                              </button>
+                              <button onClick={cancelEditMember} disabled={busy} style={{ padding: 8 }}>
+                                Cancelar
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => startEditMember(m)}
+                              disabled={busy || (isOwner && myRole !== "owner")}
+                              style={{ padding: 8 }}
+                              title={isOwner && myRole !== "owner" ? "Solo owner puede editar a otro owner" : "Editar permisos"}
+                            >
+                              Editar permisos
+                            </button>
+                          )}
+                          <button
+                            onClick={() => removeAccess(m.user_id, display)}
+                            disabled={busy || isOwner}
+                            style={{ padding: 8 }}
+                            title={isOwner ? "No se puede remover al owner" : "Quitar acceso"}
+                          >
+                            Quitar acceso
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

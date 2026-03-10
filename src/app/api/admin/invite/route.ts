@@ -142,10 +142,12 @@ export async function POST(req: Request) {
       });
 
     let invitedUserId = inviteData.user?.id ?? null;
+    let inviteDelivery: "email_sent" | "existing_user_linked" = "email_sent";
     if (inviteErr) {
       // Si ya existe en Auth, reusamos profile para asignar membership en la org.
       if (inviteErr.message.toLowerCase().includes("already")) {
         invitedUserId = await findAuthUserIdByEmail(email);
+        inviteDelivery = "existing_user_linked";
       } else {
         return NextResponse.json({ error: inviteErr.message, code: "BAD_REQUEST" }, { status: 400 });
       }
@@ -181,7 +183,13 @@ export async function POST(req: Request) {
 
     if (memberErr) throw memberErr;
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({
+      ok: true,
+      invited_email: email,
+      delivery: inviteDelivery,
+      membership_role: effectiveRole,
+      member_type_id: effectiveMemberTypeId,
+    });
   } catch (error: unknown) {
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
