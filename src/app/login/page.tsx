@@ -257,8 +257,24 @@ export default function LoginPage() {
         return;
       }
 
+      if (data.user?.id) {
+        const requestRes = await fetch("/api/auth/access-request/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: data.user.id,
+            email: normalizedEmail,
+          }),
+        });
+        const requestJson = await requestRes.json().catch(() => ({}));
+        if (!requestRes.ok) {
+          setMsg(requestJson.error || "La cuenta fue creada, pero no se pudo registrar la solicitud para superadmin.");
+          return;
+        }
+      }
+
       setMsg(
-        "Cuenta creada. Si en Supabase está activa la confirmación de correo, revisa tu bandeja. Si no, podrás iniciar sesión de inmediato con tu contraseña."
+        "Cuenta creada y solicitud enviada al superadmin. Si en Supabase está activa la confirmación de correo, revisa tu bandeja antes de iniciar sesión."
       );
       setMode("signin");
       setConfirmPassword("");
