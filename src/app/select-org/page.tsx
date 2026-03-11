@@ -11,6 +11,15 @@ type SuperAdminStatus = {
   is_super_admin?: boolean;
   primary_super_admin_email?: string | null;
 };
+type AccessRequest = {
+  id: string;
+  status: "pending" | "approved" | "rejected";
+  requested_at: string;
+  resolved_at?: string | null;
+  organization_id?: string | null;
+  assigned_role?: string | null;
+  note?: string | null;
+};
 
 export default function SelectOrgPage() {
   const router = useRouter();
@@ -21,6 +30,7 @@ export default function SelectOrgPage() {
   const [error, setError] = useState<string>("");
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [primarySuperAdminEmail, setPrimarySuperAdminEmail] = useState("");
+  const [accessRequest, setAccessRequest] = useState<AccessRequest | null>(null);
 
   useEffect(() => {
     void init();
@@ -99,6 +109,7 @@ export default function SelectOrgPage() {
     }
 
     const list: Org[] = Array.isArray(json.orgs) ? json.orgs : [];
+    setAccessRequest(json.access_request ?? null);
     setOrgs(list);
 
     // ✅ Regla: 1 usuario = 1 org. Si hay 1, entramos automáticamente.
@@ -167,6 +178,16 @@ export default function SelectOrgPage() {
     router.replace("/app");
   }
 
+  async function exitAccessFlow() {
+    setBusy(true);
+    setError("");
+    try {
+      await supabaseAuth.auth.signOut();
+    } finally {
+      router.replace("/login");
+    }
+  }
+
   if (loading)
     return (
       <div style={{ minHeight: "100vh", padding: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -187,6 +208,19 @@ export default function SelectOrgPage() {
       {orgs.length === 0 && !error ? (
         <div style={{ marginTop: 14 }}>
           <p>No tienes acceso a ninguna organización en esta plataforma.</p>
+          {accessRequest?.status === "pending" ? (
+            <p>
+              Tu solicitud de acceso está pendiente de revisión por superadmin desde{" "}
+              {new Date(accessRequest.requested_at).toLocaleString()}.
+            </p>
+          ) : null}
+          {accessRequest?.status === "rejected" ? (
+            <p>
+              Tu solicitud de acceso fue rechazada
+              {accessRequest.resolved_at ? ` el ${new Date(accessRequest.resolved_at).toLocaleString()}` : ""}.
+              {accessRequest.note ? ` Motivo: ${accessRequest.note}` : ""}
+            </p>
+          ) : null}
           {isSuperAdmin ? (
             <p>
               Eres super admin. Puedes crear organizaciones en{" "}
@@ -200,6 +234,22 @@ export default function SelectOrgPage() {
                 : ""}
             </p>
           )}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
+            <button
+              onClick={() => void exitAccessFlow()}
+              disabled={busy}
+              style={{ padding: 10 }}
+            >
+              Cerrar sesión
+            </button>
+            <button
+              onClick={() => router.replace("/login")}
+              disabled={busy}
+              style={{ padding: 10 }}
+            >
+              Volver al login
+            </button>
+          </div>
         </div>
       ) : orgs.length > 1 ? (
         <div style={{ marginTop: 14 }}>

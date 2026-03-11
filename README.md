@@ -43,15 +43,30 @@ RESEND_FROM_NAME=Deadline Tracker
 
 Usos actuales detectados:
 
+- `signInWithPassword`
+  - [src/app/login/page.tsx](/home/dannysilver/dev2026/deadline-tracker/src/app/login/page.tsx)
+- `signUp`
+  - [src/app/login/page.tsx](/home/dannysilver/dev2026/deadline-tracker/src/app/login/page.tsx)
+- `signInWithOAuth`
+  - [src/app/login/page.tsx](/home/dannysilver/dev2026/deadline-tracker/src/app/login/page.tsx)
 - `inviteUserByEmail`
   - [src/app/api/admin/invite/route.ts](/home/dannysilver/dev2026/deadline-tracker/src/app/api/admin/invite/route.ts)
   - [src/app/api/platform/admin/invite/route.ts](/home/dannysilver/dev2026/deadline-tracker/src/app/api/platform/admin/invite/route.ts)
 - `resetPasswordForEmail`
   - [src/app/api/auth/password-reset/request/route.ts](/home/dannysilver/dev2026/deadline-tracker/src/app/api/auth/password-reset/request/route.ts)
 - `signInWithOtp`
-  - no se usa actualmente
-- `signUp`
-  - no se usa actualmente
+  - [src/app/login/page.tsx](/home/dannysilver/dev2026/deadline-tracker/src/app/login/page.tsx)
+
+### Estrategia actual de acceso
+
+El login quedó orientado a SaaS B2B:
+
+1. `Microsoft OAuth`
+2. `Google OAuth`
+3. `Correo + contraseña`
+4. `Magic link` como respaldo
+
+Esto reduce la dependencia de entrega de correos en entornos corporativos con filtros estrictos.
 
 ### `redirectTo`
 
@@ -59,6 +74,8 @@ Todos los flujos que envían correo desde Supabase Auth quedaron centralizados a
 
 - invitaciones: `SITE_URL|APP_URL|NEXT_PUBLIC_APP_URL + /auth/callback`
 - reset password: `SITE_URL|APP_URL|NEXT_PUBLIC_APP_URL + /reset-password`
+- sign up por contraseña: `SITE_URL|APP_URL|NEXT_PUBLIC_APP_URL + /auth/callback`
+- OAuth Google / Microsoft: `SITE_URL|APP_URL|NEXT_PUBLIC_APP_URL + /auth/callback`
 
 Helper usado:
 
@@ -89,6 +106,56 @@ Qué hace:
 3. Sincroniza perfil local.
 4. Provisiona contraseña provisoria si corresponde a una invitación.
 5. Redirige a `select-org`, `setup-super-admin` o `app/super-admin`.
+
+Este callback sirve para:
+
+- Google OAuth
+- Microsoft OAuth
+- magic link
+- invitaciones
+- confirmación posterior a `signUp` si el proyecto exige confirmación de correo
+
+## Configuración OAuth en Supabase
+
+### Google
+
+En `Supabase Dashboard -> Authentication -> Providers -> Google`:
+
+1. Habilita `Google`.
+2. Crea un OAuth Client en Google Cloud.
+3. Usa como redirect/callback URL la que te entrega Supabase para el provider.
+4. Configura los orígenes/autorizados también para tu dominio público.
+
+Redirects de aplicación a mantener:
+
+- `https://app.opsahead.cl/auth/callback`
+
+### Microsoft
+
+En `Supabase Dashboard -> Authentication -> Providers -> Azure`:
+
+1. Habilita `Azure`.
+2. Registra la app en Microsoft Entra ID / Azure AD.
+3. Usa la callback URL del provider que Supabase indica.
+4. Configura tenant, client id y client secret en Supabase.
+
+Redirects de aplicación a mantener:
+
+- `https://app.opsahead.cl/auth/callback`
+
+## Registro con contraseña
+
+Para un flujo SaaS B2B donde no quieres depender del correo para entrar:
+
+1. Revisa en `Supabase Dashboard -> Authentication -> Providers -> Email`
+2. Decide si `Confirm email` estará:
+   - activado: el usuario deberá confirmar email tras `signUp`
+   - desactivado: el usuario podrá entrar inmediatamente con correo + contraseña
+
+Recomendación operativa:
+
+- si el acceso principal será `SSO + contraseña`, desactivar confirmación de email simplifica onboarding
+- si necesitas verificación fuerte de email, déjala activa y comunica que el correo sigue siendo un paso auxiliar, no el método principal de login
 
 ## SMTP externo en Supabase
 

@@ -8,6 +8,16 @@ type OrgJoinRow = {
   organizations?: { id?: string | null; name?: string | null } | null;
 };
 
+type AccessRequestRow = {
+  id: string;
+  status: "pending" | "approved" | "rejected";
+  requested_at: string;
+  resolved_at?: string | null;
+  organization_id?: string | null;
+  assigned_role?: string | null;
+  note?: string | null;
+};
+
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unauthorized";
 }
@@ -37,7 +47,20 @@ export async function GET(req: Request) {
       }))
       .filter((o) => o.id && o.name);
 
-    return NextResponse.json({ orgs });
+    let accessRequest: AccessRequestRow | null = null;
+    if (orgs.length === 0) {
+      const { data: requestData, error: requestErr } = await db
+        .from("organization_access_requests")
+        .select("id,status,requested_at,resolved_at,organization_id,assigned_role,note")
+        .eq("user_id", user.id)
+        .order("requested_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (requestErr) throw requestErr;
+      accessRequest = (requestData as AccessRequestRow | null) ?? null;
+    }
+
+    return NextResponse.json({ orgs, access_request: accessRequest });
   } catch (e: unknown) {
     return NextResponse.json(
       { error: getErrorMessage(e) },

@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-type BusyAction = "password" | "reset" | null;
+type BusyAction = "password" | "register" | "magic_link" | "reset" | "oauth_google" | "oauth_microsoft" | null;
+type AuthMode = "signin" | "signup";
 
 const AUTH_EMAIL_COOLDOWN_MS = 75_000;
 
@@ -17,67 +18,78 @@ function toStorageSafeEmail(email: string) {
   return encodeURIComponent(email.trim().toLowerCase());
 }
 
-function getResetCooldownKey(email: string) {
-  return `auth:resetCooldown:${toStorageSafeEmail(email)}`;
+function getCooldownKey(kind: "magic" | "reset", email: string) {
+  return `auth:${kind}Cooldown:${toStorageSafeEmail(email)}`;
+}
+
+function getAuthPublicOrigin() {
+  const envOrigin = String(process.env.NEXT_PUBLIC_APP_URL ?? "").trim();
+  if (envOrigin) return envOrigin.replace(/\/+$/, "");
+  if (typeof window !== "undefined" && window.location.origin) return window.location.origin;
+  return "http://localhost:3000";
 }
 
 export default function LoginPage() {
   const router = useRouter();
 
+  const [mode, setMode] = useState<AuthMode>("signin");
   const [email, setEmail] = useState("");
   const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
   const [platformLogoUrl, setPlatformLogoUrl] = useState("");
-
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showMagicLink, setShowMagicLink] = useState(false);
 
-  // "busy" global, pero además sabemos qué acción está corriendo
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const busy = busyAction !== null;
-
   const [msg, setMsg] = useState("");
-
-  // Locks para impedir doble ejecución aunque el usuario doble-click / enter / etc.
   const inFlightRef = useRef<BusyAction>(null);
 
-  // Cooldowns para evitar spamear OTP / reset
   const [resetCooldownUntil, setResetCooldownUntil] = useState<number>(0);
+  const [magicCooldownUntil, setMagicCooldownUntil] = useState<number>(0);
   const [nowTs, setNowTs] = useState(() => Date.now());
 
   const canSendReset = nowTs > resetCooldownUntil;
+  const canSendMagicLink = nowTs > magicCooldownUntil;
 
   function humanizeAuthErrorMessage(raw: string) {
     const lower = raw.toLowerCase();
     if (lower.includes("rate limit") || lower.includes("too many requests") || lower.includes("429")) {
       return (
-        "Estás intentando enviar demasiados correos en poco tiempo (límite de Supabase).\n" +
+        "Estás intentando enviar demasiados correos en poco tiempo.\n" +
         "Espera un minuto y vuelve a intentar."
       );
+    }
+    if (lower.includes("email not confirmed")) {
+      return "Tu correo aún no está confirmado. Si tu proyecto exige confirmación por email, revisa tu bandeja o usa SSO.";
     }
     return raw;
   }
 
   function getRetrySecondsFromMessage(raw: string): number | null {
     const lower = raw.toLowerCase();
-    // Ejemplos comunes: "For security purposes, you can only request this once every 60 seconds"
-    // o mensajes que incluyen "after 23 seconds"
     const match = lower.match(/(\d+)\s*seconds?/);
     if (!match) return null;
     const seconds = Number(match[1]);
     return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
   }
 
-  function persistCooldown(emailValue: string, cooldownUntil: number) {
+  function persistCooldown(kind: "magic" | "reset", emailValue: string, cooldownUntil: number) {
     if (!emailValue) return;
     try {
-      window.localStorage.setItem(getResetCooldownKey(emailValue), String(cooldownUntil));
+      window.localStorage.setItem(getCooldownKey(kind, emailValue), String(cooldownUntil));
     } catch {
       // noop
     }
   }
 
-  function applyCooldownUntil(cooldownUntil: number) {
-    setResetCooldownUntil(cooldownUntil);
-    persistCooldown(normalizedEmail, cooldownUntil);
+  function applyCooldown(kind: "magic" | "reset", cooldownUntil: number) {
+    if (kind === "magic") {
+      setMagicCooldownUntil(cooldownUntil);
+    } else {
+      setResetCooldownUntil(cooldownUntil);
+    }
+    persistCooldown(kind, normalizedEmail, cooldownUntil);
   }
 
   async function syncProfileFromSession() {
@@ -134,21 +146,26 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!normalizedEmail) {
+      setMagicCooldownUntil(0);
       setResetCooldownUntil(0);
       return;
     }
 
     try {
-      const resetRaw = window.localStorage.getItem(getResetCooldownKey(normalizedEmail));
+      const magicRaw = window.localStorage.getItem(getCooldownKey("magic", normalizedEmail));
+      const resetRaw = window.localStorage.getItem(getCooldownKey("reset", normalizedEmail));
+      const magicUntil = magicRaw ? Number(magicRaw) : 0;
       const resetUntil = resetRaw ? Number(resetRaw) : 0;
+      setMagicCooldownUntil(Number.isFinite(magicUntil) ? magicUntil : 0);
       setResetCooldownUntil(Number.isFinite(resetUntil) ? resetUntil : 0);
     } catch {
+      setMagicCooldownUntil(0);
       setResetCooldownUntil(0);
     }
   }, [normalizedEmail]);
 
   useEffect(() => {
-    const hasActiveCooldown = resetCooldownUntil > nowTs;
+    const hasActiveCooldown = magicCooldownUntil > nowTs || resetCooldownUntil > nowTs;
     if (!hasActiveCooldown) return;
 
     const id = window.setInterval(() => {
@@ -156,7 +173,16 @@ export default function LoginPage() {
     }, 1000);
 
     return () => window.clearInterval(id);
-  }, [resetCooldownUntil, nowTs]);
+  }, [magicCooldownUntil, resetCooldownUntil, nowTs]);
+
+  async function finalizeSignedInSession() {
+    await syncProfileFromSession();
+    const { data } = await supabaseAuth.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) throw new Error("No se pudo validar sesión.");
+    const route = await resolvePostAuthRoute(token);
+    router.replace(route);
+  }
 
   async function loginWithPassword(e: React.FormEvent) {
     e.preventDefault();
@@ -167,7 +193,6 @@ export default function LoginPage() {
       return;
     }
 
-    // Lock fuerte anti doble submit
     if (inFlightRef.current) return;
     inFlightRef.current = "password";
     setBusyAction("password");
@@ -183,23 +208,134 @@ export default function LoginPage() {
         return;
       }
 
-      try {
-        await syncProfileFromSession();
-      } catch (syncError) {
-        const message =
-          syncError instanceof Error ? syncError.message : "No se pudo sincronizar el perfil";
-        setMsg(message);
+      await finalizeSignedInSession();
+    } catch (error: unknown) {
+      setMsg(error instanceof Error ? error.message : "No se pudo iniciar sesión.");
+    } finally {
+      setBusyAction(null);
+      inFlightRef.current = null;
+    }
+  }
+
+  async function registerWithPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg("");
+
+    if (!normalizedEmail || !password) {
+      setMsg("Ingresa email y contraseña.");
+      return;
+    }
+    if (password.length < 8) {
+      setMsg("La contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setMsg("La confirmación de contraseña no coincide.");
+      return;
+    }
+
+    if (inFlightRef.current) return;
+    inFlightRef.current = "register";
+    setBusyAction("register");
+
+    try {
+      const { data, error } = await supabaseAuth.auth.signUp({
+        email: normalizedEmail,
+        password,
+        options: {
+          emailRedirectTo: `${getAuthPublicOrigin()}/auth/callback`,
+        },
+      });
+
+      if (error) {
+        setMsg(humanizeAuthErrorMessage(error.message));
         return;
       }
 
-      const { data } = await supabaseAuth.auth.getSession();
-      const token = data.session?.access_token;
-      if (!token) {
-        setMsg("No se pudo validar sesión.");
+      if (data.session) {
+        await finalizeSignedInSession();
         return;
       }
-      const route = await resolvePostAuthRoute(token);
-      router.replace(route);
+
+      setMsg(
+        "Cuenta creada. Si en Supabase está activa la confirmación de correo, revisa tu bandeja. Si no, podrás iniciar sesión de inmediato con tu contraseña."
+      );
+      setMode("signin");
+      setConfirmPassword("");
+    } catch (error: unknown) {
+      setMsg(error instanceof Error ? error.message : "No se pudo crear la cuenta.");
+    } finally {
+      setBusyAction(null);
+      inFlightRef.current = null;
+    }
+  }
+
+  async function startOAuth(provider: "google" | "azure") {
+    setMsg("");
+    if (inFlightRef.current) return;
+    const action: BusyAction = provider === "google" ? "oauth_google" : "oauth_microsoft";
+    inFlightRef.current = action;
+    setBusyAction(action);
+
+    try {
+      const { error } = await supabaseAuth.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: `${getAuthPublicOrigin()}/auth/callback`,
+          queryParams:
+            provider === "azure"
+              ? { prompt: "select_account" }
+              : { prompt: "select_account" },
+        },
+      });
+
+      if (error) {
+        setMsg(humanizeAuthErrorMessage(error.message));
+      }
+    } finally {
+      setBusyAction(null);
+      inFlightRef.current = null;
+    }
+  }
+
+  async function sendMagicLink() {
+    setMsg("");
+
+    if (!normalizedEmail) {
+      setMsg("Ingresa un email válido para continuar con magic link.");
+      return;
+    }
+
+    if (!canSendMagicLink) {
+      const seconds = Math.max(1, Math.ceil((magicCooldownUntil - Date.now()) / 1000));
+      setMsg(`Espera ${seconds}s para reenviar el magic link.`);
+      return;
+    }
+
+    if (inFlightRef.current) return;
+    inFlightRef.current = "magic_link";
+    setBusyAction("magic_link");
+    applyCooldown("magic", Date.now() + AUTH_EMAIL_COOLDOWN_MS);
+
+    try {
+      const { error } = await supabaseAuth.auth.signInWithOtp({
+        email: normalizedEmail,
+        options: {
+          emailRedirectTo: `${getAuthPublicOrigin()}/auth/callback`,
+          shouldCreateUser: false,
+        },
+      });
+
+      if (error) {
+        const retrySeconds = getRetrySecondsFromMessage(error.message);
+        if (retrySeconds) {
+          applyCooldown("magic", Date.now() + retrySeconds * 1000 + 2_000);
+        }
+        setMsg(humanizeAuthErrorMessage(error.message));
+        return;
+      }
+
+      setMsg("Te envié un magic link. Úsalo como método de respaldo si no quieres entrar con contraseña o SSO.");
     } finally {
       setBusyAction(null);
       inFlightRef.current = null;
@@ -220,12 +356,10 @@ export default function LoginPage() {
       return;
     }
 
-    // Lock fuerte anti doble click
     if (inFlightRef.current) return;
     inFlightRef.current = "reset";
     setBusyAction("reset");
-
-    applyCooldownUntil(Date.now() + AUTH_EMAIL_COOLDOWN_MS);
+    applyCooldown("reset", Date.now() + AUTH_EMAIL_COOLDOWN_MS);
 
     try {
       const res = await fetch("/api/auth/password-reset/request", {
@@ -241,7 +375,7 @@ export default function LoginPage() {
         const message = String(json?.error || "No se pudo enviar el correo de restablecimiento.");
         const retrySeconds = getRetrySecondsFromMessage(message);
         if (retrySeconds) {
-          applyCooldownUntil(Date.now() + retrySeconds * 1000 + 2_000);
+          applyCooldown("reset", Date.now() + retrySeconds * 1000 + 2_000);
         }
         setMsg(humanizeAuthErrorMessage(message));
         return;
@@ -255,72 +389,216 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto mt-6 w-full max-w-md px-2 sm:mt-10 sm:px-4">
-      <Card>
-        <CardHeader className="space-y-2">
+    <main className="mx-auto mt-4 w-full max-w-xl px-3 sm:mt-10 sm:px-4">
+      <Card className="overflow-hidden">
+        <CardHeader className="space-y-3 border-b border-[color:var(--border)] bg-[linear-gradient(135deg,#ecfeff_0%,#f8fafc_55%,#ffffff_100%)]">
           {platformLogoUrl ? (
-            <div className="flex justify-center pb-2">
+            <div className="flex justify-center pb-1">
               <Image
                 src={platformLogoUrl}
                 alt="Logo plataforma"
                 width={110}
                 height={110}
-                className="h-[110px] w-[110px] rounded-xl object-cover"
+                className="h-[96px] w-[96px] rounded-2xl object-cover shadow-sm"
               />
             </div>
           ) : null}
-          <CardTitle className="text-2xl">Iniciar sesión</CardTitle>
-          <CardDescription>Acceso por contraseña para miembros y administradores.</CardDescription>
+          <div className="space-y-1 text-center">
+            <CardTitle className="text-2xl">Acceso a Ops Ahead</CardTitle>
+            <CardDescription>
+              Prioriza SSO y contraseña. Magic link queda como respaldo para usuarios existentes.
+            </CardDescription>
+          </div>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={loginWithPassword} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="tu@correo.com"
-                type="email"
-                required
-                autoComplete="email"
-                inputMode="email"
-              />
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
-              <Input
-                id="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                type="password"
-                required
-                autoComplete="current-password"
-              />
-            </div>
-
-            <Button type="submit" disabled={busy} className="w-full">
-              {busyAction === "password" ? "Entrando..." : "Entrar"}
-            </Button>
-
+        <CardContent className="space-y-5 pt-5">
+          <div className="grid gap-3">
             <Button
               type="button"
               variant="outline"
-              disabled={busy || !normalizedEmail}
-              onClick={sendPasswordReset}
-              className="w-full"
+              disabled={busy}
+              className="w-full justify-center"
+              onClick={() => void startOAuth("azure")}
             >
-              {busyAction === "reset"
-                ? "Enviando..."
-                : !canSendReset
-                ? `Espera ${Math.max(1, Math.ceil((resetCooldownUntil - nowTs) / 1000))}s`
-                : "Restablecer contraseña"}
+              {busyAction === "oauth_microsoft" ? "Conectando..." : "Continuar con Microsoft"}
             </Button>
-          </form>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              className="w-full justify-center"
+              onClick={() => void startOAuth("google")}
+            >
+              {busyAction === "oauth_google" ? "Conectando..." : "Continuar con Google"}
+            </Button>
+          </div>
 
-          {msg ? <p className="mt-4 whitespace-pre-wrap text-sm text-slate-700">{msg}</p> : null}
+          <div className="flex items-center gap-3 text-xs uppercase tracking-[0.24em] text-slate-400">
+            <div className="h-px flex-1 bg-[color:var(--border)]" />
+            <span>o entra con correo</span>
+            <div className="h-px flex-1 bg-[color:var(--border)]" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 rounded-[var(--radius-md)] bg-slate-100 p-1">
+            <button
+              type="button"
+              onClick={() => setMode("signin")}
+              className={`rounded-[calc(var(--radius-md)-4px)] px-3 py-2 text-sm font-medium transition-colors ${
+                mode === "signin" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
+              }`}
+            >
+              Correo + contraseña
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("signup")}
+              className={`rounded-[calc(var(--radius-md)-4px)] px-3 py-2 text-sm font-medium transition-colors ${
+                mode === "signup" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
+              }`}
+            >
+              Crear cuenta
+            </button>
+          </div>
+
+          {mode === "signin" ? (
+            <form onSubmit={loginWithPassword} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="tu@empresa.com"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  inputMode="email"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Contraseña</Label>
+                <Input
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <Button type="submit" disabled={busy} className="w-full">
+                  {busyAction === "password" ? "Entrando..." : "Entrar"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy || !normalizedEmail}
+                  onClick={sendPasswordReset}
+                  className="w-full sm:w-auto"
+                >
+                  {busyAction === "reset"
+                    ? "Enviando..."
+                    : !canSendReset
+                    ? `Espera ${Math.max(1, Math.ceil((resetCooldownUntil - nowTs) / 1000))}s`
+                    : "Reset password"}
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={registerWithPassword} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="signup-email">Email</Label>
+                <Input
+                  id="signup-email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="tu@empresa.com"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  inputMode="email"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="signup-password">Contraseña</Label>
+                <Input
+                  id="signup-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Mínimo 8 caracteres"
+                  type="password"
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="signup-confirm-password">Confirmar contraseña</Label>
+                <Input
+                  id="signup-confirm-password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Repite tu contraseña"
+                  type="password"
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <p className="text-sm text-slate-500">
+                Crear una cuenta no asigna acceso a una organización por sí solo. En entornos multiempresa, el acceso final depende de invitación o membresía.
+              </p>
+
+              <Button type="submit" disabled={busy} className="w-full">
+                {busyAction === "register" ? "Creando cuenta..." : "Crear cuenta"}
+              </Button>
+            </form>
+          )}
+
+          <div className="rounded-[var(--radius-md)] border border-dashed border-[color:var(--border)] bg-slate-50/80 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium text-slate-900">Magic link</div>
+                <div className="text-sm text-slate-500">Úsalo solo como respaldo si tu organización ya depende de ese flujo.</div>
+              </div>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setShowMagicLink((v) => !v)}>
+                {showMagicLink ? "Ocultar" : "Mostrar"}
+              </Button>
+            </div>
+
+            {showMagicLink ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+                <Input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="tu@empresa.com"
+                  type="email"
+                  autoComplete="email"
+                  inputMode="email"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy || !normalizedEmail || !canSendMagicLink}
+                  onClick={sendMagicLink}
+                  className="w-full sm:w-auto"
+                >
+                  {busyAction === "magic_link"
+                    ? "Enviando..."
+                    : !canSendMagicLink
+                    ? `Espera ${Math.max(1, Math.ceil((magicCooldownUntil - nowTs) / 1000))}s`
+                    : "Enviar magic link"}
+                </Button>
+              </div>
+            ) : null}
+          </div>
+
+          {msg ? <p className="whitespace-pre-wrap text-sm text-slate-700">{msg}</p> : null}
         </CardContent>
       </Card>
     </main>

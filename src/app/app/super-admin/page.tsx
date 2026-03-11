@@ -26,6 +26,18 @@ type OrganizationSummary = {
   owners: Array<{ user_id: string; email: string | null }>;
 };
 
+type AccessRequestSummary = {
+  id: string;
+  user_id: string;
+  email: string;
+  status: "pending" | "approved" | "rejected";
+  requested_at: string;
+  resolved_at?: string | null;
+  organization_id?: string | null;
+  assigned_role?: string | null;
+  note?: string | null;
+};
+
 export default function SuperAdminPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -35,10 +47,13 @@ export default function SuperAdminPage() {
 
   const [organizationName, setOrganizationName] = useState("");
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
+  const [accessRequests, setAccessRequests] = useState<AccessRequestSummary[]>([]);
   const [ownerDrafts, setOwnerDrafts] = useState<Record<string, string>>({});
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteOrgId, setInviteOrgId] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
+  const [requestOrgDrafts, setRequestOrgDrafts] = useState<Record<string, string>>({});
+  const [requestRoleDrafts, setRequestRoleDrafts] = useState<Record<string, string>>({});
   const [platformLogoUrl, setPlatformLogoUrl] = useState("");
   const [platformLogoFile, setPlatformLogoFile] = useState<File | null>(null);
   const [platformLogoPreviewUrl, setPlatformLogoPreviewUrl] = useState("");
@@ -60,6 +75,26 @@ export default function SuperAdminPage() {
     setPlatformLogoPreviewUrl(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
   }, [platformLogoFile]);
+
+  useEffect(() => {
+    if (!organizations[0]?.id || accessRequests.length === 0) return;
+
+    setRequestOrgDrafts((prev) => {
+      const next = { ...prev };
+      for (const request of accessRequests) {
+        if (!next[request.id]) next[request.id] = organizations[0].id;
+      }
+      return next;
+    });
+
+    setRequestRoleDrafts((prev) => {
+      const next = { ...prev };
+      for (const request of accessRequests) {
+        if (!next[request.id]) next[request.id] = request.assigned_role || "member";
+      }
+      return next;
+    });
+  }, [organizations, accessRequests]);
 
   async function getTokenOrRedirect() {
     const { data } = await supabaseAuth.auth.getSession();
@@ -96,7 +131,7 @@ export default function SuperAdminPage() {
         return;
       }
 
-      await Promise.all([loadOrganizations(token), loadPlatformBranding(token)]);
+      await Promise.all([loadOrganizations(token), loadAccessRequests(token), loadPlatformBranding(token)]);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         setError("Tiempo de espera agotado validando permisos de super admin.");
@@ -146,6 +181,26 @@ export default function SuperAdminPage() {
     if (!inviteOrgId && Array.isArray(json.organizations) && json.organizations[0]?.id) {
       setInviteOrgId(String(json.organizations[0].id));
     }
+  }
+
+  async function loadAccessRequests(providedToken?: string) {
+    const token = providedToken ?? (await getTokenOrRedirect());
+    if (!token) return;
+
+    const res = await fetch("/api/platform/admin/access-requests", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      requests?: AccessRequestSummary[];
+    };
+
+    if (!res.ok) {
+      setError(json.error || "No se pudieron cargar solicitudes de acceso.");
+      return;
+    }
+
+    setAccessRequests(Array.isArray(json.requests) ? json.requests : []);
   }
 
   async function createOrganization() {
@@ -370,7 +425,50 @@ export default function SuperAdminPage() {
       `Invitación enviada/asignada: ${json.invited?.email || email} → ${json.organization?.name || inviteOrgId} (${json.invited?.role || inviteRole}).`
     );
     setInviteEmail("");
-    await loadOrganizations(token);
+    await Promise.all([loadOrganizations(token), loadAccessRequests(token)]);
+    setBusy(false);
+  }
+
+  async function resolveAccessRequest(requestId: string, action: "approve" | "reject") {
+    setBusy(true);
+    setError("");
+    setOk("");
+
+    const token = await getTokenOrRedirect();
+    if (!token) {
+      setBusy(false);
+      return;
+    }
+
+    const organizationId = requestOrgDrafts[requestId] ?? "";
+    const role = requestRoleDrafts[requestId] ?? "member";
+
+    const res = await fetch("/api/platform/admin/access-requests", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        requestId,
+        action,
+        organizationId: action === "approve" ? organizationId : null,
+        role: action === "approve" ? role : null,
+      }),
+    });
+
+    const json = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      request?: { status?: string; assigned_role?: string | null };
+    };
+    if (!res.ok) {
+      setError(json.error || "No se pudo resolver la solicitud.");
+      setBusy(false);
+      return;
+    }
+
+    setOk(action === "approve" ? "Solicitud aprobada y usuario asociado a organización." : "Solicitud rechazada.");
+    await Promise.all([loadOrganizations(token), loadAccessRequests(token)]);
     setBusy(false);
   }
 
@@ -623,6 +721,99 @@ export default function SuperAdminPage() {
             <Button onClick={sendGlobalInvite} disabled={busy} className="w-full">
               {busy ? "Enviando..." : "Invitar a organización"}
             </Button>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="mt-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Solicitudes de acceso</CardTitle>
+            <CardDescription>
+              Revisa los registros autónomos y asocia manualmente una organización y rol cuando corresponda.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {accessRequests.length === 0 ? (
+              <p className="text-sm text-slate-600">No hay solicitudes de acceso registradas.</p>
+            ) : (
+              <div className="grid gap-3">
+                {accessRequests.map((request) => {
+                  const isPending = request.status === "pending";
+                  const orgDraft = requestOrgDrafts[request.id] ?? organizations[0]?.id ?? "";
+                  const roleDraft = requestRoleDrafts[request.id] ?? request.assigned_role ?? "member";
+
+                  return (
+                    <div key={request.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="text-sm font-semibold text-slate-900">{request.email}</div>
+                            <Badge variant={isPending ? "secondary" : "outline"}>{request.status}</Badge>
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            Solicitado: {new Date(request.requested_at).toLocaleString()}
+                            {request.resolved_at ? ` · Resuelto: ${new Date(request.resolved_at).toLocaleString()}` : ""}
+                          </div>
+                          {request.note ? <div className="mt-2 text-xs text-slate-600">Nota: {request.note}</div> : null}
+                        </div>
+
+                        {isPending ? (
+                          <div className="grid min-w-[280px] gap-2">
+                            <select
+                              value={orgDraft}
+                              onChange={(e) => setRequestOrgDrafts((prev) => ({ ...prev, [request.id]: e.target.value }))}
+                              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                              disabled={busy}
+                            >
+                              <option value="">Selecciona organización…</option>
+                              {organizations.map((org) => (
+                                <option key={org.id} value={org.id}>
+                                  {org.name}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              value={roleDraft}
+                              onChange={(e) => setRequestRoleDrafts((prev) => ({ ...prev, [request.id]: e.target.value }))}
+                              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                              disabled={busy}
+                            >
+                              <option value="member">member</option>
+                              <option value="admin">admin</option>
+                              <option value="owner">owner</option>
+                              <option value="viewer">viewer</option>
+                            </select>
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => resolveAccessRequest(request.id, "approve")}
+                                disabled={busy || !orgDraft}
+                                className="flex-1"
+                              >
+                                Aprobar
+                              </Button>
+                              <Button
+                                onClick={() => resolveAccessRequest(request.id, "reject")}
+                                disabled={busy}
+                                variant="outline"
+                                className="flex-1"
+                              >
+                                Rechazar
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-slate-600">
+                            {request.organization_id ? `Org: ${request.organization_id}` : "Sin organización asignada"}
+                            {request.assigned_role ? ` · Rol: ${request.assigned_role}` : ""}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       </section>
