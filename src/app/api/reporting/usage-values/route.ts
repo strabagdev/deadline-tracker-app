@@ -46,7 +46,6 @@ type UsageLogJoin = {
           | null;
       }[]
     | null;
-  usage_log_field_values?: UsageFieldValueJoin[] | null;
 };
 
 type EntityFieldValueJoin = {
@@ -81,11 +80,6 @@ function getErrorMessage(error: unknown): string {
     if (parts.length > 0) return parts.join(" | ");
   }
   return "error";
-}
-
-function isMissingShowInUsageRecordsError(error: unknown) {
-  const text = getErrorMessage(error).toLowerCase();
-  return text.includes("show_in_usage_records");
 }
 
 function pickOne<T>(value: T | T[] | null | undefined): T | null {
@@ -156,14 +150,6 @@ export async function GET(req: Request) {
           usage_unit_id,
           entity_types(id, name),
           usage_units(id, name, show_in_usage_records)
-        ),
-        usage_log_field_values(
-          usage_field_id,
-          value_text,
-          value_number,
-          value_date,
-          value_boolean,
-          usage_fields(id, name, key, field_type, created_at)
         )
       `
       )
@@ -177,7 +163,7 @@ export async function GET(req: Request) {
     if (entityTypeId && entityTypeId !== "all") query = query.eq("entities.entity_type_id", entityTypeId);
 
     let { data, error } = await query;
-    if (error && isMissingShowInUsageRecordsError(error)) {
+    if (error && getErrorMessage(error).toLowerCase().includes("show_in_usage_records")) {
       let fallbackQuery = db
         .from("usage_logs")
         .select(
@@ -195,14 +181,6 @@ export async function GET(req: Request) {
             usage_unit_id,
             entity_types(id, name),
             usage_units(id, name)
-          ),
-          usage_log_field_values(
-            usage_field_id,
-            value_text,
-            value_number,
-            value_date,
-            value_boolean,
-            usage_fields(id, name, key, field_type, created_at)
           )
         `
         )
@@ -222,6 +200,7 @@ export async function GET(req: Request) {
     if (error) throw error;
 
     const rowsRaw = (data ?? []) as UsageLogJoin[];
+    const usageLogIds = rowsRaw.map((r) => String(r.id)).filter((id) => id.length > 0);
     const entityIds = Array.from(
       new Set(
         rowsRaw
@@ -259,6 +238,33 @@ export async function GET(req: Request) {
       }
     }
     const usageFieldMetaById = new Map<string, { name: string; created_at: string }>();
+    const usageFieldValuesByLogId = new Map<string, UsageFieldValueJoin[]>();
+    if (usageLogIds.length > 0) {
+      const { data: usageFieldValues, error: usageFieldValuesErr } = await db
+        .from("usage_log_field_values")
+        .select(
+          `
+          usage_log_id,
+          usage_field_id,
+          value_text,
+          value_number,
+          value_date,
+          value_boolean,
+          usage_fields(id, name, key, field_type, created_at)
+        `
+        )
+        .eq("organization_id", orgId)
+        .in("usage_log_id", usageLogIds);
+      if (usageFieldValuesErr) throw usageFieldValuesErr;
+
+      for (const row of (usageFieldValues ?? []) as Array<UsageFieldValueJoin & { usage_log_id: string }>) {
+        const usageLogId = String(row.usage_log_id ?? "").trim();
+        if (!usageLogId) continue;
+        const current = usageFieldValuesByLogId.get(usageLogId) ?? [];
+        current.push(row);
+        usageFieldValuesByLogId.set(usageLogId, current);
+      }
+    }
 
     const rows = rowsRaw
       .filter((r) => {
@@ -277,7 +283,7 @@ export async function GET(req: Request) {
       const mainValueText = String(r.value_text ?? "").trim();
       const mainValueNumber = r.value != null && Number.isFinite(Number(r.value)) ? Number(r.value) : null;
       const mainValue = mainValueText || (mainValueNumber != null ? String(mainValueNumber) : "—");
-      const fieldValues = (r.usage_log_field_values ?? []).map((fv) => {
+      const fieldValues = (usageFieldValuesByLogId.get(String(r.id)) ?? []).map((fv) => {
         const f = pickOne(fv.usage_fields);
         const usageFieldId = String(fv.usage_field_id);
         const fieldName = String(f?.name ?? f?.key ?? "Campo");
