@@ -5,6 +5,25 @@ import { getSuperAdminStatus } from "@/lib/server/superAdmin";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object") {
+    const maybe = error as {
+      message?: unknown;
+      error?: unknown;
+      error_description?: unknown;
+      details?: unknown;
+      hint?: unknown;
+    };
+    const parts = [
+      maybe.message,
+      maybe.error,
+      maybe.error_description,
+      maybe.details,
+      maybe.hint,
+    ]
+      .map((value) => String(value ?? "").trim())
+      .filter((value) => value.length > 0);
+    if (parts.length > 0) return parts.join(" | ");
+  }
   return "error";
 }
 
