@@ -20,11 +20,10 @@ type AlertEventRow = {
   id: string;
   entity_id: string;
   deadline_id: string | null;
-  event_type: string;
+  type: string;
   severity: string;
   message: string;
-  first_seen_at: string;
-  last_seen_at: string;
+  created_at: string;
   resolved_at: string | null;
   entities?: { name: string | null } | { name: string | null }[] | null;
   deadlines?:
@@ -129,7 +128,7 @@ export async function POST(req: Request) {
           organization_id: orgId,
           entity_id: r.entity_id,
           deadline_id: r.deadline_id,
-          event_type: EVENT_TYPE,
+          type: EVENT_TYPE,
           severity: r.risk_level,
           message: eventMessage(entityName, deadlineName, r.risk_level, r.days_remaining, labels),
         };
@@ -137,25 +136,25 @@ export async function POST(req: Request) {
 
     const { data: existingData, error: existingErr } = await db
       .from("alert_events")
-      .select("id, entity_id, deadline_id, event_type")
+      .select("id, entity_id, deadline_id, type")
       .eq("organization_id", orgId)
       .is("resolved_at", null)
-      .eq("event_type", EVENT_TYPE);
+      .eq("type", EVENT_TYPE);
     if (existingErr) throw existingErr;
 
     const existing = (existingData ?? []) as Array<{
       id: string;
       entity_id: string;
       deadline_id: string | null;
-      event_type: string;
+      type: string;
     }>;
     const existingByKey = new Map(
-      existing.map((e) => [`${e.event_type}|${e.entity_id}|${e.deadline_id ?? ""}`, e])
+      existing.map((e) => [`${e.type}|${e.entity_id}|${e.deadline_id ?? ""}`, e])
     );
 
     const candidateKeys = new Set<string>();
     for (const c of candidates) {
-      const key = `${c.event_type}|${c.entity_id}|${c.deadline_id ?? ""}`;
+      const key = `${c.type}|${c.entity_id}|${c.deadline_id ?? ""}`;
       candidateKeys.add(key);
       const match = existingByKey.get(key);
       if (match) {
@@ -164,7 +163,6 @@ export async function POST(req: Request) {
           .update({
             severity: c.severity,
             message: c.message,
-            last_seen_at: nowIso,
             resolved_at: null,
           })
           .eq("id", match.id);
@@ -176,11 +174,10 @@ export async function POST(req: Request) {
             organization_id: c.organization_id,
             entity_id: c.entity_id,
             deadline_id: c.deadline_id,
-            event_type: c.event_type,
+            type: c.type,
             severity: c.severity,
             message: c.message,
-            first_seen_at: nowIso,
-            last_seen_at: nowIso,
+            created_at: nowIso,
             resolved_at: null,
           });
         if (insErr) throw insErr;
@@ -188,7 +185,7 @@ export async function POST(req: Request) {
     }
 
     const toResolveIds = existing
-      .filter((e) => !candidateKeys.has(`${e.event_type}|${e.entity_id}|${e.deadline_id ?? ""}`))
+      .filter((e) => !candidateKeys.has(`${e.type}|${e.entity_id}|${e.deadline_id ?? ""}`))
       .map((e) => e.id);
     if (toResolveIds.length > 0) {
       const { error: resErr } = await db
@@ -231,28 +228,27 @@ export async function GET(req: Request) {
         id,
         entity_id,
         deadline_id,
-        event_type,
+        type,
         severity,
         message,
-        first_seen_at,
-        last_seen_at,
+        created_at,
         resolved_at,
         entities(name),
         deadlines(deadline_types(name))
       `
       )
       .eq("organization_id", orgId)
-      .eq("event_type", EVENT_TYPE)
+      .eq("type", EVENT_TYPE)
       .is("resolved_at", null)
-      .order("last_seen_at", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(200);
     if (activeErr) throw activeErr;
 
     const { data: recentResolvedData, error: resolvedErr } = await db
       .from("alert_events")
-      .select("id, entity_id, deadline_id, event_type, severity, message, first_seen_at, last_seen_at, resolved_at")
+      .select("id, entity_id, deadline_id, type, severity, message, created_at, resolved_at")
       .eq("organization_id", orgId)
-      .eq("event_type", EVENT_TYPE)
+      .eq("type", EVENT_TYPE)
       .not("resolved_at", "is", null)
       .order("resolved_at", { ascending: false })
       .limit(50);
@@ -268,29 +264,29 @@ export async function GET(req: Request) {
         entity_name: entity?.name ?? "Entidad",
         deadline_id: r.deadline_id,
         deadline_name: deadlineType?.name ?? "Vencimiento",
-        event_type: r.event_type,
+        event_type: r.type,
         severity: r.severity,
         message: r.message,
-        first_seen_at: r.first_seen_at,
-        last_seen_at: r.last_seen_at,
+        first_seen_at: r.created_at,
+        last_seen_at: r.created_at,
         resolved_at: r.resolved_at,
       };
     }).sort((a, b) => {
       const pa = severityPriority(a.severity);
       const pb = severityPriority(b.severity);
       if (pa !== pb) return pa - pb;
-      return new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime();
+      return new Date(b.first_seen_at).getTime() - new Date(a.first_seen_at).getTime();
     });
 
     const recent_resolved = (recentResolvedData ?? []).map((r) => ({
       id: String(r.id),
       entity_id: String(r.entity_id),
       deadline_id: r.deadline_id ? String(r.deadline_id) : null,
-      event_type: String(r.event_type),
+      event_type: String(r.type),
       severity: String(r.severity),
       message: String(r.message),
-      first_seen_at: String(r.first_seen_at),
-      last_seen_at: String(r.last_seen_at),
+      first_seen_at: String(r.created_at),
+      last_seen_at: String(r.created_at),
       resolved_at: String(r.resolved_at),
     }));
 

@@ -267,7 +267,7 @@ export async function syncForecastAndAlertsForEntity(db: DataClient, orgId: stri
       organization_id: orgId,
       entity_id: r.entity_id,
       deadline_id: r.deadline_id,
-      event_type: EVENT_TYPE,
+      type: EVENT_TYPE,
       severity: r.risk_level,
       message: eventMessage(entityName, deadlineName, r.risk_level, r.days_remaining, labels),
     };
@@ -275,9 +275,9 @@ export async function syncForecastAndAlertsForEntity(db: DataClient, orgId: stri
 
   const { data: existingAlertsData, error: existingAlertsErr } = await db
     .from("alert_events")
-    .select("id, entity_id, deadline_id, event_type")
+    .select("id, entity_id, deadline_id, type")
     .eq("organization_id", orgId)
-    .eq("event_type", EVENT_TYPE)
+    .eq("type", EVENT_TYPE)
     .eq("entity_id", entityId)
     .is("resolved_at", null);
   if (existingAlertsErr) throw existingAlertsErr;
@@ -286,15 +286,15 @@ export async function syncForecastAndAlertsForEntity(db: DataClient, orgId: stri
     id: string;
     entity_id: string;
     deadline_id: string | null;
-    event_type: string;
+    type: string;
   }>;
   const existingByKey = new Map(
-    existing.map((e) => [`${e.event_type}|${e.entity_id}|${e.deadline_id ?? ""}`, e])
+    existing.map((e) => [`${e.type}|${e.entity_id}|${e.deadline_id ?? ""}`, e])
   );
 
   const candidateKeys = new Set<string>();
   for (const c of candidates) {
-    const key = `${c.event_type}|${c.entity_id}|${c.deadline_id ?? ""}`;
+    const key = `${c.type}|${c.entity_id}|${c.deadline_id ?? ""}`;
     candidateKeys.add(key);
     const match = existingByKey.get(key);
     if (match) {
@@ -303,7 +303,6 @@ export async function syncForecastAndAlertsForEntity(db: DataClient, orgId: stri
         .update({
           severity: c.severity,
           message: c.message,
-          last_seen_at: nowIso,
           resolved_at: null,
         })
         .eq("id", match.id);
@@ -313,11 +312,10 @@ export async function syncForecastAndAlertsForEntity(db: DataClient, orgId: stri
         organization_id: c.organization_id,
         entity_id: c.entity_id,
         deadline_id: c.deadline_id,
-        event_type: c.event_type,
+        type: c.type,
         severity: c.severity,
         message: c.message,
-        first_seen_at: nowIso,
-        last_seen_at: nowIso,
+        created_at: nowIso,
         resolved_at: null,
       });
       if (insErr) throw insErr;
@@ -325,7 +323,7 @@ export async function syncForecastAndAlertsForEntity(db: DataClient, orgId: stri
   }
 
   const toResolveIds = existing
-    .filter((e) => !candidateKeys.has(`${e.event_type}|${e.entity_id}|${e.deadline_id ?? ""}`))
+    .filter((e) => !candidateKeys.has(`${e.type}|${e.entity_id}|${e.deadline_id ?? ""}`))
     .map((e) => e.id);
   if (toResolveIds.length > 0) {
     const { error: resolveErr } = await db

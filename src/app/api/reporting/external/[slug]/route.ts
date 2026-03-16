@@ -30,9 +30,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
 
     const { data, error } = await db
       .from("reporting_endpoints")
-      .select("organization_id, slug, label, dataset_key, endpoint_token, is_active")
+      .select("organization_id, slug, name, dataset_key, token_hash, is_active")
       .eq("slug", endpointSlug)
-      .eq("endpoint_token", endpointToken)
+      .eq("token_hash", endpointToken)
       .maybeSingle();
     if (error) throw error;
     if (!data) return NextResponse.json({ error: "endpoint not found", code: "NOT_FOUND" }, { status: 404 });
@@ -49,7 +49,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       meta: {
         organization_id: orgId,
         endpoint_slug: String(data.slug),
-        endpoint_label: String(data.label ?? ""),
+        endpoint_label: String(data.name ?? ""),
         dataset_key: datasetKey,
         dataset_note:
           datasetKey === "usage_logs"

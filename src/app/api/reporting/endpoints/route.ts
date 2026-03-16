@@ -83,7 +83,7 @@ export async function GET(req: Request) {
 
     const { data, error } = await db
       .from("reporting_endpoints")
-      .select("id, slug, label, dataset_key, endpoint_token, is_active, created_at, updated_at")
+      .select("id, slug, name, dataset_key, token_hash, is_active, created_at, updated_at")
       .eq("organization_id", access.organizationId)
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -93,9 +93,9 @@ export async function GET(req: Request) {
       endpoints: (data ?? []).map((row) => ({
         id: String(row.id),
         slug: String(row.slug),
-        label: String(row.label),
+        label: String(row.name),
         dataset_key: String(row.dataset_key),
-        endpoint_token: String(row.endpoint_token),
+        endpoint_token: String(row.token_hash),
         is_active: Boolean(row.is_active),
         created_at: String(row.created_at),
         updated_at: String(row.updated_at),
@@ -164,9 +164,9 @@ export async function POST(req: Request) {
       .insert({
         organization_id: access.organizationId,
         slug,
-        label,
+        name: label,
         dataset_key: datasetKey,
-        endpoint_token: makeToken(),
+        token_hash: makeToken(),
         is_active: true,
       })
       .select("id")
@@ -210,7 +210,7 @@ export async function PUT(req: Request) {
     if (body?.label != null) {
       const label = String(body.label).trim();
       if (!label) return NextResponse.json({ error: "label cannot be empty", code: "BAD_REQUEST" }, { status: 400 });
-      patch.label = label;
+      patch.name = label;
     }
     if (body?.slug != null) {
       const slug = normalizeSlug(String(body.slug));
@@ -223,7 +223,7 @@ export async function PUT(req: Request) {
       patch.dataset_key = datasetKey;
     }
     if (body?.is_active != null) patch.is_active = Boolean(body.is_active);
-    if (body?.rotate_token === true) patch.endpoint_token = makeToken();
+    if (body?.rotate_token === true) patch.token_hash = makeToken();
 
     const { error } = await db
       .from("reporting_endpoints")

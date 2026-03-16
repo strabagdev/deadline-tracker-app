@@ -180,15 +180,7 @@ export async function buildBiDatasetRows(
       value_text,
       logged_on,
       logged_at,
-      entities(name, entity_types(name), usage_units(name)),
-      usage_log_field_values(
-        usage_field_id,
-        value_text,
-        value_number,
-        value_date,
-        value_boolean,
-        usage_fields(name, key)
-      )
+      entities(name, entity_types(name), usage_units(name))
     `
     )
     .eq("organization_id", organizationId)
@@ -201,6 +193,62 @@ export async function buildBiDatasetRows(
 
   const { data, error } = await query;
   if (error) throw new Error(readMessage(error));
+
+  const usageLogIds = Array.from(
+    new Set(
+      (data ?? [])
+        .map((r) => String((r as { id?: string }).id ?? "").trim())
+        .filter((v) => v.length > 0)
+    )
+  );
+
+  const usageFieldValuesByLogId = new Map<
+    string,
+    Array<{
+      value_text?: string | null;
+      value_number?: number | null;
+      value_date?: string | null;
+      value_boolean?: boolean | null;
+      usage_fields?:
+        | { name?: string | null; key?: string | null }
+        | { name?: string | null; key?: string | null }[]
+        | null;
+    }>
+  >();
+  if (usageLogIds.length > 0) {
+    const { data: usageFieldRows, error: usageFieldErr } = await db
+      .from("usage_log_field_values")
+      .select(
+        `
+        usage_log_id,
+        value_text,
+        value_number,
+        value_date,
+        value_boolean,
+        usage_fields(name, key)
+      `
+      )
+      .eq("organization_id", organizationId)
+      .in("usage_log_id", usageLogIds);
+    if (usageFieldErr) throw new Error(readMessage(usageFieldErr));
+
+    for (const row of usageFieldRows ?? []) {
+      const usageLogId = String((row as { usage_log_id?: string }).usage_log_id ?? "").trim();
+      if (!usageLogId) continue;
+      const current = usageFieldValuesByLogId.get(usageLogId) ?? [];
+      current.push(row as {
+        value_text?: string | null;
+        value_number?: number | null;
+        value_date?: string | null;
+        value_boolean?: boolean | null;
+        usage_fields?:
+          | { name?: string | null; key?: string | null }
+          | { name?: string | null; key?: string | null }[]
+          | null;
+      });
+      usageFieldValuesByLogId.set(usageLogId, current);
+    }
+  }
 
   const entityIds = Array.from(
     new Set(
@@ -247,21 +295,7 @@ export async function buildBiDatasetRows(
     );
     const entityType = pickOne(entity?.entity_types ?? null);
     const usageUnit = pickOne(entity?.usage_units ?? null);
-    const usageFieldValuesRaw =
-      (r as {
-        usage_log_field_values?:
-          | Array<{
-              value_text?: string | null;
-              value_number?: number | null;
-              value_date?: string | null;
-              value_boolean?: boolean | null;
-              usage_fields?:
-                | { name?: string | null; key?: string | null }
-                | { name?: string | null; key?: string | null }[]
-                | null;
-            }>
-          | null;
-      }).usage_log_field_values ?? [];
+    const usageFieldValuesRaw = usageFieldValuesByLogId.get(String((r as { id: string }).id)) ?? [];
 
     const usageFieldValues: Record<string, string | number | boolean> = {};
     for (const fv of usageFieldValuesRaw) {

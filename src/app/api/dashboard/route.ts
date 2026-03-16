@@ -24,10 +24,6 @@ type ForecastRow = {
   days_remaining: number | null;
   risk_level: "green" | "yellow" | "orange" | "red" | "none";
   risk_score: number | null;
-  deadlines?:
-    | { deadline_types?: { name: string | null; measure_by: "date" | "usage" | null } | { name: string | null; measure_by: "date" | "usage" | null }[] | null }
-    | { deadline_types?: { name: string | null; measure_by: "date" | "usage" | null } | { name: string | null; measure_by: "date" | "usage" | null }[] | null }[]
-    | null;
 };
 
 type DynamicFieldDistribution = {
@@ -61,7 +57,27 @@ function parseTrendLabelTime(label: string): number | null {
 }
 
 function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "error";
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object") {
+    const maybe = error as {
+      message?: unknown;
+      error?: unknown;
+      error_description?: unknown;
+      details?: unknown;
+      hint?: unknown;
+    };
+    const parts = [
+      maybe.message,
+      maybe.error,
+      maybe.error_description,
+      maybe.details,
+      maybe.hint,
+    ]
+      .map((value) => String(value ?? "").trim())
+      .filter((value) => value.length > 0);
+    if (parts.length > 0) return parts.join(" | ");
+  }
+  return "error";
 }
 
 function pickOne<T>(value: T | T[] | null | undefined): T | null {
@@ -413,27 +429,55 @@ export async function GET(req: Request) {
     if (entityIds.length > 0) {
       const { data: forecastsData, error: forecastsErr } = await db
         .from("deadline_forecasts")
-        .select(
-          "entity_id, deadline_id, forecast_due_date, days_remaining, risk_level, risk_score, deadlines(deadline_types(name, measure_by))"
-        )
+        .select("entity_id, deadline_id, forecast_due_date, days_remaining, risk_level, risk_score")
         .eq("organization_id", orgId)
         .in("entity_id", entityIds);
       if (forecastsErr) throw forecastsErr;
+
+      const deadlineIds = Array.from(
+        new Set(
+          ((forecastsData ?? []) as ForecastRow[])
+            .map((row) => String(row.deadline_id ?? "").trim())
+            .filter((id) => id.length > 0)
+        )
+      );
+      const deadlineMetaById = new Map<string, { name: string; measure_by: "date" | "usage" | "unknown" }>();
+      if (deadlineIds.length > 0) {
+        const { data: deadlineMetaData, error: deadlineMetaErr } = await db
+          .from("deadlines")
+          .select("id, deadline_types(name, measure_by)")
+          .eq("organization_id", orgId)
+          .in("id", deadlineIds);
+        if (deadlineMetaErr) throw deadlineMetaErr;
+
+        for (const row of (deadlineMetaData ?? []) as Array<{
+          id: string;
+          deadline_types?:
+            | { name?: string | null; measure_by?: "date" | "usage" | null }
+            | { name?: string | null; measure_by?: "date" | "usage" | null }[]
+            | null;
+        }>) {
+          const deadlineType = pickOne(row.deadline_types ?? null);
+          deadlineMetaById.set(String(row.id), {
+            name: String(deadlineType?.name ?? "Vencimiento"),
+            measure_by:
+              deadlineType?.measure_by === "date" || deadlineType?.measure_by === "usage"
+                ? deadlineType.measure_by
+                : "unknown",
+          });
+        }
+      }
 
       for (const row of (forecastsData ?? []) as ForecastRow[]) {
         const current = nearestForecastByEntity.get(row.entity_id);
         const rowDays = row.days_remaining ?? Number.MAX_SAFE_INTEGER;
         const currentDays = current?.days_remaining ?? Number.MAX_SAFE_INTEGER;
         if (!current || rowDays < currentDays) {
-          const deadline = pickOne(row.deadlines);
-          const deadlineType = pickOne(deadline?.deadline_types ?? null);
+          const deadlineMeta = deadlineMetaById.get(String(row.deadline_id));
           nearestForecastByEntity.set(row.entity_id, {
             deadline_id: String(row.deadline_id),
-            deadline_name: String(deadlineType?.name ?? "Vencimiento"),
-            measure_by:
-              deadlineType?.measure_by === "date" || deadlineType?.measure_by === "usage"
-                ? deadlineType.measure_by
-                : "unknown",
+            deadline_name: deadlineMeta?.name ?? "Vencimiento",
+            measure_by: deadlineMeta?.measure_by ?? "unknown",
             forecast_due_date: row.forecast_due_date ? String(row.forecast_due_date) : null,
             days_remaining: row.days_remaining != null ? Number(row.days_remaining) : null,
             risk_level: row.risk_level,
