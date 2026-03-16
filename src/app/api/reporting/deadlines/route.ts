@@ -3,6 +3,7 @@ import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { canViewModule, getOrgAccess } from "@/lib/server/orgAccess";
 import { isSuperAdmin } from "@/lib/server/superAdmin";
+import { getSemaphoreSettings } from "@/lib/server/semaphoreSettings";
 
 type ReportStatus = "green" | "yellow" | "orange" | "red";
 
@@ -163,16 +164,11 @@ export async function GET(req: Request) {
       }
     }
 
-    const { data: settingsData, error: settingsErr } = await db
-      .from("organization_settings")
-      .select("yellow_days, orange_days, red_days")
-      .eq("organization_id", orgId)
-      .maybeSingle();
-    if (settingsErr) throw settingsErr;
+    const semaphore = await getSemaphoreSettings(db, orgId);
     const thresholds = {
-      yellowDays: Number(settingsData?.yellow_days ?? 60),
-      orangeDays: Number(settingsData?.orange_days ?? 30),
-      redDays: Number(settingsData?.red_days ?? 15),
+      yellowDays: semaphore.yellowDays,
+      orangeDays: semaphore.orangeDays,
+      redDays: semaphore.redDays,
     };
 
     const { data: deadlineData, error: deadlinesErr } = await db

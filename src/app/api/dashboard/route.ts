@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { canViewModule, getOrgAccess } from "@/lib/server/orgAccess";
+import { getSemaphoreSettings } from "@/lib/server/semaphoreSettings";
 
 type DataClient = ReturnType<typeof createDataServerClient>;
 type Status = "green" | "yellow" | "orange" | "red" | "none";
@@ -486,16 +487,11 @@ export async function GET(req: Request) {
         }
       }
 
-      const { data: settingsData, error: settingsErr } = await db
-        .from("organization_settings")
-        .select("yellow_days, orange_days, red_days")
-        .eq("organization_id", orgId)
-        .maybeSingle();
-      if (settingsErr) throw settingsErr;
+      const semaphore = await getSemaphoreSettings(db, orgId);
       const thresholds = {
-        yellow: Number(settingsData?.yellow_days ?? 60),
-        orange: Number(settingsData?.orange_days ?? 30),
-        red: Number(settingsData?.red_days ?? 15),
+        yellow: semaphore.yellowDays,
+        orange: semaphore.orangeDays,
+        red: semaphore.redDays,
       };
 
       const { data: deadlinesData, error: deadlinesErr } = await db

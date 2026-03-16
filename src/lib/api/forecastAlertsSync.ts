@@ -1,4 +1,5 @@
 import { createDataServerClient } from "@/lib/supabase/dataServer";
+import { getSemaphoreSettings } from "@/lib/server/semaphoreSettings";
 
 type DataClient = ReturnType<typeof createDataServerClient>;
 type RiskLevel = "green" | "yellow" | "orange" | "red" | "none";
@@ -92,22 +93,17 @@ export async function syncForecastAndAlertsForEntity(db: DataClient, orgId: stri
   const now = new Date();
   const nowIso = now.toISOString();
 
-  const { data: settingsData, error: settingsErr } = await db
-    .from("organization_settings")
-    .select("yellow_days, orange_days, red_days, label_red, label_orange, label_yellow")
-    .eq("organization_id", orgId)
-    .maybeSingle();
-  if (settingsErr) throw settingsErr;
+  const semaphore = await getSemaphoreSettings(db, orgId);
 
   const thresholds = {
-    yellowDays: Number(settingsData?.yellow_days ?? 60),
-    orangeDays: Number(settingsData?.orange_days ?? 30),
-    redDays: Number(settingsData?.red_days ?? 15),
+    yellowDays: semaphore.yellowDays,
+    orangeDays: semaphore.orangeDays,
+    redDays: semaphore.redDays,
   };
   const labels = {
-    red: String(settingsData?.label_red ?? "Vencido"),
-    orange: String(settingsData?.label_orange ?? "Por vencer"),
-    yellow: String(settingsData?.label_yellow ?? "Aviso"),
+    red: semaphore.labelRed,
+    orange: semaphore.labelOrange,
+    yellow: semaphore.labelYellow,
   };
 
   const { data: deadlinesData, error: deadlinesErr } = await db

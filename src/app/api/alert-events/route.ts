@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { canViewModule, getOrgAccess } from "@/lib/server/orgAccess";
+import { getSemaphoreSettings } from "@/lib/server/semaphoreSettings";
 
 type ForecastRow = {
   organization_id: string;
@@ -83,16 +84,11 @@ export async function POST(req: Request) {
 
     const nowIso = new Date().toISOString();
     const EVENT_TYPE = "forecast_risk";
-    const { data: settingsData, error: settingsErr } = await db
-      .from("organization_settings")
-      .select("label_red, label_orange, label_yellow")
-      .eq("organization_id", orgId)
-      .maybeSingle();
-    if (settingsErr) throw settingsErr;
+    const semaphore = await getSemaphoreSettings(db, orgId);
     const labels = {
-      red: String(settingsData?.label_red ?? "Vencido"),
-      orange: String(settingsData?.label_orange ?? "Por vencer"),
-      yellow: String(settingsData?.label_yellow ?? "Aviso"),
+      red: semaphore.labelRed,
+      orange: semaphore.labelOrange,
+      yellow: semaphore.labelYellow,
     };
 
     const { data: forecastData, error: forecastErr } = await db
