@@ -21,9 +21,12 @@ function getEnvOrigin() {
   );
 }
 
+function isLocalOrigin(value: string) {
+  return value.includes("localhost") || value.includes("127.0.0.1");
+}
+
 export function getPublicAppOrigin(req: Request): string {
   const envOrigin = getEnvOrigin();
-  if (envOrigin) return envOrigin;
 
   const forwardedHost = String(req.headers.get("x-forwarded-host") ?? "")
     .split(",")[0]
@@ -32,13 +35,18 @@ export function getPublicAppOrigin(req: Request): string {
     .split(",")[0]
     .trim();
 
+  if (envOrigin && !isLocalOrigin(envOrigin)) return envOrigin;
+
   if (forwardedHost) {
     const proto = forwardedProto || "https";
-    return `${proto}://${forwardedHost}`;
+    const forwardedOrigin = `${proto}://${forwardedHost}`;
+    if (!isLocalOrigin(forwardedOrigin) || !envOrigin) return forwardedOrigin;
   }
 
   const reqOrigin = safeOriginFromUrl(req.url);
-  if (reqOrigin && !reqOrigin.includes("localhost")) return reqOrigin;
+  if (reqOrigin && !isLocalOrigin(reqOrigin)) return reqOrigin;
+
+  if (envOrigin) return envOrigin;
 
   return reqOrigin || "http://localhost:3000";
 }
