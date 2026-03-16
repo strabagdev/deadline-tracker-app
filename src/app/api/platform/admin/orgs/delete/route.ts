@@ -9,6 +9,15 @@ function getErrorMessage(error: unknown): string {
   return "error";
 }
 
+async function deleteByOrganizationId(
+  db: ReturnType<typeof createDataServerClient>,
+  table: string,
+  organizationId: string
+) {
+  const { error } = await db.from(table).delete().eq("organization_id", organizationId);
+  if (error) throw error;
+}
+
 export async function DELETE(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
@@ -30,45 +39,37 @@ export async function DELETE(req: Request) {
     if (orgErr) throw orgErr;
     if (!org?.id) return NextResponse.json({ error: "organization not found", code: "ORGANIZATION_NOT_FOUND" }, { status: 404 });
 
-    // Limpieza manual para evitar bloqueos por FK cuando no hay ON DELETE CASCADE.
-    const { error: usageErr } = await db.from("usage_logs").delete().eq("organization_id", organizationId);
-    if (usageErr) throw usageErr;
-
-    const { error: deadlinesErr } = await db.from("deadlines").delete().eq("organization_id", organizationId);
-    if (deadlinesErr) throw deadlinesErr;
-
-    const { error: settingsErr } = await db
-      .from("organization_settings")
-      .delete()
-      .eq("organization_id", organizationId);
-    if (settingsErr) throw settingsErr;
-
-    const { error: membersErr } = await db
-      .from("organization_members")
-      .delete()
-      .eq("organization_id", organizationId);
-    if (membersErr) throw membersErr;
-
-    const { error: entitiesErr } = await db.from("entities").delete().eq("organization_id", organizationId);
-    if (entitiesErr) throw entitiesErr;
-
-    const { error: typeErr } = await db
-      .from("deadline_types")
-      .delete()
-      .eq("organization_id", organizationId);
-    if (typeErr) throw typeErr;
-
-    const { error: entityTypeErr } = await db
-      .from("entity_types")
-      .delete()
-      .eq("organization_id", organizationId);
-    if (entityTypeErr) throw entityTypeErr;
-
     const { error: userSettingsErr } = await db
       .from("user_settings")
       .update({ active_organization_id: null, updated_at: new Date().toISOString() })
       .eq("active_organization_id", organizationId);
     if (userSettingsErr) throw userSettingsErr;
+
+    // Limpieza explícita alineada al modelo bootstrap actual para tolerar bases legacy con cascadas incompletas.
+    for (const table of [
+      "organization_member_type_modules",
+      "organization_invite_email_cooldowns",
+      "reporting_endpoints",
+      "deadline_change_events",
+      "alert_events",
+      "deadline_forecasts",
+      "usage_log_field_values",
+      "usage_logs",
+      "usage_fields",
+      "usage_units",
+      "entity_field_values",
+      "entity_fields",
+      "deadlines",
+      "deadline_types",
+      "entities",
+      "entity_types",
+      "organization_access_requests",
+      "organization_members",
+      "organization_member_types",
+      "organization_settings",
+    ] as const) {
+      await deleteByOrganizationId(db, table, organizationId);
+    }
 
     const { error: deleteOrgErr } = await db.from("organizations").delete().eq("id", organizationId);
     if (deleteOrgErr) throw deleteOrgErr;

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { canViewModule, getOrgAccess, isAdminRole } from "@/lib/server/orgAccess";
+import { getSemaphoreSettings } from "@/lib/server/semaphoreSettings";
 
 function getErrorMessage(err: unknown) {
   return err instanceof Error ? err.message : "error";
@@ -55,60 +56,18 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
 
-    const { data, error } = await db
-      .from("organization_settings")
-      .select(
-        "organization_id, yellow_days, orange_days, red_days, label_green, label_yellow, label_orange, label_red, updated_at"
-      )
-      .eq("organization_id", access.organizationId)
-      .maybeSingle();
-
-    if (error && !isMissingColumnError(error)) throw error;
-
-    let settings = data as
-      | {
-          organization_id: string;
-          yellow_days: number;
-          orange_days: number;
-          red_days: number;
-          label_green?: string | null;
-          label_yellow?: string | null;
-          label_orange?: string | null;
-          label_red?: string | null;
-          updated_at: string | null;
-        }
-      | null;
-
-    if (error && isMissingColumnError(error)) {
-      const { data: legacyData, error: legacyError } = await db
-        .from("organization_settings")
-        .select("organization_id, yellow_days, orange_days, red_days, updated_at")
-        .eq("organization_id", access.organizationId)
-        .maybeSingle();
-      if (legacyError) throw legacyError;
-      settings = legacyData
-        ? {
-            ...legacyData,
-            label_green: "Al día",
-            label_yellow: "Aviso",
-            label_orange: "Por vencer",
-            label_red: "Vencido",
-          }
-        : null;
-    }
-
-    const safeSettings =
-      settings ?? ({
-        organization_id: access.organizationId,
-        yellow_days: 60,
-        orange_days: 30,
-        red_days: 15,
-        label_green: "Al día",
-        label_yellow: "Aviso",
-        label_orange: "Por vencer",
-        label_red: "Vencido",
-        updated_at: null,
-      } as const);
+    const settings = await getSemaphoreSettings(db, access.organizationId);
+    const safeSettings = {
+      organization_id: access.organizationId,
+      yellow_days: settings.yellowDays,
+      orange_days: settings.orangeDays,
+      red_days: settings.redDays,
+      label_green: settings.labelGreen,
+      label_yellow: settings.labelYellow,
+      label_orange: settings.labelOrange,
+      label_red: settings.labelRed,
+      updated_at: null,
+    };
 
     return NextResponse.json({ organization_id: access.organizationId, role: access.role, settings: safeSettings });
   } catch (e: unknown) {
@@ -188,39 +147,22 @@ export async function PUT(req: Request) {
       throw upErr;
     }
 
-    const { data, error } = await db
-      .from("organization_settings")
-      .select(
-        "organization_id, yellow_days, orange_days, red_days, label_green, label_yellow, label_orange, label_red, updated_at"
-      )
-      .eq("organization_id", access.organizationId)
-      .maybeSingle();
-
-    if (error && !isMissingColumnError(error)) throw error;
-
-    if (error && isMissingColumnError(error)) {
-      const { data: legacyData, error: legacyError } = await db
-        .from("organization_settings")
-        .select("organization_id, yellow_days, orange_days, red_days, updated_at")
-        .eq("organization_id", access.organizationId)
-        .maybeSingle();
-      if (legacyError) throw legacyError;
-      return NextResponse.json({
+    const settings = await getSemaphoreSettings(db, access.organizationId);
+    return NextResponse.json({
+      organization_id: access.organizationId,
+      role: access.role,
+      settings: {
         organization_id: access.organizationId,
-        role: access.role,
-        settings: legacyData
-          ? {
-              ...legacyData,
-              label_green: "Al día",
-              label_yellow: "Aviso",
-              label_orange: "Por vencer",
-              label_red: "Vencido",
-            }
-          : null,
-      });
-    }
-
-    return NextResponse.json({ organization_id: access.organizationId, role: access.role, settings: data });
+        yellow_days: settings.yellowDays,
+        orange_days: settings.orangeDays,
+        red_days: settings.redDays,
+        label_green: settings.labelGreen,
+        label_yellow: settings.labelYellow,
+        label_orange: settings.labelOrange,
+        label_red: settings.labelRed,
+        updated_at: null,
+      },
+    });
   } catch (e: unknown) {
     return NextResponse.json({ error: getErrorMessage(e), code: "INTERNAL_ERROR" }, { status: 500 });
   }
