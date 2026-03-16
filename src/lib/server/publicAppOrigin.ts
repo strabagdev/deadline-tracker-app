@@ -34,6 +34,10 @@ export function getPublicAppOrigin(req: Request): string {
   const forwardedProto = String(req.headers.get("x-forwarded-proto") ?? "")
     .split(",")[0]
     .trim();
+  const host = String(req.headers.get("host") ?? "")
+    .split(",")[0]
+    .trim();
+  const reqProto = safeOriginFromUrl(req.url).startsWith("https://") ? "https" : "http";
 
   if (envOrigin && !isLocalOrigin(envOrigin)) return envOrigin;
 
@@ -41,6 +45,11 @@ export function getPublicAppOrigin(req: Request): string {
     const proto = forwardedProto || "https";
     const forwardedOrigin = `${proto}://${forwardedHost}`;
     if (!isLocalOrigin(forwardedOrigin) || !envOrigin) return forwardedOrigin;
+  }
+
+  if (host) {
+    const hostOrigin = `${forwardedProto || reqProto}://${host}`;
+    if (!isLocalOrigin(hostOrigin) || !envOrigin) return hostOrigin;
   }
 
   const reqOrigin = safeOriginFromUrl(req.url);
