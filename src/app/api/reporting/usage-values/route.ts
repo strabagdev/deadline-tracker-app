@@ -61,7 +61,31 @@ type EntityFieldValueJoin = {
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object") {
+    const maybe = error as {
+      message?: unknown;
+      error?: unknown;
+      error_description?: unknown;
+      details?: unknown;
+      hint?: unknown;
+    };
+    const parts = [
+      maybe.message,
+      maybe.error,
+      maybe.error_description,
+      maybe.details,
+      maybe.hint,
+    ]
+      .map((value) => String(value ?? "").trim())
+      .filter((value) => value.length > 0);
+    if (parts.length > 0) return parts.join(" | ");
+  }
   return "error";
+}
+
+function isMissingShowInUsageRecordsError(error: unknown) {
+  const text = getErrorMessage(error).toLowerCase();
+  return text.includes("show_in_usage_records");
 }
 
 function pickOne<T>(value: T | T[] | null | undefined): T | null {
@@ -152,7 +176,49 @@ export async function GET(req: Request) {
     if (dateTo) query = query.lte("logged_on", dateTo);
     if (entityTypeId && entityTypeId !== "all") query = query.eq("entities.entity_type_id", entityTypeId);
 
-    const { data, error } = await query;
+    let { data, error } = await query;
+    if (error && isMissingShowInUsageRecordsError(error)) {
+      let fallbackQuery = db
+        .from("usage_logs")
+        .select(
+          `
+          id,
+          entity_id,
+          value,
+          value_text,
+          logged_on,
+          logged_at,
+          entities!inner(
+            id,
+            name,
+            entity_type_id,
+            usage_unit_id,
+            entity_types(id, name),
+            usage_units(id, name)
+          ),
+          usage_log_field_values(
+            usage_field_id,
+            value_text,
+            value_number,
+            value_date,
+            value_boolean,
+            usage_fields(id, name, key, field_type, created_at)
+          )
+        `
+        )
+        .eq("organization_id", orgId)
+        .order("logged_on", { ascending: false })
+        .order("logged_at", { ascending: false })
+        .limit(limit);
+
+      if (dateFrom) fallbackQuery = fallbackQuery.gte("logged_on", dateFrom);
+      if (dateTo) fallbackQuery = fallbackQuery.lte("logged_on", dateTo);
+      if (entityTypeId && entityTypeId !== "all") fallbackQuery = fallbackQuery.eq("entities.entity_type_id", entityTypeId);
+
+      const fallback = await fallbackQuery;
+      data = fallback.data;
+      error = fallback.error;
+    }
     if (error) throw error;
 
     const rowsRaw = (data ?? []) as UsageLogJoin[];
