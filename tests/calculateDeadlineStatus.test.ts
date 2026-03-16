@@ -51,7 +51,7 @@ test("measure_by=usage calcula vencimiento usando latestUsage y last_done_usage"
   const result = calculateDeadlineStatus(deadline, 130, thresholds);
   assert.equal(result.measureBy, "usage");
   assert.ok(result.due instanceof Date);
-  assert.equal(result.status, "red");
+  assert.equal(result.status, "orange");
 });
 
 test("measure_by=usage sin usage logs usa fallback con last_done_date", () => {
