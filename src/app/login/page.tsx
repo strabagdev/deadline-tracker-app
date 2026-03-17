@@ -405,218 +405,292 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto mt-4 w-full max-w-xl px-3 sm:mt-10 sm:px-4">
-      <Card className="overflow-hidden">
-        <CardHeader className="space-y-3 border-b border-[color:var(--border)] bg-[linear-gradient(135deg,#ecfeff_0%,#f8fafc_55%,#ffffff_100%)]">
-          {platformLogoUrl ? (
-            <div className="flex justify-center pb-1">
-              <Image
-                src={platformLogoUrl}
-                alt="Logo plataforma"
-                width={110}
-                height={110}
-                className="h-[96px] w-[96px] rounded-2xl object-cover shadow-sm"
-              />
-            </div>
-          ) : null}
-          <div className="space-y-1 text-center">
-            <CardTitle className="text-2xl">Acceso a Ops Ahead</CardTitle>
-            <CardDescription>
-              Prioriza SSO y contraseña. Magic link queda como respaldo para usuarios existentes.
-            </CardDescription>
-          </div>
-        </CardHeader>
-
-        <CardContent className="space-y-5 pt-5">
-          <div className="grid gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              className="w-full justify-center"
-              onClick={() => void startOAuth("azure")}
-            >
-              {busyAction === "oauth_microsoft" ? "Conectando..." : "Continuar con Microsoft"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              className="w-full justify-center"
-              onClick={() => void startOAuth("google")}
-            >
-              {busyAction === "oauth_google" ? "Conectando..." : "Continuar con Google"}
-            </Button>
-          </div>
-
-          <div className="flex items-center gap-3 text-xs uppercase tracking-[0.24em] text-slate-400">
-            <div className="h-px flex-1 bg-[color:var(--border)]" />
-            <span>o entra con correo</span>
-            <div className="h-px flex-1 bg-[color:var(--border)]" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 rounded-[var(--radius-md)] bg-slate-100 p-1">
-            <button
-              type="button"
-              onClick={() => setMode("signin")}
-              className={`rounded-[calc(var(--radius-md)-4px)] px-3 py-2 text-sm font-medium transition-colors ${
-                mode === "signin" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
-              }`}
-            >
-              Correo + contraseña
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("signup")}
-              className={`rounded-[calc(var(--radius-md)-4px)] px-3 py-2 text-sm font-medium transition-colors ${
-                mode === "signup" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
-              }`}
-            >
-              Crear cuenta
-            </button>
-          </div>
-
-          {mode === "signin" ? (
-            <form onSubmit={loginWithPassword} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="tu@empresa.com"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  inputMode="email"
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(15,118,110,0.12),transparent_26%),radial-gradient(circle_at_bottom_right,rgba(45,79,135,0.12),transparent_28%),linear-gradient(180deg,#f3f7fb_0%,#edf4f0_100%)] px-3 py-4 sm:px-4 sm:py-6">
+      <div className="mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1320px] gap-4 lg:grid-cols-[1.08fr_0.92fr]">
+        <section className="hidden overflow-hidden rounded-[34px] border border-white/45 bg-[linear-gradient(140deg,rgba(10,31,33,0.98),rgba(9,88,81,0.92))] px-8 py-8 text-white shadow-[0_30px_90px_rgba(15,23,42,0.16)] lg:flex lg:flex-col lg:justify-between">
+          <div>
+            <div className="flex items-center gap-4">
+              {platformLogoUrl ? (
+                <Image
+                  src={platformLogoUrl}
+                  alt="Logo plataforma"
+                  width={88}
+                  height={88}
+                  className="h-[72px] w-[72px] rounded-2xl border border-white/10 object-cover shadow-[0_16px_40px_rgba(0,0,0,0.18)]"
                 />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">Contraseña</Label>
-                <Input
-                  id="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  type="password"
-                  required
-                  autoComplete="current-password"
-                />
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-                <Button type="submit" disabled={busy} className="w-full">
-                  {busyAction === "password" ? "Entrando..." : "Entrar"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy || !normalizedEmail}
-                  onClick={sendPasswordReset}
-                  className="w-full sm:w-auto"
-                >
-                  {busyAction === "reset"
-                    ? "Enviando..."
-                    : !canSendReset
-                    ? `Espera ${Math.max(1, Math.ceil((resetCooldownUntil - nowTs) / 1000))}s`
-                    : "Reset password"}
-                </Button>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={registerWithPassword} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="signup-email">Email</Label>
-                <Input
-                  id="signup-email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="tu@empresa.com"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  inputMode="email"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="signup-password">Contraseña</Label>
-                <Input
-                  id="signup-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Mínimo 8 caracteres"
-                  type="password"
-                  required
-                  autoComplete="new-password"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="signup-confirm-password">Confirmar contraseña</Label>
-                <Input
-                  id="signup-confirm-password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Repite tu contraseña"
-                  type="password"
-                  required
-                  autoComplete="new-password"
-                />
-              </div>
-
-              <p className="text-sm text-slate-500">
-                Crear una cuenta no asigna acceso a una organización por sí solo. En entornos multiempresa, el acceso final depende de invitación o membresía.
-              </p>
-
-              <Button type="submit" disabled={busy} className="w-full">
-                {busyAction === "register" ? "Creando cuenta..." : "Crear cuenta"}
-              </Button>
-            </form>
-          )}
-
-          <div className="rounded-[var(--radius-md)] border border-dashed border-[color:var(--border)] bg-slate-50/80 p-4">
-            <div className="flex items-center justify-between gap-3">
+              ) : (
+                <div className="flex h-[72px] w-[72px] items-center justify-center rounded-2xl border border-white/10 bg-white/8 text-lg font-semibold">
+                  OA
+                </div>
+              )}
               <div>
-                <div className="text-sm font-medium text-slate-900">Magic link</div>
-                <div className="text-sm text-slate-500">Úsalo solo como respaldo si tu organización ya depende de ese flujo.</div>
+                <div className="text-xs uppercase tracking-[0.32em] text-emerald-200/78">Ops Ahead</div>
+                <div className="mt-2 text-sm text-white/62">Control operativo de vencimientos, uso y cobertura.</div>
               </div>
-              <Button type="button" variant="ghost" size="sm" onClick={() => setShowMagicLink((v) => !v)}>
-                {showMagicLink ? "Ocultar" : "Mostrar"}
-              </Button>
             </div>
 
-            {showMagicLink ? (
-              <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
-                <Input
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="tu@empresa.com"
-                  type="email"
-                  autoComplete="email"
-                  inputMode="email"
-                />
+            <h1 className="mt-10 max-w-xl text-5xl font-semibold leading-[1.02] tracking-tight">
+              Entra al centro de control donde el forecast ya viene resuelto.
+            </h1>
+            <p className="mt-6 max-w-2xl text-base leading-7 text-white/72">
+              Ops Ahead organiza entidades, vencimientos y registros de uso para que la operación lea el estado real
+              sin recalcular en cada pantalla. Aquí el foco está en cobertura, presión de agenda y trazabilidad.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-[26px] border border-white/12 bg-white/8 px-4 py-4 backdrop-blur-sm">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/58">Forecast</div>
+              <div className="mt-3 text-lg font-semibold">Precalculado</div>
+              <p className="mt-2 text-sm leading-6 text-white/65">La plataforma privilegia lecturas operativas ya resueltas y no cálculos pesados al cargar.</p>
+            </div>
+            <div className="rounded-[26px] border border-white/12 bg-white/8 px-4 py-4 backdrop-blur-sm">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/58">Uso</div>
+              <div className="mt-3 text-lg font-semibold">Trazable</div>
+              <p className="mt-2 text-sm leading-6 text-white/65">Los registros quedan ordenados cronológicamente para sostener cálculo, historia y analítica.</p>
+            </div>
+            <div className="rounded-[26px] border border-white/12 bg-white/8 px-4 py-4 backdrop-blur-sm">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/58">Acceso</div>
+              <div className="mt-3 text-lg font-semibold">Multiempresa</div>
+              <p className="mt-2 text-sm leading-6 text-white/65">Las cuentas pueden quedar pendientes de aprobación y asignación organizacional por superadmin.</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="flex items-center justify-center">
+          <Card className="w-full max-w-[640px] overflow-hidden border-white/60 bg-[rgba(255,255,255,0.82)] backdrop-blur-md">
+            <CardHeader className="border-b border-[color:var(--border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(237,244,240,0.72))] pb-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">Acceso seguro</div>
+                  <CardTitle className="text-3xl tracking-tight">
+                    {mode === "signin" ? "Entrar a Ops Ahead" : "Crear cuenta de acceso"}
+                  </CardTitle>
+                  <CardDescription className="max-w-xl text-sm leading-6">
+                    Prioriza SSO o contraseña. Magic link queda como respaldo para usuarios existentes y el acceso final puede depender de tu organización.
+                  </CardDescription>
+                </div>
+                {platformLogoUrl ? (
+                  <Image
+                    src={platformLogoUrl}
+                    alt="Logo plataforma"
+                    width={72}
+                    height={72}
+                    className="hidden h-[64px] w-[64px] rounded-2xl border border-black/5 object-cover shadow-sm sm:block"
+                  />
+                ) : null}
+              </div>
+            </CardHeader>
+
+            <CardContent className="space-y-6 pt-6">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={busy || !normalizedEmail || !canSendMagicLink}
-                  onClick={sendMagicLink}
-                  className="w-full sm:w-auto"
+                  disabled={busy}
+                  className="h-11 w-full justify-center rounded-2xl border-[rgba(17,32,28,0.1)] bg-white"
+                  onClick={() => void startOAuth("azure")}
                 >
-                  {busyAction === "magic_link"
-                    ? "Enviando..."
-                    : !canSendMagicLink
-                    ? `Espera ${Math.max(1, Math.ceil((magicCooldownUntil - nowTs) / 1000))}s`
-                    : "Enviar magic link"}
+                  {busyAction === "oauth_microsoft" ? "Conectando..." : "Continuar con Microsoft"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  className="h-11 w-full justify-center rounded-2xl border-[rgba(17,32,28,0.1)] bg-white"
+                  onClick={() => void startOAuth("google")}
+                >
+                  {busyAction === "oauth_google" ? "Conectando..." : "Continuar con Google"}
                 </Button>
               </div>
-            ) : null}
-          </div>
 
-          {msg ? <p className="whitespace-pre-wrap text-sm text-slate-700">{msg}</p> : null}
-        </CardContent>
-      </Card>
+              <div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.22em] text-slate-400">
+                <div className="h-px flex-1 bg-[color:var(--border)]" />
+                <span>o continúa con correo</span>
+                <div className="h-px flex-1 bg-[color:var(--border)]" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 rounded-[18px] bg-[rgba(215,243,239,0.42)] p-1.5">
+                <button
+                  type="button"
+                  onClick={() => setMode("signin")}
+                  className={`rounded-[14px] px-3 py-2.5 text-sm font-medium transition-colors ${
+                    mode === "signin" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
+                  }`}
+                >
+                  Entrar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode("signup")}
+                  className={`rounded-[14px] px-3 py-2.5 text-sm font-medium transition-colors ${
+                    mode === "signup" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
+                  }`}
+                >
+                  Crear cuenta
+                </button>
+              </div>
+
+              {mode === "signin" ? (
+                <form onSubmit={loginWithPassword} className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="email">Email corporativo</Label>
+                      <Input
+                        id="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="tu@empresa.com"
+                        type="email"
+                        required
+                        autoComplete="email"
+                        inputMode="email"
+                        className="h-11 rounded-2xl bg-white"
+                      />
+                    </div>
+
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="password">Contraseña</Label>
+                      <Input
+                        id="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        type="password"
+                        required
+                        autoComplete="current-password"
+                        className="h-11 rounded-2xl bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                    <Button type="submit" disabled={busy} className="h-11 w-full rounded-2xl">
+                      {busyAction === "password" ? "Entrando..." : "Entrar"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={busy || !normalizedEmail}
+                      onClick={sendPasswordReset}
+                      className="h-11 w-full rounded-2xl sm:w-auto"
+                    >
+                      {busyAction === "reset"
+                        ? "Enviando..."
+                        : !canSendReset
+                        ? `Espera ${Math.max(1, Math.ceil((resetCooldownUntil - nowTs) / 1000))}s`
+                        : "Restablecer"}
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <form onSubmit={registerWithPassword} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-email">Email corporativo</Label>
+                    <Input
+                      id="signup-email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="tu@empresa.com"
+                      type="email"
+                      required
+                      autoComplete="email"
+                      inputMode="email"
+                      className="h-11 rounded-2xl bg-white"
+                    />
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-password">Contraseña</Label>
+                      <Input
+                        id="signup-password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Mínimo 8 caracteres"
+                        type="password"
+                        required
+                        autoComplete="new-password"
+                        className="h-11 rounded-2xl bg-white"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-confirm-password">Confirmar</Label>
+                      <Input
+                        id="signup-confirm-password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Repite tu contraseña"
+                        type="password"
+                        required
+                        autoComplete="new-password"
+                        className="h-11 rounded-2xl bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-[20px] border border-[rgba(17,32,28,0.08)] bg-[rgba(215,243,239,0.28)] px-4 py-3 text-sm leading-6 text-slate-600">
+                    Crear una cuenta no asigna acceso a una organización por sí solo. En entornos multiempresa, el
+                    acceso final depende de invitación, membresía o aprobación del superadmin.
+                  </div>
+
+                  <Button type="submit" disabled={busy} className="h-11 w-full rounded-2xl">
+                    {busyAction === "register" ? "Creando cuenta..." : "Crear cuenta"}
+                  </Button>
+                </form>
+              )}
+
+              <div className="rounded-[22px] border border-dashed border-[color:var(--border)] bg-[rgba(244,247,251,0.7)] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium text-slate-900">Magic link</div>
+                    <div className="text-sm leading-6 text-slate-500">
+                      Déjalo como respaldo si tu organización ya opera con ese flujo.
+                    </div>
+                  </div>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setShowMagicLink((v) => !v)}>
+                    {showMagicLink ? "Ocultar" : "Mostrar"}
+                  </Button>
+                </div>
+
+                {showMagicLink ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+                    <Input
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="tu@empresa.com"
+                      type="email"
+                      autoComplete="email"
+                      inputMode="email"
+                      className="h-11 rounded-2xl bg-white"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={busy || !normalizedEmail || !canSendMagicLink}
+                      onClick={sendMagicLink}
+                      className="h-11 w-full rounded-2xl sm:w-auto"
+                    >
+                      {busyAction === "magic_link"
+                        ? "Enviando..."
+                        : !canSendMagicLink
+                        ? `Espera ${Math.max(1, Math.ceil((magicCooldownUntil - nowTs) / 1000))}s`
+                        : "Enviar magic link"}
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+
+              {msg ? (
+                <div className="rounded-[18px] border border-[rgba(17,32,28,0.08)] bg-white px-4 py-3 text-sm leading-6 text-slate-700">
+                  {msg}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        </section>
+      </div>
     </main>
   );
 }

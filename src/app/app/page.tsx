@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 import { Loader } from "@/components/ui/loader";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type EntityType = { id: string; name: string };
@@ -180,6 +181,30 @@ function isTemporalTrend(points: Array<{ label: string; value: number }>) {
     if (parseTrendLabelTime(p.label) != null) temporal += 1;
   }
   return temporal >= 2;
+}
+
+function MetricTile({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: React.ReactNode;
+  tone?: "neutral" | "danger" | "healthy";
+}) {
+  const valueClass =
+    tone === "danger"
+      ? "text-rose-100"
+      : tone === "healthy"
+        ? "text-emerald-100"
+        : "text-white";
+
+  return (
+    <div className="rounded-[22px] border border-white/12 bg-white/8 px-4 py-4 backdrop-blur-sm">
+      <div className="text-[11px] uppercase tracking-[0.18em] text-white/60">{label}</div>
+      <div className={`mt-3 text-3xl font-semibold tracking-tight ${valueClass}`}>{value}</div>
+    </div>
+  );
 }
 
 export default function AnalyticsDashboardPage() {
@@ -422,59 +447,74 @@ export default function AnalyticsDashboardPage() {
 
   return (
     <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-4 sm:space-y-6">
-      <section className="rounded-xl border bg-white px-3 py-2 sm:px-4 sm:py-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <label className="app-page-title shrink-0">Dashboard</label>
-          <select
-            value={entityTypeFilter}
-            onChange={(e) => setEntityTypeFilter(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm sm:ml-auto sm:w-auto sm:min-w-[260px] sm:max-w-[420px]"
-          >
-            <option value="all">Todos los tipos</option>
-            {entityTypes.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-          </select>
+      <section className="grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
+        <div className="overflow-hidden rounded-[28px] border border-[#15362f]/10 bg-[linear-gradient(135deg,rgba(9,88,81,0.96),rgba(18,37,33,0.97))] px-5 py-5 text-white shadow-[0_24px_60px_rgba(15,23,42,0.12)] sm:px-6 sm:py-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="bg-white/12 text-white hover:bg-white/12">Centro de control</Badge>
+            <Badge className="bg-emerald-200/14 text-emerald-50 hover:bg-emerald-200/14">
+              {isAllTypesView ? "Vista global" : selectedEntityTypeName}
+            </Badge>
+          </div>
+          <div className="mt-4 max-w-3xl">
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-[2.5rem]">
+              Vencimientos y cobertura operativa, en una sola lectura.
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/72 sm:text-base">
+              Esta vista resume el estado real de la operación. El foco está en cobertura forecast, concentración
+              por tipo y presión de vencimientos en los próximos 30 días.
+            </p>
+          </div>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <MetricTile label="Total entidades" value={totals.total} />
+            <MetricTile label="Con forecast" value={totals.withForecast} />
+            <MetricTile label="Vencidas" value={totals.overdue} tone="danger" />
+            <MetricTile label="Al día" value={totals.healthy} tone="healthy" />
+            <MetricTile label="Cobertura" value={`${totals.coverage}%`} />
+          </div>
         </div>
+
+        <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.76)] backdrop-blur-sm">
+          <CardHeader className="pb-3">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Enfoque</div>
+            <CardTitle className="text-xl">Recorta el tablero por tipo</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm leading-6 text-[var(--muted-foreground)]">
+              Usa esta vista para entrar a un frente operativo específico. Al seleccionar un tipo, desaparecen las
+              comparativas globales y se privilegia la lectura enfocada.
+            </p>
+            <label className="grid gap-2 text-xs font-medium uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+              Tipo de entidad
+              <select
+                value={entityTypeFilter}
+                onChange={(e) => setEntityTypeFilter(e.target.value)}
+                className="h-11 w-full rounded-2xl border border-[var(--input)] bg-white px-3 text-sm text-slate-800"
+              >
+                <option value="all">Todos los tipos</option>
+                {entityTypes.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </label>
+            <div className="rounded-2xl border border-[rgba(17,32,28,0.08)] bg-[rgba(215,243,239,0.46)] px-4 py-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Contexto actual</div>
+              <div className="mt-2 text-sm text-slate-700">
+                {isAllTypesView ? (
+                  <>Estás viendo la distribución total de la organización y las comparativas entre frentes.</>
+                ) : (
+                  <>Estás viendo solo indicadores y gráficos asociados a <b>{selectedEntityTypeName}</b>.</>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </section>
 
-      <div className="grid grid-cols-5 gap-2 sm:gap-3">
-        <Card>
-          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[110px] sm:gap-2 sm:px-4 sm:py-3">
-            <div className="flex h-7 items-center justify-center text-[10px] leading-tight text-slate-500 sm:h-auto sm:text-xs">Total entidades</div>
-            <div className="text-lg font-semibold tabular-nums sm:text-2xl">{totals.total}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[110px] sm:gap-2 sm:px-4 sm:py-3">
-            <div className="flex h-7 items-center justify-center text-[10px] leading-tight text-slate-500 sm:h-auto sm:text-xs">Con forecast</div>
-            <div className="text-lg font-semibold tabular-nums sm:text-2xl">{totals.withForecast}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[110px] sm:gap-2 sm:px-4 sm:py-3">
-            <div className="flex h-7 items-center justify-center text-[10px] leading-tight text-slate-500 sm:h-auto sm:text-xs">Vencidas</div>
-            <div className="text-lg font-semibold tabular-nums text-rose-700 sm:text-2xl">{totals.overdue}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[110px] sm:gap-2 sm:px-4 sm:py-3">
-            <div className="flex h-7 items-center justify-center text-[10px] leading-tight text-slate-500 sm:h-auto sm:text-xs">Al día</div>
-            <div className="text-lg font-semibold tabular-nums text-emerald-700 sm:text-2xl">{totals.healthy}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex min-h-[92px] flex-col items-center justify-center gap-1 px-1 py-2 text-center sm:min-h-[110px] sm:gap-2 sm:px-4 sm:py-3">
-            <div className="flex h-7 items-center justify-center text-[10px] leading-tight text-slate-500 sm:h-auto sm:text-xs">Cobertura</div>
-            <div className="text-lg font-semibold tabular-nums sm:text-2xl">{totals.coverage}%</div>
-          </CardContent>
-        </Card>
-      </div>
-
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
+        <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.82)]">
           <CardHeader className="pb-2">
-            <CardTitle className="text-center text-base">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Semáforo</div>
+            <CardTitle className="text-left text-base sm:text-lg">
               {isAllTypesView ? "Distribución por estado" : `Distribución por estado · ${selectedEntityTypeName}`}
             </CardTitle>
           </CardHeader>
@@ -484,18 +524,24 @@ export default function AnalyticsDashboardPage() {
         </Card>
 
         {isAllTypesView ? (
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-center text-base">Top por tipo de entidad</CardTitle></CardHeader>
+          <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.82)]">
+            <CardHeader className="pb-2">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Comparativa</div>
+              <CardTitle className="text-left text-base sm:text-lg">Top por tipo de entidad</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-2">
               {byEntityType.length === 0 ? <p className="app-empty">Sin datos para graficar.</p> : null}
               {byEntityType.length > 0 ? <DonutChart slices={entityTypeDonutSlices} centerLabel="Top por tipo de entidad" /> : null}
             </CardContent>
           </Card>
         ) : (
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-center text-base">Vista enfocada</CardTitle></CardHeader>
+          <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.82)]">
+            <CardHeader className="pb-2">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Modo</div>
+              <CardTitle className="text-left text-base sm:text-lg">Vista enfocada</CardTitle>
+            </CardHeader>
             <CardContent>
-              <p className="app-empty text-center">
+              <p className="app-empty">
                 Estás viendo solo los gráficos asociados a <b>{selectedEntityTypeName}</b>.
               </p>
             </CardContent>
@@ -503,19 +549,22 @@ export default function AnalyticsDashboardPage() {
         )}
       </div>
 
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-center text-base">Campos dinámicos (gráficos)</CardTitle></CardHeader>
+      <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.82)]">
+        <CardHeader className="pb-2">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Analítica</div>
+          <CardTitle className="text-left text-base sm:text-lg">Campos dinámicos</CardTitle>
+        </CardHeader>
         <CardContent className="space-y-3">
           {entityTypeFilter === "all" ? (
-            <p className="app-empty text-center">Selecciona un tipo de entidad para ver gráficos de campos dinámicos configurados en modo analítico.</p>
+            <p className="app-empty">Selecciona un tipo de entidad para ver gráficos de campos dinámicos configurados en modo analítico.</p>
           ) : dynamicFieldCharts.length === 0 ? (
-            <p className="app-empty text-center">No hay campos dinámicos con modo analítico (`distribution`, `trend` o `count`) para este tipo.</p>
+            <p className="app-empty">No hay campos dinámicos con modo analítico (`distribution`, `trend` o `count`) para este tipo.</p>
           ) : (
             <div className="grid gap-3 lg:grid-cols-2">
               {dynamicFieldCharts.map((chart) => (
-                <div key={chart.fieldId} className="rounded-xl border border-slate-200 p-3">
+                <div key={chart.fieldId} className="rounded-[22px] border border-[rgba(17,32,28,0.08)] bg-[rgba(237,244,240,0.65)] p-4">
                   <div className="mb-1 text-sm font-semibold text-slate-700">{chart.title}</div>
-                  <div className="mb-2 text-xs uppercase tracking-wide text-slate-500">{chart.mode}</div>
+                  <div className="mb-3 text-[11px] uppercase tracking-[0.16em] text-slate-500">{chart.mode}</div>
                   {chart.mode === "distribution" ? (
                     <DonutChart slices={chart.slices} centerLabel={chart.title} />
                   ) : null}
@@ -534,9 +583,10 @@ export default function AnalyticsDashboardPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.82)]">
         <CardHeader className="pb-2">
-          <CardTitle className="text-center text-base">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Presión de agenda</div>
+          <CardTitle className="text-left text-base sm:text-lg">
             {isAllTypesView
               ? "Tendencia próximos 30 días (vencimientos previstos)"
               : `Tendencia próximos 30 días · ${selectedEntityTypeName}`}
@@ -548,9 +598,9 @@ export default function AnalyticsDashboardPage() {
           ) : (
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
               {dueTrend30.map((d) => (
-                <div key={d.day} className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700">
-                  <div className="text-xs text-slate-500">{d.day}</div>
-                  <div className="text-lg font-semibold">{d.count}</div>
+                <div key={d.day} className="rounded-[20px] border border-[rgba(17,32,28,0.08)] bg-[rgba(215,243,239,0.35)] px-4 py-3 text-sm text-slate-700">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{d.day}</div>
+                  <div className="mt-2 text-2xl font-semibold tracking-tight">{d.count}</div>
                 </div>
               ))}
             </div>
@@ -558,9 +608,12 @@ export default function AnalyticsDashboardPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-center text-base">Contexto</CardTitle></CardHeader>
-        <CardContent className="text-center text-xs text-slate-500">
+      <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.82)]">
+        <CardHeader className="pb-2">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Lectura ejecutiva</div>
+          <CardTitle className="text-left text-base sm:text-lg">Contexto</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm leading-6 text-slate-600">
           {isAllTypesView ? (
             <>
               Entidades en organización: <b>{meta?.entity_count_in_org ?? entities.length}</b>. Este dashboard es analítico; la operación diaria se mantiene en <b>Operaciones</b>.
