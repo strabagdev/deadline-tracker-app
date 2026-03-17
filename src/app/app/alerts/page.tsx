@@ -152,19 +152,32 @@ export default function AlertsPage() {
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <CardTitle>Alertas (Audit)</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Módulo de eventos auditables generado desde deadline_forecasts.</p>
+              <CardTitle>Eventos</CardTitle>
+              <p className="mt-1 text-sm text-slate-500">
+                Historial operativo derivado desde <code>deadline_forecasts</code>. El estado vigente se revisa en Forecast.
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <Link href="/app/forecast">
-                <Button variant="outline" size="sm">Forecast</Button>
+                <Button variant="outline" size="sm">Ir a Forecast</Button>
               </Link>
               <Button onClick={() => void recompute()} disabled={busy} size="sm">
-                {busy ? "Recomputando..." : "Recomputar alertas"}
+                {busy ? "Actualizando..." : "Actualizar eventos"}
               </Button>
             </div>
           </div>
         </CardHeader>
+      </Card>
+
+      <Card>
+        <CardContent className="flex flex-col gap-2 py-4 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
+          <div>
+            <b className="text-slate-800">Forecast</b> es la fuente de verdad del estado actual.
+          </div>
+          <div>
+            <b className="text-slate-800">Eventos</b> conserva trazabilidad de entradas y salidas de riesgo.
+          </div>
+        </CardContent>
       </Card>
 
       {errorMsg ? <p className="whitespace-pre-wrap text-sm text-rose-600">{errorMsg}</p> : null}
@@ -177,22 +190,22 @@ export default function AlertsPage() {
         <>
           <section className="grid gap-3 md:grid-cols-2">
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Activas</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Eventos activos</CardTitle></CardHeader>
               <CardContent><div className="text-2xl font-semibold">{summary.active}</div></CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Resueltas recientes</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Eventos cerrados recientes</CardTitle></CardHeader>
               <CardContent><div className="text-2xl font-semibold">{summary.resolved_recent}</div></CardContent>
             </Card>
           </section>
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Alertas activas</CardTitle>
+              <CardTitle className="text-base">Riesgos activos registrados</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
               {activePreview.length === 0 ? (
-                <p className="text-sm text-slate-500">Sin alertas activas.</p>
+                <p className="text-sm text-slate-500">Sin eventos activos.</p>
               ) : (
                 <div className="space-y-2">
                   {activePreview.map((a) => (
@@ -215,11 +228,11 @@ export default function AlertsPage() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Historial reciente (resueltas)</CardTitle>
+              <CardTitle className="text-base">Historial reciente</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
               {recentResolved.length === 0 ? (
-                <p className="text-sm text-slate-500">Sin alertas resueltas recientes.</p>
+                <p className="text-sm text-slate-500">Sin eventos cerrados recientes.</p>
               ) : (
                 <div className="space-y-1.5">
                   {recentResolved.map((a) => (

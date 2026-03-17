@@ -216,7 +216,6 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/app", label: "Dashboard", moduleKey: "analytics_dashboard", icon: <IconHome /> },
   { href: "/app/operations", label: "Operaciones", moduleKey: "operations_dashboard", icon: <IconEntities /> },
   { href: "/app/forecast", label: "Forecast", moduleKey: "forecast", icon: <IconForecast /> },
-  { href: "/app/alerts", label: "Alertas", moduleKey: "alerts", icon: <IconAlert /> },
   { href: "/app/entities", label: "Entidades", moduleKey: "entities", icon: <IconEntities /> },
   { href: "/app/usage-capture", label: "Captura uso", moduleKey: "usage_capture", icon: <IconUsage /> },
   { href: "/app/bi-integrations", label: "Integraciones BI", moduleKey: "bi_integrations", icon: <IconReport /> },

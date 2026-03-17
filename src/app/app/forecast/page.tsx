@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 type ForecastSummary = {
   upcoming_7_days: number;
@@ -27,6 +28,16 @@ type ForecastEntity = {
   days_remaining: number | null;
   risk_level: "green" | "yellow" | "orange" | "red" | "none";
   risk_score: number;
+};
+
+type ForecastEvent = {
+  id: string;
+  entity_name?: string;
+  deadline_name?: string;
+  severity: "red" | "orange" | "yellow" | "green" | "none" | string;
+  message: string;
+  last_seen_at: string;
+  resolved_at: string | null;
 };
 
 type Status = "red" | "orange" | "yellow" | "green" | "none";
@@ -91,6 +102,15 @@ export default function ForecastPage() {
     green: "Al día",
     none: "Sin info",
   });
+  const [showEvents, setShowEvents] = useState(false);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventsError, setEventsError] = useState("");
+  const [activeEvents, setActiveEvents] = useState<ForecastEvent[]>([]);
+  const [resolvedEvents, setResolvedEvents] = useState<ForecastEvent[]>([]);
+  const [eventsSummary, setEventsSummary] = useState<{ active: number; resolved_recent: number }>({
+    active: 0,
+    resolved_recent: 0,
+  });
 
   async function loadForecasts() {
     setLoading(true);
@@ -134,6 +154,41 @@ export default function ForecastPage() {
     setLoading(false);
   }
 
+  async function loadEvents() {
+    setEventsLoading(true);
+    setEventsError("");
+    const { data } = await supabaseAuth.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      setEventsLoading(false);
+      return;
+    }
+
+    const res = await fetch("/api/alert-events", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json().catch(() => ({}));
+
+    if (res.status === 403) {
+      setEventsSummary({ active: 0, resolved_recent: 0 });
+      setActiveEvents([]);
+      setResolvedEvents([]);
+      setEventsLoading(false);
+      return;
+    }
+
+    if (!res.ok) {
+      setEventsError(json.error || "No se pudo cargar el historial de eventos.");
+      setEventsLoading(false);
+      return;
+    }
+
+    setEventsSummary(json.summary ?? { active: 0, resolved_recent: 0 });
+    setActiveEvents(Array.isArray(json.active) ? json.active : []);
+    setResolvedEvents(Array.isArray(json.recent_resolved) ? json.recent_resolved : []);
+    setEventsLoading(false);
+  }
+
   async function recompute() {
     setBusy(true);
     setErrorMsg("");
@@ -164,6 +219,14 @@ export default function ForecastPage() {
     void loadForecasts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!showEvents) return;
+    if (eventsLoading) return;
+    if (activeEvents.length > 0 || resolvedEvents.length > 0 || eventsError) return;
+    void loadEvents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showEvents]);
 
   const orderedRows = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -203,7 +266,7 @@ export default function ForecastPage() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <CardTitle>OpsAhead Forecast</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Proyección de vencimientos, estado y alertas automáticas.</p>
+              <p className="mt-1 text-sm text-slate-500">Motor precalculado principal para vencimientos, riesgo y estado operativo.</p>
             </div>
             <div className="flex items-center gap-2">
               <Link href="/app">
@@ -242,6 +305,81 @@ export default function ForecastPage() {
               <CardContent><div className="text-2xl font-semibold">{summary.total_entities ?? rows.length}</div></CardContent>
             </Card>
           </section>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base">Eventos derivados</CardTitle>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Historial auxiliar generado desde el mismo motor precalculado de forecast.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="text-xs text-slate-500">
+                    Activos: <b>{eventsSummary.active}</b> · Cerrados recientes: <b>{eventsSummary.resolved_recent}</b>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setShowEvents((v) => !v)}>
+                    {showEvents ? "Ocultar" : "Ver eventos"}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            {showEvents ? (
+              <CardContent className="space-y-3 pt-0">
+                {eventsLoading ? <Loader label="Cargando eventos..." /> : null}
+                {eventsError ? <p className="text-sm text-rose-600">{eventsError}</p> : null}
+                {!eventsLoading && !eventsError ? (
+                  <>
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <div className="space-y-2">
+                        <div className="text-sm font-semibold text-slate-800">Activos</div>
+                        {activeEvents.length === 0 ? (
+                          <p className="text-sm text-slate-500">Sin eventos activos.</p>
+                        ) : (
+                          activeEvents.slice(0, 10).map((event) => (
+                            <div key={event.id} className="rounded-xl border bg-slate-50 px-3 py-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="outline" className={riskBadgeClass(event.severity)}>
+                                  {statusLabel(event.severity, labels)}
+                                </Badge>
+                                {event.entity_name ? <Badge variant="outline">{event.entity_name}</Badge> : null}
+                                {event.deadline_name ? <Badge variant="outline">{event.deadline_name}</Badge> : null}
+                                <span className="text-xs text-slate-500">
+                                  Última detección: {new Date(event.last_seen_at).toLocaleString()}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-sm text-slate-700">{event.message}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <div className="text-sm font-semibold text-slate-800">Cerrados recientes</div>
+                        {resolvedEvents.length === 0 ? (
+                          <p className="text-sm text-slate-500">Sin eventos cerrados recientes.</p>
+                        ) : (
+                          resolvedEvents.slice(0, 10).map((event) => (
+                            <div key={event.id} className="rounded-xl border bg-white px-3 py-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="outline" className={cn(riskBadgeClass(event.severity), "opacity-80")}>
+                                  {statusLabel(event.severity, labels)}
+                                </Badge>
+                                <span className="text-sm text-slate-700">{event.message}</span>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      Esta sección es secundaria. El estado vigente y accionable vive en la tabla principal de forecast.
+                    </div>
+                  </>
+                ) : null}
+              </CardContent>
+            ) : null}
+          </Card>
 
           <Card>
             <CardHeader className="pb-2">

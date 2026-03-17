@@ -52,7 +52,7 @@ const MODULE_LABELS: Record<(typeof MODULE_KEYS)[number], string> = {
   analytics_dashboard: "Dashboard analítico",
   operations_dashboard: "Dashboard operativo",
   forecast: "Pronóstico",
-  alerts: "Alertas",
+  alerts: "Eventos",
   entities: "Entidades",
   reports_usage: "Reportes de uso",
   semaphore: "Semáforo",

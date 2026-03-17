@@ -7,30 +7,24 @@ import { getSemaphoreSettings } from "@/lib/server/semaphoreSettings";
 type DeadlineRow = {
   id: string;
   entity_id: string;
+  deadline_type_id: string | null;
   next_due_date: string | null;
   last_done_usage: number | null;
   frequency: number | null;
   usage_daily_average: number | null;
-  deadline_types?: {
-    id: string;
-    name: string;
-    measure_by: "date" | "usage";
-    is_active: boolean;
-  } | {
-    id: string;
-    name: string;
-    measure_by: "date" | "usage";
-    is_active: boolean;
-  }[] | null;
-  entities?: {
-    id: string;
-    name: string;
-    tracks_usage: boolean;
-  } | {
-    id: string;
-    name: string;
-    tracks_usage: boolean;
-  }[] | null;
+};
+
+type DeadlineTypeRow = {
+  id: string;
+  name: string;
+  measure_by: "date" | "usage";
+  is_active: boolean;
+};
+
+type EntityRow = {
+  id: string;
+  name: string;
+  tracks_usage: boolean;
 };
 
 type RiskLevel = "green" | "yellow" | "orange" | "red" | "none";
@@ -40,11 +34,6 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return "error";
-}
-
-function pickOne<T>(value: T | T[] | null | undefined): T | null {
-  if (Array.isArray(value)) return value[0] ?? null;
-  return value ?? null;
 }
 
 function startOfLocalDay(d: Date) {
@@ -102,27 +91,34 @@ export async function POST(req: Request) {
 
     const { data: deadlinesData, error: deadlinesErr } = await db
       .from("deadlines")
-      .select(
-        `
-        id,
-        entity_id,
-        next_due_date,
-        last_done_usage,
-        frequency,
-        usage_daily_average,
-        deadline_types(id, name, measure_by, is_active),
-        entities(id, name, tracks_usage)
-      `
-      )
+      .select("id, entity_id, deadline_type_id, next_due_date, last_done_usage, frequency, usage_daily_average")
       .eq("organization_id", orgId)
-      .eq("is_current", true)
-      .eq("deadline_types.is_active", true);
+      .eq("is_current", true);
 
     if (deadlinesErr) throw deadlinesErr;
-    const deadlines = (deadlinesData ?? []) as DeadlineRow[];
-    const currentDeadlineIds = new Set(deadlines.map((d) => d.id));
+    const rawDeadlines = (deadlinesData ?? []) as DeadlineRow[];
+    const currentDeadlineIds = new Set(rawDeadlines.map((d) => d.id));
+    const entityIds = Array.from(new Set(rawDeadlines.map((d) => d.entity_id).filter(Boolean)));
+    const deadlineTypeIds = Array.from(new Set(rawDeadlines.map((d) => d.deadline_type_id).filter(Boolean))) as string[];
 
-    const entityIds = Array.from(new Set(deadlines.map((d) => d.entity_id)));
+    const [{ data: entitiesData, error: entitiesErr }, { data: deadlineTypesData, error: deadlineTypesErr }] = await Promise.all([
+      entityIds.length > 0
+        ? db.from("entities").select("id, name, tracks_usage").eq("organization_id", orgId).in("id", entityIds)
+        : Promise.resolve({ data: [], error: null }),
+      deadlineTypeIds.length > 0
+        ? db.from("deadline_types").select("id, name, measure_by, is_active").eq("organization_id", orgId).in("id", deadlineTypeIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (entitiesErr) throw entitiesErr;
+    if (deadlineTypesErr) throw deadlineTypesErr;
+
+    const entityById = new Map(((entitiesData ?? []) as EntityRow[]).map((entity) => [entity.id, entity]));
+    const deadlineTypeById = new Map(((deadlineTypesData ?? []) as DeadlineTypeRow[]).map((type) => [type.id, type]));
+    const deadlines = rawDeadlines.filter((deadline) => {
+      const deadlineType = deadline.deadline_type_id ? deadlineTypeById.get(deadline.deadline_type_id) : null;
+      return deadlineType?.is_active !== false;
+    });
 
     const latestUsageByEntity = new Map<string, { value: number; logged_at: string }>();
     await Promise.all(
@@ -156,8 +152,8 @@ export async function POST(req: Request) {
     }> = [];
 
     for (const d of deadlines) {
-      const deadlineType = pickOne(d.deadline_types);
-      const entity = pickOne(d.entities);
+      const deadlineType = d.deadline_type_id ? deadlineTypeById.get(d.deadline_type_id) ?? null : null;
+      const entity = entityById.get(d.entity_id) ?? null;
       const measureBy = deadlineType?.measure_by;
       const entityName = entity?.name ?? "Entidad";
       const deadlineName = deadlineType?.name ?? "Vencimiento";
