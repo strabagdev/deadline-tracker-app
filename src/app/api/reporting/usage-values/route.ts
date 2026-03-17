@@ -3,59 +3,61 @@ import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { canViewModule, getOrgAccess } from "@/lib/server/orgAccess";
 
-type UsageFieldValueJoin = {
-  usage_field_id: string;
-  value_text: string | null;
-  value_number: number | null;
-  value_date: string | null;
-  value_boolean: boolean | null;
-  usage_fields?:
-    | { id: string; name: string | null; key: string | null; field_type: string | null; created_at: string | null }
-    | { id: string; name: string | null; key: string | null; field_type: string | null; created_at: string | null }[]
-    | null;
-};
-
-type UsageLogJoin = {
+type UsageLogRow = {
   id: string;
   entity_id: string;
   value: number | null;
   value_text: string | null;
   logged_on: string;
   logged_at: string;
-  entities?:
-    | {
-        id: string;
-        name: string;
-        entity_type_id: string | null;
-        usage_unit_id: string | null;
-        entity_types?: { id: string; name: string | null } | { id: string; name: string | null }[] | null;
-        usage_units?:
-          | { id: string; name: string | null; show_in_usage_records?: boolean | null }
-          | { id: string; name: string | null; show_in_usage_records?: boolean | null }[]
-          | null;
-      }
-    | {
-        id: string;
-        name: string;
-        entity_type_id: string | null;
-        usage_unit_id: string | null;
-        entity_types?: { id: string; name: string | null } | { id: string; name: string | null }[] | null;
-        usage_units?:
-          | { id: string; name: string | null; show_in_usage_records?: boolean | null }
-          | { id: string; name: string | null; show_in_usage_records?: boolean | null }[]
-          | null;
-      }[]
-    | null;
 };
 
-type EntityFieldValueJoin = {
+type EntityRow = {
+  id: string;
+  name: string;
+  entity_type_id: string | null;
+  usage_unit_id: string | null;
+};
+
+type EntityTypeRow = {
+  id: string;
+  name: string | null;
+};
+
+type UsageUnitRow = {
+  id: string;
+  name: string | null;
+  show_in_usage_records?: boolean | null;
+};
+
+type EntityFieldValueRow = {
   entity_id: string;
   entity_field_id: string;
   value_text: string | null;
-  entity_fields?:
-    | { id: string; name: string | null; key: string | null; created_at: string | null }
-    | { id: string; name: string | null; key: string | null; created_at: string | null }[]
-    | null;
+};
+
+type EntityFieldRow = {
+  id: string;
+  name: string | null;
+  key: string | null;
+  created_at: string | null;
+};
+
+type UsageLogFieldValueRow = {
+  usage_log_id: string;
+  usage_field_id: string;
+  value_text: string | null;
+  value_number: number | null;
+  value_date: string | null;
+  value_boolean: boolean | null;
+};
+
+type UsageFieldRow = {
+  id: string;
+  name: string | null;
+  key: string | null;
+  field_type: string | null;
+  created_at: string | null;
 };
 
 function getErrorMessage(error: unknown): string {
@@ -68,13 +70,7 @@ function getErrorMessage(error: unknown): string {
       details?: unknown;
       hint?: unknown;
     };
-    const parts = [
-      maybe.message,
-      maybe.error,
-      maybe.error_description,
-      maybe.details,
-      maybe.hint,
-    ]
+    const parts = [maybe.message, maybe.error, maybe.error_description, maybe.details, maybe.hint]
       .map((value) => String(value ?? "").trim())
       .filter((value) => value.length > 0);
     if (parts.length > 0) return parts.join(" | ");
@@ -82,12 +78,7 @@ function getErrorMessage(error: unknown): string {
   return "error";
 }
 
-function pickOne<T>(value: T | T[] | null | undefined): T | null {
-  if (Array.isArray(value)) return value[0] ?? null;
-  return value ?? null;
-}
-
-function renderFieldValue(v: UsageFieldValueJoin) {
+function renderFieldValue(v: UsageLogFieldValueRow) {
   if (v.value_boolean !== null) return v.value_boolean ? "Sí" : "No";
   if (v.value_number !== null) return String(v.value_number);
   if (v.value_date) return v.value_date;
@@ -135,24 +126,7 @@ export async function GET(req: Request) {
 
     let query = db
       .from("usage_logs")
-      .select(
-        `
-        id,
-        entity_id,
-        value,
-        value_text,
-        logged_on,
-        logged_at,
-        entities!inner(
-          id,
-          name,
-          entity_type_id,
-          usage_unit_id,
-          entity_types(id, name),
-          usage_units(id, name, show_in_usage_records)
-        )
-      `
-      )
+      .select("id, entity_id, value, value_text, logged_on, logged_at")
       .eq("organization_id", orgId)
       .order("logged_on", { ascending: false })
       .order("logged_at", { ascending: false })
@@ -160,166 +134,194 @@ export async function GET(req: Request) {
 
     if (dateFrom) query = query.gte("logged_on", dateFrom);
     if (dateTo) query = query.lte("logged_on", dateTo);
-    if (entityTypeId && entityTypeId !== "all") query = query.eq("entities.entity_type_id", entityTypeId);
 
-    let { data, error } = await query;
-    if (error && getErrorMessage(error).toLowerCase().includes("show_in_usage_records")) {
-      let fallbackQuery = db
-        .from("usage_logs")
-        .select(
-          `
-          id,
-          entity_id,
-          value,
-          value_text,
-          logged_on,
-          logged_at,
-          entities!inner(
-            id,
-            name,
-            entity_type_id,
-            usage_unit_id,
-            entity_types(id, name),
-            usage_units(id, name)
-          )
-        `
-        )
-        .eq("organization_id", orgId)
-        .order("logged_on", { ascending: false })
-        .order("logged_at", { ascending: false })
-        .limit(limit);
-
-      if (dateFrom) fallbackQuery = fallbackQuery.gte("logged_on", dateFrom);
-      if (dateTo) fallbackQuery = fallbackQuery.lte("logged_on", dateTo);
-      if (entityTypeId && entityTypeId !== "all") fallbackQuery = fallbackQuery.eq("entities.entity_type_id", entityTypeId);
-
-      const fallback = await fallbackQuery;
-      data = fallback.data;
-      error = fallback.error;
-    }
+    const { data, error } = await query;
     if (error) throw error;
 
-    const rowsRaw = (data ?? []) as UsageLogJoin[];
-    const usageLogIds = rowsRaw.map((r) => String(r.id)).filter((id) => id.length > 0);
-    const entityIds = Array.from(
+    const usageLogs = (data ?? []) as UsageLogRow[];
+    const usageLogIds = usageLogs.map((row) => String(row.id)).filter((value) => value.length > 0);
+    const entityIds = Array.from(new Set(usageLogs.map((row) => String(row.entity_id)).filter((value) => value.length > 0)));
+
+    const { data: entitiesData, error: entitiesErr } = entityIds.length
+      ? await db
+          .from("entities")
+          .select("id, name, entity_type_id, usage_unit_id")
+          .eq("organization_id", orgId)
+          .in("id", entityIds)
+      : { data: [], error: null };
+    if (entitiesErr) throw entitiesErr;
+
+    const entities = (entitiesData ?? []) as EntityRow[];
+    const entitiesById = new Map(entities.map((row) => [String(row.id), row]));
+
+    const filteredEntityIds =
+      entityTypeId && entityTypeId !== "all"
+        ? entities.filter((row) => String(row.entity_type_id ?? "") === entityTypeId).map((row) => String(row.id))
+        : entityIds;
+
+    const filteredEntityIdSet = new Set(filteredEntityIds);
+    const filteredUsageLogs = usageLogs.filter((row) => filteredEntityIdSet.has(String(row.entity_id)));
+
+    const filteredUsageLogIds = filteredUsageLogs.map((row) => String(row.id)).filter((value) => value.length > 0);
+    const filteredEntityIdsUnique = Array.from(new Set(filteredUsageLogs.map((row) => String(row.entity_id)).filter((value) => value.length > 0)));
+
+    const entityTypeIds = Array.from(
       new Set(
-        rowsRaw
-          .map((r) => {
-            const entity = pickOne(r.entities);
-            return entity?.id ? String(entity.id) : "";
-          })
-          .filter((id) => id.length > 0)
+        entities
+          .map((row) => String(row.entity_type_id ?? "").trim())
+          .filter((value) => value.length > 0)
       )
     );
+    const usageUnitIds = Array.from(
+      new Set(
+        entities
+          .map((row) => String(row.usage_unit_id ?? "").trim())
+          .filter((value) => value.length > 0)
+      )
+    );
+
+    const [{ data: entityTypesData, error: entityTypesErr }, { data: usageUnitsData, error: usageUnitsErr }] = await Promise.all([
+      entityTypeIds.length > 0
+        ? db.from("entity_types").select("id, name").eq("organization_id", orgId).in("id", entityTypeIds)
+        : Promise.resolve({ data: [], error: null }),
+      usageUnitIds.length > 0
+        ? db.from("usage_units").select("id, name, show_in_usage_records").eq("organization_id", orgId).in("id", usageUnitIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (entityTypesErr) throw entityTypesErr;
+    if (usageUnitsErr) throw usageUnitsErr;
+
+    const entityTypeById = new Map(((entityTypesData ?? []) as EntityTypeRow[]).map((row) => [String(row.id), row]));
+    const usageUnitById = new Map(((usageUnitsData ?? []) as UsageUnitRow[]).map((row) => [String(row.id), row]));
+
     const entityProfileByEntityId: Record<string, Array<{ entity_field_id: string; name: string; value: string }>> = {};
     const entityFieldMetaById = new Map<string, { name: string; created_at: string }>();
-    if (entityIds.length > 0) {
-      const { data: entityFieldValues, error: entityFieldValuesErr } = await db
+    if (filteredEntityIdsUnique.length > 0) {
+      const { data: entityFieldValuesData, error: entityFieldValuesErr } = await db
         .from("entity_field_values")
-        .select("entity_id, entity_field_id, value_text, entity_fields(id, name, key, created_at)")
+        .select("entity_id, entity_field_id, value_text")
         .eq("organization_id", orgId)
-        .in("entity_id", entityIds);
+        .in("entity_id", filteredEntityIdsUnique);
       if (entityFieldValuesErr) throw entityFieldValuesErr;
 
-      for (const row of (entityFieldValues ?? []) as EntityFieldValueJoin[]) {
+      const entityFieldValues = (entityFieldValuesData ?? []) as EntityFieldValueRow[];
+      const entityFieldIds = Array.from(
+        new Set(
+          entityFieldValues
+            .map((row) => String(row.entity_field_id ?? "").trim())
+            .filter((value) => value.length > 0)
+        )
+      );
+      const { data: entityFieldsData, error: entityFieldsErr } = entityFieldIds.length
+        ? await db
+            .from("entity_fields")
+            .select("id, name, key, created_at")
+            .eq("organization_id", orgId)
+            .in("id", entityFieldIds)
+        : { data: [], error: null };
+      if (entityFieldsErr) throw entityFieldsErr;
+
+      const entityFieldById = new Map(((entityFieldsData ?? []) as EntityFieldRow[]).map((row) => [String(row.id), row]));
+
+      for (const row of entityFieldValues) {
         const value = String(row.value_text ?? "").trim();
         if (!value) continue;
-        const field = pickOne(row.entity_fields);
-        const name = String(field?.name ?? field?.key ?? "").trim();
-        if (!name) continue;
         const entityFieldId = String(row.entity_field_id ?? "").trim();
         if (!entityFieldId) continue;
-        const createdAt = String(field?.created_at ?? "");
-        entityFieldMetaById.set(entityFieldId, { name, created_at: createdAt });
+        const field = entityFieldById.get(entityFieldId);
+        const name = String(field?.name ?? field?.key ?? "").trim();
+        if (!name) continue;
+        entityFieldMetaById.set(entityFieldId, { name, created_at: String(field?.created_at ?? "") });
         const entityId = String(row.entity_id ?? "").trim();
         if (!entityId) continue;
         if (!entityProfileByEntityId[entityId]) entityProfileByEntityId[entityId] = [];
         entityProfileByEntityId[entityId].push({ entity_field_id: entityFieldId, name, value });
       }
     }
+
     const usageFieldMetaById = new Map<string, { name: string; created_at: string }>();
-    const usageFieldValuesByLogId = new Map<string, UsageFieldValueJoin[]>();
-    if (usageLogIds.length > 0) {
-      const { data: usageFieldValues, error: usageFieldValuesErr } = await db
+    const usageFieldValuesByLogId = new Map<string, UsageLogFieldValueRow[]>();
+    if (filteredUsageLogIds.length > 0) {
+      const { data: usageFieldValuesData, error: usageFieldValuesErr } = await db
         .from("usage_log_field_values")
-        .select(
-          `
-          usage_log_id,
-          usage_field_id,
-          value_text,
-          value_number,
-          value_date,
-          value_boolean,
-          usage_fields(id, name, key, field_type, created_at)
-        `
-        )
+        .select("usage_log_id, usage_field_id, value_text, value_number, value_date, value_boolean")
         .eq("organization_id", orgId)
-        .in("usage_log_id", usageLogIds);
+        .in("usage_log_id", filteredUsageLogIds);
       if (usageFieldValuesErr) throw usageFieldValuesErr;
 
-      for (const row of (usageFieldValues ?? []) as Array<UsageFieldValueJoin & { usage_log_id: string }>) {
+      const usageFieldValues = (usageFieldValuesData ?? []) as UsageLogFieldValueRow[];
+      const usageFieldIds = Array.from(
+        new Set(
+          usageFieldValues
+            .map((row) => String(row.usage_field_id ?? "").trim())
+            .filter((value) => value.length > 0)
+        )
+      );
+      const { data: usageFieldsData, error: usageFieldsErr } = usageFieldIds.length
+        ? await db
+            .from("usage_fields")
+            .select("id, name, key, field_type, created_at")
+            .eq("organization_id", orgId)
+            .in("id", usageFieldIds)
+        : { data: [], error: null };
+      if (usageFieldsErr) throw usageFieldsErr;
+
+      const usageFieldById = new Map(((usageFieldsData ?? []) as UsageFieldRow[]).map((row) => [String(row.id), row]));
+
+      for (const row of usageFieldValues) {
         const usageLogId = String(row.usage_log_id ?? "").trim();
         if (!usageLogId) continue;
+        const usageFieldId = String(row.usage_field_id ?? "").trim();
+        if (!usageFieldId) continue;
+        const field = usageFieldById.get(usageFieldId);
+        const fieldName = String(field?.name ?? field?.key ?? "Campo").trim();
+        usageFieldMetaById.set(usageFieldId, { name: fieldName, created_at: String(field?.created_at ?? "") });
         const current = usageFieldValuesByLogId.get(usageLogId) ?? [];
         current.push(row);
         usageFieldValuesByLogId.set(usageLogId, current);
       }
     }
 
-    const rows = rowsRaw
-      .filter((r) => {
-        const entity = pickOne(r.entities);
-        if (!entity?.id) return false;
-        if (entityTypeId && entityTypeId !== "all") {
-          return String(entity.entity_type_id ?? "") === entityTypeId;
-        }
-        return true;
-      })
-      .map((r) => {
-      const entity = pickOne(r.entities);
-      const entityType = pickOne(entity?.entity_types ?? null);
-      const unit = pickOne(entity?.usage_units ?? null);
+    const rows = filteredUsageLogs.map((row) => {
+      const entity = entitiesById.get(String(row.entity_id));
+      const entityType = entity?.entity_type_id ? entityTypeById.get(String(entity.entity_type_id)) : null;
+      const unit = entity?.usage_unit_id ? usageUnitById.get(String(entity.usage_unit_id)) : null;
       const showUnit = Boolean(unit?.id) && unit?.show_in_usage_records !== false;
-      const mainValueText = String(r.value_text ?? "").trim();
-      const mainValueNumber = r.value != null && Number.isFinite(Number(r.value)) ? Number(r.value) : null;
+      const mainValueText = String(row.value_text ?? "").trim();
+      const mainValueNumber = row.value != null && Number.isFinite(Number(row.value)) ? Number(row.value) : null;
       const mainValue = mainValueText || (mainValueNumber != null ? String(mainValueNumber) : "—");
-      const fieldValues = (usageFieldValuesByLogId.get(String(r.id)) ?? []).map((fv) => {
-        const f = pickOne(fv.usage_fields);
-        const usageFieldId = String(fv.usage_field_id);
-        const fieldName = String(f?.name ?? f?.key ?? "Campo");
-        usageFieldMetaById.set(usageFieldId, {
-          name: fieldName,
-          created_at: String(f?.created_at ?? ""),
-        });
+      const fieldValues = (usageFieldValuesByLogId.get(String(row.id)) ?? []).map((valueRow) => {
+        const usageFieldId = String(valueRow.usage_field_id);
+        const fieldMeta = usageFieldMetaById.get(usageFieldId);
         return {
           usage_field_id: usageFieldId,
-          name: fieldName,
-          value: renderFieldValue(fv),
+          name: String(fieldMeta?.name ?? "Campo"),
+          value: renderFieldValue(valueRow),
         };
       });
       return {
-        id: String(r.id),
-        entity_id: String(r.entity_id),
+        id: String(row.id),
+        entity_id: String(row.entity_id),
         entity_name: String(entity?.name ?? "Entidad"),
         entity_type_id: entity?.entity_type_id ? String(entity.entity_type_id) : null,
         entity_type_name: String(entityType?.name ?? "Sin tipo"),
         usage_unit_name: showUnit ? String(unit?.name ?? "") : "",
         usage_unit_visible: showUnit,
-        logged_on: String(r.logged_on),
-        logged_at: String(r.logged_at),
+        logged_on: String(row.logged_on),
+        logged_at: String(row.logged_at),
         value: mainValueNumber,
         value_text: mainValueText || null,
         value_display: mainValue,
-        entity_profile_values: entityProfileByEntityId[String(r.entity_id)] ?? [],
+        entity_profile_values: entityProfileByEntityId[String(row.entity_id)] ?? [],
         field_values: fieldValues,
       };
-      });
+    });
 
     const entityTypeOptions = Array.from(
       new Map(
         rows
-          .filter((r) => r.entity_type_id)
-          .map((r) => [String(r.entity_type_id), String(r.entity_type_name || "Sin tipo")])
+          .filter((row) => row.entity_type_id)
+          .map((row) => [String(row.entity_type_id), String(row.entity_type_name || "Sin tipo")])
       ).entries()
     )
       .map(([id, name]) => ({ id, name }))

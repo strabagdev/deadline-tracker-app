@@ -13,25 +13,11 @@ type ForecastPowerBiRow = {
   risk_level: string;
   risk_score: number | null;
   computed_at: string;
-  entities?: { name: string | null } | { name: string | null }[] | null;
-  deadlines?:
-    | {
-        deadline_types?: { name: string | null; measure_by?: "date" | "usage" | null } | { name: string | null; measure_by?: "date" | "usage" | null }[] | null;
-      }
-    | {
-        deadline_types?: { name: string | null; measure_by?: "date" | "usage" | null } | { name: string | null; measure_by?: "date" | "usage" | null }[] | null;
-      }[]
-    | null;
 };
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return "error";
-}
-
-function pickOne<T>(value: T | T[] | null | undefined): T | null {
-  if (Array.isArray(value)) return value[0] ?? null;
-  return value ?? null;
 }
 
 function parsePositiveInt(value: string | null, fallback: number, max: number): number {
@@ -110,29 +96,55 @@ export async function GET(req: Request) {
 
     const { data, error } = await db
       .from("deadline_forecasts")
-      .select(
-        `
-        organization_id,
-        entity_id,
-        deadline_id,
-        forecast_due_date,
-        days_remaining,
-        risk_level,
-        risk_score,
-        computed_at,
-        entities(name),
-        deadlines(deadline_types(name, measure_by))
-      `
-      )
+      .select("organization_id, entity_id, deadline_id, forecast_due_date, days_remaining, risk_level, risk_score, computed_at")
       .eq("organization_id", orgId)
       .order("computed_at", { ascending: false })
       .range(from, to);
     if (error) throw error;
 
-    const rows = ((data ?? []) as ForecastPowerBiRow[]).map((r) => {
-      const entity = pickOne(r.entities);
-      const deadline = pickOne(r.deadlines);
-      const deadlineType = pickOne(deadline?.deadline_types ?? null);
+    const forecasts = (data ?? []) as ForecastPowerBiRow[];
+    const entityIds = Array.from(new Set(forecasts.map((row) => String(row.entity_id)).filter(Boolean)));
+    const deadlineIds = Array.from(new Set(forecasts.map((row) => String(row.deadline_id)).filter(Boolean)));
+
+    const [{ data: entitiesData, error: entitiesErr }, { data: deadlinesData, error: deadlinesErr }] = await Promise.all([
+      entityIds.length > 0
+        ? db.from("entities").select("id, name").eq("organization_id", orgId).in("id", entityIds)
+        : Promise.resolve({ data: [], error: null }),
+      deadlineIds.length > 0
+        ? db.from("deadlines").select("id, deadline_type_id").eq("organization_id", orgId).in("id", deadlineIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (entitiesErr) throw entitiesErr;
+    if (deadlinesErr) throw deadlinesErr;
+
+    const deadlineTypeIds = Array.from(
+      new Set(
+        ((deadlinesData ?? []) as Array<{ deadline_type_id: string | null }>)
+          .map((row) => String(row.deadline_type_id ?? "").trim())
+          .filter((value) => value.length > 0)
+      )
+    );
+    const { data: deadlineTypesData, error: deadlineTypesErr } = deadlineTypeIds.length
+      ? await db
+          .from("deadline_types")
+          .select("id, name, measure_by")
+          .eq("organization_id", orgId)
+          .in("id", deadlineTypeIds)
+      : { data: [], error: null };
+    if (deadlineTypesErr) throw deadlineTypesErr;
+
+    const entityById = new Map(((entitiesData ?? []) as Array<{ id: string; name: string | null }>).map((row) => [String(row.id), row]));
+    const deadlineById = new Map(
+      ((deadlinesData ?? []) as Array<{ id: string; deadline_type_id: string | null }>).map((row) => [String(row.id), row])
+    );
+    const deadlineTypeById = new Map(
+      ((deadlineTypesData ?? []) as Array<{ id: string; name: string | null; measure_by: "date" | "usage" | null }>).map((row) => [String(row.id), row])
+    );
+
+    const rows = forecasts.map((r) => {
+      const entity = entityById.get(String(r.entity_id));
+      const deadline = deadlineById.get(String(r.deadline_id));
+      const deadlineType = deadline?.deadline_type_id ? deadlineTypeById.get(String(deadline.deadline_type_id)) : null;
       return {
         organization_id: r.organization_id,
         entity_id: r.entity_id,

@@ -15,7 +15,6 @@ type EntityRow = {
   entity_type_id: string | null;
   tracks_usage: boolean;
   usage_unit_id: string | null;
-  entity_types?: { id: string; name: string } | { id: string; name: string }[] | null;
 };
 
 type ForecastRow = {
@@ -79,11 +78,6 @@ function getErrorMessage(error: unknown): string {
     if (parts.length > 0) return parts.join(" | ");
   }
   return "error";
-}
-
-function pickOne<T>(value: T | T[] | null | undefined): T | null {
-  if (Array.isArray(value)) return value[0] ?? null;
-  return value ?? null;
 }
 
 function statusPriority(s: Status) {
@@ -388,13 +382,21 @@ export async function GET(req: Request) {
 
     const { data: entitiesData, error: entitiesErr } = await db
       .from("entities")
-      .select("id, name, created_at, entity_type_id, tracks_usage, usage_unit_id, entity_types(id, name)")
+      .select("id, name, created_at, entity_type_id, tracks_usage, usage_unit_id")
       .eq("organization_id", orgId)
       .order("created_at", { ascending: false });
     if (entitiesErr) throw entitiesErr;
 
     const entities = (entitiesData ?? []) as EntityRow[];
     const entityIds = entities.map((e) => e.id);
+    const entityTypeIds = Array.from(
+      new Set(entities.map((entity) => String(entity.entity_type_id ?? "").trim()).filter((value) => value.length > 0))
+    );
+    const { data: entityTypesData, error: entityTypesErr } = entityTypeIds.length
+      ? await db.from("entity_types").select("id, name").eq("organization_id", orgId).in("id", entityTypeIds)
+      : { data: [], error: null };
+    if (entityTypesErr) throw entityTypesErr;
+    const entityTypeById = new Map(((entityTypesData ?? []) as Array<{ id: string; name: string }>).map((row) => [String(row.id), row]));
 
     const [latestUsageByEntity, cardFieldsByEntity, dynamicDistributionByEntityType] = await Promise.all([
       getLatestUsageByEntity(db, orgId, entityIds),
@@ -446,19 +448,32 @@ export async function GET(req: Request) {
       if (deadlineIds.length > 0) {
         const { data: deadlineMetaData, error: deadlineMetaErr } = await db
           .from("deadlines")
-          .select("id, deadline_types(name, measure_by)")
+          .select("id, deadline_type_id")
           .eq("organization_id", orgId)
           .in("id", deadlineIds);
         if (deadlineMetaErr) throw deadlineMetaErr;
 
-        for (const row of (deadlineMetaData ?? []) as Array<{
-          id: string;
-          deadline_types?:
-            | { name?: string | null; measure_by?: "date" | "usage" | null }
-            | { name?: string | null; measure_by?: "date" | "usage" | null }[]
-            | null;
-        }>) {
-          const deadlineType = pickOne(row.deadline_types ?? null);
+        const deadlineTypeIds = Array.from(
+          new Set(
+            ((deadlineMetaData ?? []) as Array<{ deadline_type_id: string | null }>)
+              .map((row) => String(row.deadline_type_id ?? "").trim())
+              .filter((value) => value.length > 0)
+          )
+        );
+        const { data: deadlineTypesData, error: deadlineTypesErr } = deadlineTypeIds.length
+          ? await db
+              .from("deadline_types")
+              .select("id, name, measure_by")
+              .eq("organization_id", orgId)
+              .in("id", deadlineTypeIds)
+          : { data: [], error: null };
+        if (deadlineTypesErr) throw deadlineTypesErr;
+        const deadlineTypeById = new Map(
+          ((deadlineTypesData ?? []) as Array<{ id: string; name: string | null; measure_by: "date" | "usage" | null }>).map((row) => [String(row.id), row])
+        );
+
+        for (const row of (deadlineMetaData ?? []) as Array<{ id: string; deadline_type_id: string | null }>) {
+          const deadlineType = row.deadline_type_id ? deadlineTypeById.get(String(row.deadline_type_id)) : null;
           deadlineMetaById.set(String(row.id), {
             name: String(deadlineType?.name ?? "Vencimiento"),
             measure_by:
@@ -496,24 +511,38 @@ export async function GET(req: Request) {
 
       const { data: deadlinesData, error: deadlinesErr } = await db
         .from("deadlines")
-        .select("id, entity_id, next_due_date, deadline_types(name, measure_by)")
+        .select("id, entity_id, next_due_date, deadline_type_id")
         .eq("organization_id", orgId)
         .eq("is_current", true)
         .in("entity_id", entityIds)
         .not("next_due_date", "is", null);
       if (deadlinesErr) throw deadlinesErr;
 
+      const fallbackDeadlineTypeIds = Array.from(
+        new Set(
+          ((deadlinesData ?? []) as Array<{ deadline_type_id: string | null }>)
+            .map((row) => String(row.deadline_type_id ?? "").trim())
+            .filter((value) => value.length > 0)
+        )
+      );
+      const { data: fallbackDeadlineTypesData, error: fallbackDeadlineTypesErr } = fallbackDeadlineTypeIds.length
+        ? await db
+            .from("deadline_types")
+            .select("id, name, measure_by")
+            .eq("organization_id", orgId)
+            .in("id", fallbackDeadlineTypeIds)
+        : { data: [], error: null };
+      if (fallbackDeadlineTypesErr) throw fallbackDeadlineTypesErr;
+      const fallbackDeadlineTypeById = new Map(
+        ((fallbackDeadlineTypesData ?? []) as Array<{ id: string; name: string | null; measure_by: "date" | "usage" | null }>).map((row) => [String(row.id), row])
+      );
+
       const todayIso = new Date().toISOString().slice(0, 10);
       const todayTs = Date.parse(`${todayIso}T00:00:00Z`);
-      for (const row of (deadlinesData ?? []) as Array<{
-        id: string;
-        entity_id: string;
-        next_due_date: string | null;
-        deadline_types?: { name?: string | null; measure_by?: "date" | "usage" | null } | { name?: string | null; measure_by?: "date" | "usage" | null }[] | null;
-      }>) {
+      for (const row of (deadlinesData ?? []) as Array<{ id: string; entity_id: string; next_due_date: string | null; deadline_type_id: string | null }>) {
         if (nearestForecastByEntity.has(row.entity_id)) continue;
         if (!row.next_due_date) continue;
-        const dt = pickOne(row.deadline_types ?? null);
+        const dt = row.deadline_type_id ? fallbackDeadlineTypeById.get(String(row.deadline_type_id)) : null;
         if (dt?.measure_by !== "date") continue;
 
         const dueTs = Date.parse(`${String(row.next_due_date).slice(0, 10)}T00:00:00Z`);
@@ -545,7 +574,7 @@ export async function GET(req: Request) {
       entity_type_id: e.entity_type_id,
       tracks_usage: Boolean(e.tracks_usage),
       usage_unit_id: e.usage_unit_id,
-      entity_types: pickOne(e.entity_types),
+      entity_types: e.entity_type_id ? entityTypeById.get(String(e.entity_type_id)) ?? null : null,
       card_fields: cardFieldsByEntity[e.id] ?? [],
       nearest_forecast: nearestForecastByEntity.get(e.id) ?? fallbackNearestByEntity.get(e.id) ?? null,
     }));

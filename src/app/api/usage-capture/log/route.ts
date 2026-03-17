@@ -80,6 +80,52 @@ function makeRepo(db: DataClient): UsageLogsRepo {
         logged_at: String(row.logged_at),
       };
     },
+    getNumericUsageBounds: async (orgId, entityId, loggedOn) => {
+      const [previousRes, nextRes] = await Promise.all([
+        db
+          .from("usage_logs")
+          .select("value, logged_on, logged_at")
+          .eq("organization_id", orgId)
+          .eq("entity_id", entityId)
+          .not("value", "is", null)
+          .lt("logged_on", loggedOn)
+          .order("logged_on", { ascending: false })
+          .order("logged_at", { ascending: false })
+          .limit(1),
+        db
+          .from("usage_logs")
+          .select("value, logged_on, logged_at")
+          .eq("organization_id", orgId)
+          .eq("entity_id", entityId)
+          .not("value", "is", null)
+          .gt("logged_on", loggedOn)
+          .order("logged_on", { ascending: true })
+          .order("logged_at", { ascending: true })
+          .limit(1),
+      ]);
+      if (previousRes.error) throw previousRes.error;
+      if (nextRes.error) throw nextRes.error;
+      const previousRow = (previousRes.data ?? [])[0] as { value: number; logged_on: string | null; logged_at: string } | undefined;
+      const nextRow = (nextRes.data ?? [])[0] as { value: number; logged_on: string | null; logged_at: string } | undefined;
+      return {
+        previous:
+          previousRow && Number.isFinite(Number(previousRow.value))
+            ? {
+                value: Number(previousRow.value),
+                logged_on: previousRow.logged_on ? String(previousRow.logged_on) : null,
+                logged_at: String(previousRow.logged_at),
+              }
+            : null,
+        next:
+          nextRow && Number.isFinite(Number(nextRow.value))
+            ? {
+                value: Number(nextRow.value),
+                logged_on: nextRow.logged_on ? String(nextRow.logged_on) : null,
+                logged_at: String(nextRow.logged_at),
+              }
+            : null,
+      };
+    },
     createUsageLog: async (orgId, entityId, value, valueText, loggedOn, loggedAt) => {
       const { data, error } = await db
         .from("usage_logs")
@@ -491,18 +537,21 @@ export async function PUT(req: Request) {
     }
 
     if (parsed.valueNumber != null) {
-      const latest = await makeRepo(db).getLatestNumericUsageLog(organizationId, parsed.entityId);
-      const existingValue = existing.value != null && Number.isFinite(Number(existing.value)) ? Number(existing.value) : null;
-      const latestComparableValue =
-        latest && latest.logged_on === parsed.loggedOn && existingValue != null
-          ? existingValue
-          : latest?.value ?? null;
-
-      if (latestComparableValue != null && parsed.valueNumber < latestComparableValue) {
+      const bounds = await makeRepo(db).getNumericUsageBounds(organizationId, parsed.entityId, parsed.loggedOn);
+      if (bounds.previous && parsed.valueNumber < bounds.previous.value) {
         return NextResponse.json(
           {
-            error: `El valor no puede ser menor al último registro (${latestComparableValue}).`,
+            error: `El valor no puede ser menor al registro anterior (${bounds.previous.value}).`,
             code: "USAGE_VALUE_CANNOT_DECREASE",
+          },
+          { status: 400 }
+        );
+      }
+      if (bounds.next && parsed.valueNumber > bounds.next.value) {
+        return NextResponse.json(
+          {
+            error: `El valor no puede ser mayor al registro siguiente (${bounds.next.value}).`,
+            code: "USAGE_VALUE_CANNOT_INCREASE_OVER_NEXT",
           },
           { status: 400 }
         );

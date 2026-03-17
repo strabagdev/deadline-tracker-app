@@ -36,6 +36,11 @@ type LatestUsageValue = {
   logged_at: string;
 };
 
+type NumericUsageBounds = {
+  previous: LatestUsageValue | null;
+  next: LatestUsageValue | null;
+};
+
 type UsageLogFieldValueInput = {
   usageFieldId: string;
   value: unknown;
@@ -45,6 +50,7 @@ export type UsageLogsRepo = {
   requireEntityInOrg: (orgId: string, entityId: string) => Promise<boolean>;
   listUsageLogs: (orgId: string, entityId: string, limit: number) => Promise<UsageLogRow[]>;
   getLatestNumericUsageLog: (orgId: string, entityId: string) => Promise<LatestUsageValue | null>;
+  getNumericUsageBounds: (orgId: string, entityId: string, loggedOn: string) => Promise<NumericUsageBounds>;
   createUsageLog: (
     orgId: string,
     entityId: string,
@@ -99,13 +105,22 @@ export async function handleUsageLogsPost(
   if (!okEntity) return { status: 404, body: { error: "entity not found", code: "ENTITY_NOT_FOUND" } };
 
   if (valueNumber != null) {
-    const latest = await repo.getLatestNumericUsageLog(orgId, entityId);
-    if (latest && valueNumber < latest.value) {
+    const bounds = await repo.getNumericUsageBounds(orgId, entityId, loggedOn);
+    if (bounds.previous && valueNumber < bounds.previous.value) {
       return {
         status: 400,
         body: {
-          error: `El valor no puede ser menor al último registro (${latest.value}).`,
+          error: `El valor no puede ser menor al registro anterior (${bounds.previous.value}).`,
           code: "USAGE_VALUE_CANNOT_DECREASE",
+        },
+      };
+    }
+    if (bounds.next && valueNumber > bounds.next.value) {
+      return {
+        status: 400,
+        body: {
+          error: `El valor no puede ser mayor al registro siguiente (${bounds.next.value}).`,
+          code: "USAGE_VALUE_CANNOT_INCREASE_OVER_NEXT",
         },
       };
     }

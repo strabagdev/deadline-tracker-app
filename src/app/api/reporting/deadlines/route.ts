@@ -11,6 +11,7 @@ type DeadlineJoinRow = {
   organization_id: string;
   id: string;
   entity_id: string;
+  deadline_type_id: string;
   measure_by: "date" | "usage" | null;
   next_due_date: string | null;
   last_done_date: string | null;
@@ -19,26 +20,6 @@ type DeadlineJoinRow = {
   frequency_unit: string | null;
   usage_daily_average: number | null;
   created_at: string;
-  entities?: {
-    id: string;
-    name: string;
-    tracks_usage: boolean;
-    entity_types?: { id: string; name: string | null } | { id: string; name: string | null }[] | null;
-  } | {
-    id: string;
-    name: string;
-    tracks_usage: boolean;
-    entity_types?: { id: string; name: string | null } | { id: string; name: string | null }[] | null;
-  }[] | null;
-  deadline_types?: {
-    id: string;
-    name: string | null;
-    measure_by: "date" | "usage";
-  } | {
-    id: string;
-    name: string | null;
-    measure_by: "date" | "usage";
-  }[] | null;
 };
 
 type LatestUsageRow = {
@@ -72,11 +53,6 @@ type ReportRow = {
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return "error";
-}
-
-function pickOne<T>(value: T | T[] | null | undefined): T | null {
-  if (Array.isArray(value)) return value[0] ?? null;
-  return value ?? null;
 }
 
 function unauthorized(message: string) {
@@ -173,34 +149,45 @@ export async function GET(req: Request) {
 
     const { data: deadlineData, error: deadlinesErr } = await db
       .from("deadlines")
-      .select(
-        `
-        organization_id,
-        id,
-        entity_id,
-        measure_by,
-        next_due_date,
-        last_done_date,
-        last_done_usage,
-        frequency,
-        frequency_unit,
-        usage_daily_average,
-        created_at,
-        entities(
-          id,
-          name,
-          tracks_usage,
-          entity_types(id, name)
-        ),
-        deadline_types(id, name, measure_by)
-      `
-      )
+      .select("organization_id, id, entity_id, deadline_type_id, measure_by, next_due_date, last_done_date, last_done_usage, frequency, frequency_unit, usage_daily_average, created_at")
       .eq("organization_id", orgId)
       .eq("is_current", true);
     if (deadlinesErr) throw deadlinesErr;
 
     const deadlines = (deadlineData ?? []) as DeadlineJoinRow[];
     const entityIds = Array.from(new Set(deadlines.map((d) => d.entity_id)));
+    const deadlineTypeIds = Array.from(new Set(deadlines.map((d) => String(d.deadline_type_id ?? "")).filter(Boolean)));
+
+    const [{ data: entitiesData, error: entitiesErr }, { data: deadlineTypesData, error: deadlineTypesErr }] = await Promise.all([
+      entityIds.length > 0
+        ? db.from("entities").select("id, name, tracks_usage, entity_type_id").eq("organization_id", orgId).in("id", entityIds)
+        : Promise.resolve({ data: [], error: null }),
+      deadlineTypeIds.length > 0
+        ? db.from("deadline_types").select("id, name, measure_by").eq("organization_id", orgId).in("id", deadlineTypeIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (entitiesErr) throw entitiesErr;
+    if (deadlineTypesErr) throw deadlineTypesErr;
+
+    const entityTypeIds = Array.from(
+      new Set(
+        ((entitiesData ?? []) as Array<{ entity_type_id: string | null }>)
+          .map((row) => String(row.entity_type_id ?? "").trim())
+          .filter((value) => value.length > 0)
+      )
+    );
+    const { data: entityTypesData, error: entityTypesErr } = entityTypeIds.length
+      ? await db.from("entity_types").select("id, name").eq("organization_id", orgId).in("id", entityTypeIds)
+      : { data: [], error: null };
+    if (entityTypesErr) throw entityTypesErr;
+
+    const entityById = new Map(
+      ((entitiesData ?? []) as Array<{ id: string; name: string; tracks_usage: boolean; entity_type_id: string | null }>).map((row) => [String(row.id), row])
+    );
+    const entityTypeById = new Map(((entityTypesData ?? []) as Array<{ id: string; name: string | null }>).map((row) => [String(row.id), row]));
+    const deadlineTypeById = new Map(
+      ((deadlineTypesData ?? []) as Array<{ id: string; name: string | null; measure_by: "date" | "usage" | null }>).map((row) => [String(row.id), row])
+    );
 
     const latestUsageByEntity = new Map<string, { value: number; logged_at: string }>();
     await Promise.all(
@@ -222,9 +209,9 @@ export async function GET(req: Request) {
 
     const now = new Date();
     const rows: ReportRow[] = deadlines.map((d) => {
-      const entity = pickOne(d.entities);
-      const entityType = pickOne(entity?.entity_types ?? null);
-      const deadlineType = pickOne(d.deadline_types);
+      const entity = entityById.get(String(d.entity_id));
+      const entityType = entity?.entity_type_id ? entityTypeById.get(String(entity.entity_type_id)) : null;
+      const deadlineType = deadlineTypeById.get(String(d.deadline_type_id));
       const measureBy = (deadlineType?.measure_by ?? d.measure_by ?? "date") as "date" | "usage";
       const latestUsage = latestUsageByEntity.get(d.entity_id);
 

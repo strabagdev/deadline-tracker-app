@@ -12,6 +12,10 @@ function createRepo(overrides?: Partial<UsageLogsRepo>): UsageLogsRepo {
     requireEntityInOrg: async () => true,
     listUsageLogs: async () => [{ id: "u1", entity_id: "e1", value: 10, logged_at: "2026-01-01T00:00:00.000Z" }],
     getLatestNumericUsageLog: async () => ({ value: 10, logged_on: "2026-01-01", logged_at: "2026-01-01T00:00:00.000Z" }),
+    getNumericUsageBounds: async () => ({
+      previous: { value: 10, logged_on: "2026-01-01", logged_at: "2026-01-01T00:00:00.000Z" },
+      next: null,
+    }),
     createUsageLog: async () => ({ id: "u1" }),
     getUsageFieldsByIds: async () => [],
     createUsageLogFieldValues: async () => undefined,
@@ -39,9 +43,48 @@ test("usage logs GET devuelve 404 si la entidad no pertenece a la org", async ()
 });
 
 test("usage logs POST devuelve 201 al crear", async () => {
-  const res = await handleUsageLogsPost("o1", { entity_id: "e1", value: 123 }, createRepo());
+  const res = await handleUsageLogsPost(
+    "o1",
+    { entity_id: "e1", value: 123, logged_on: "2026-01-02" },
+    createRepo({
+      getNumericUsageBounds: async () => ({
+        previous: { value: 10, logged_on: "2026-01-01", logged_at: "2026-01-01T00:00:00.000Z" },
+        next: null,
+      }),
+    })
+  );
   assert.equal(res.status, 201);
   assert.equal(res.body.id, "u1");
+});
+
+test("usage logs POST rechaza un valor menor al registro anterior", async () => {
+  const res = await handleUsageLogsPost(
+    "o1",
+    { entity_id: "e1", value: 9, logged_on: "2026-01-02" },
+    createRepo({
+      getNumericUsageBounds: async () => ({
+        previous: { value: 10, logged_on: "2026-01-01", logged_at: "2026-01-01T00:00:00.000Z" },
+        next: null,
+      }),
+    })
+  );
+  assert.equal(res.status, 400);
+  assert.equal(res.body.code, "USAGE_VALUE_CANNOT_DECREASE");
+});
+
+test("usage logs POST rechaza un valor mayor al registro siguiente", async () => {
+  const res = await handleUsageLogsPost(
+    "o1",
+    { entity_id: "e1", value: 25, logged_on: "2026-01-02" },
+    createRepo({
+      getNumericUsageBounds: async () => ({
+        previous: { value: 10, logged_on: "2026-01-01", logged_at: "2026-01-01T00:00:00.000Z" },
+        next: { value: 20, logged_on: "2026-01-03", logged_at: "2026-01-03T00:00:00.000Z" },
+      }),
+    })
+  );
+  assert.equal(res.status, 400);
+  assert.equal(res.body.code, "USAGE_VALUE_CANNOT_INCREASE_OVER_NEXT");
 });
 
 test("usage logs DELETE devuelve 404 si no existe", async () => {
@@ -66,6 +109,7 @@ test("usage logs POST guarda field_values tipados", async () => {
     {
       entity_id: "e1",
       value: 123,
+      logged_on: "2026-01-02",
       field_values: [
         { usage_field_id: "f1", value: "10.5" },
         { usage_field_id: "f2", value: "true" },

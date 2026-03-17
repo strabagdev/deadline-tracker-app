@@ -7,26 +7,11 @@ type RiskLevel = "green" | "yellow" | "orange" | "red" | "none";
 type DeadlineRow = {
   id: string;
   entity_id: string;
+  deadline_type_id: string | null;
   next_due_date: string | null;
   last_done_usage: number | null;
   frequency: number | null;
   usage_daily_average: number | null;
-  deadline_types?: {
-    name: string | null;
-    measure_by: "date" | "usage";
-    is_active: boolean;
-  } | {
-    name: string | null;
-    measure_by: "date" | "usage";
-    is_active: boolean;
-  }[] | null;
-  entities?: {
-    name: string | null;
-    tracks_usage: boolean;
-  } | {
-    name: string | null;
-    tracks_usage: boolean;
-  }[] | null;
 };
 
 type ForecastRow = {
@@ -34,20 +19,10 @@ type ForecastRow = {
   deadline_id: string;
   risk_level: "green" | "yellow" | "orange" | "red" | "none";
   days_remaining: number | null;
-  entities?: { name: string | null } | { name: string | null }[] | null;
-  deadlines?:
-    | { deadline_types?: { name: string | null } | { name: string | null }[] | null }
-    | { deadline_types?: { name: string | null } | { name: string | null }[] | null }[]
-    | null;
 };
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const EVENT_TYPE = "forecast_risk";
-
-function pickOne<T>(value: T | T[] | null | undefined): T | null {
-  if (Array.isArray(value)) return value[0] ?? null;
-  return value ?? null;
-}
 
 function startOfLocalDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -108,26 +83,48 @@ export async function syncForecastAndAlertsForEntity(db: DataClient, orgId: stri
 
   const { data: deadlinesData, error: deadlinesErr } = await db
     .from("deadlines")
-    .select(
-      `
-      id,
-      entity_id,
-      next_due_date,
-      last_done_usage,
-      frequency,
-      usage_daily_average,
-      deadline_types(name, measure_by, is_active),
-      entities(name, tracks_usage)
-    `
-    )
+    .select("id, entity_id, deadline_type_id, next_due_date, last_done_usage, frequency, usage_daily_average")
     .eq("organization_id", orgId)
     .eq("entity_id", entityId)
-    .eq("is_current", true)
-    .eq("deadline_types.is_active", true);
+    .eq("is_current", true);
   if (deadlinesErr) throw deadlinesErr;
 
   const deadlines = (deadlinesData ?? []) as DeadlineRow[];
-  const activeDeadlineIds = deadlines.map((d) => d.id);
+  const deadlineTypeIds = Array.from(
+    new Set(deadlines.map((deadline) => String(deadline.deadline_type_id ?? "")).filter((value) => value.length > 0))
+  );
+  const [{ data: deadlineTypesData, error: deadlineTypesErr }, { data: entityData, error: entityErr }] = await Promise.all([
+    deadlineTypeIds.length > 0
+      ? db
+          .from("deadline_types")
+          .select("id, name, measure_by, is_active")
+          .eq("organization_id", orgId)
+          .in("id", deadlineTypeIds)
+      : Promise.resolve({ data: [], error: null }),
+    db
+      .from("entities")
+      .select("id, name, tracks_usage")
+      .eq("organization_id", orgId)
+      .eq("id", entityId)
+      .maybeSingle(),
+  ]);
+  if (deadlineTypesErr) throw deadlineTypesErr;
+  if (entityErr) throw entityErr;
+
+  const deadlineTypeById = new Map(
+    ((deadlineTypesData ?? []) as Array<{
+      id: string;
+      name: string | null;
+      measure_by: "date" | "usage";
+      is_active: boolean;
+    }>).map((row) => [String(row.id), row])
+  );
+  const entity = (entityData ?? null) as { id: string; name: string | null; tracks_usage: boolean } | null;
+  const activeDeadlines = deadlines.filter((deadline) => {
+    const deadlineType = deadline.deadline_type_id ? deadlineTypeById.get(String(deadline.deadline_type_id)) : null;
+    return deadlineType?.is_active !== false;
+  });
+  const activeDeadlineIds = activeDeadlines.map((d) => d.id);
 
   const { data: latestUsageData, error: latestUsageErr } = await db
     .from("usage_logs")
@@ -152,9 +149,8 @@ export async function syncForecastAndAlertsForEntity(db: DataClient, orgId: stri
     computed_at: string;
   }> = [];
 
-  for (const d of deadlines) {
-    const deadlineType = pickOne(d.deadline_types);
-    const entity = pickOne(d.entities);
+  for (const d of activeDeadlines) {
+    const deadlineType = d.deadline_type_id ? deadlineTypeById.get(String(d.deadline_type_id)) : null;
     const measureBy = deadlineType?.measure_by;
     let forecastDueDate: Date | null = null;
     let daysRemaining: number | null = null;
@@ -238,25 +234,50 @@ export async function syncForecastAndAlertsForEntity(db: DataClient, orgId: stri
 
   const { data: forecastData, error: forecastErr } = await db
     .from("deadline_forecasts")
-    .select(
-      `
-      entity_id,
-      deadline_id,
-      risk_level,
-      days_remaining,
-      entities(name),
-      deadlines(deadline_types(name))
-    `
-    )
+    .select("entity_id, deadline_id, risk_level, days_remaining")
     .eq("organization_id", orgId)
     .eq("entity_id", entityId)
     .in("risk_level", ["red", "orange", "yellow"]);
   if (forecastErr) throw forecastErr;
 
+  const candidateDeadlineIds = Array.from(
+    new Set(((forecastData ?? []) as ForecastRow[]).map((row) => String(row.deadline_id)).filter(Boolean))
+  );
+  const { data: candidateDeadlinesData, error: candidateDeadlinesErr } = candidateDeadlineIds.length
+    ? await db
+        .from("deadlines")
+        .select("id, deadline_type_id")
+        .eq("organization_id", orgId)
+        .in("id", candidateDeadlineIds)
+    : { data: [], error: null };
+  if (candidateDeadlinesErr) throw candidateDeadlinesErr;
+
+  const candidateDeadlineTypeIds = Array.from(
+    new Set(
+      ((candidateDeadlinesData ?? []) as Array<{ deadline_type_id: string | null }>)
+        .map((row) => String(row.deadline_type_id ?? "").trim())
+        .filter((value) => value.length > 0)
+    )
+  );
+  const { data: candidateDeadlineTypesData, error: candidateDeadlineTypesErr } = candidateDeadlineTypeIds.length
+    ? await db
+        .from("deadline_types")
+        .select("id, name")
+        .eq("organization_id", orgId)
+        .in("id", candidateDeadlineTypeIds)
+    : { data: [], error: null };
+  if (candidateDeadlineTypesErr) throw candidateDeadlineTypesErr;
+
+  const candidateDeadlineById = new Map(
+    ((candidateDeadlinesData ?? []) as Array<{ id: string; deadline_type_id: string | null }>).map((row) => [String(row.id), row])
+  );
+  const candidateDeadlineTypeById = new Map(
+    ((candidateDeadlineTypesData ?? []) as Array<{ id: string; name: string | null }>).map((row) => [String(row.id), row])
+  );
+
   const candidates = ((forecastData ?? []) as ForecastRow[]).map((r) => {
-    const entity = pickOne(r.entities);
-    const deadline = pickOne(r.deadlines);
-    const deadlineType = pickOne(deadline?.deadline_types ?? null);
+    const deadline = candidateDeadlineById.get(String(r.deadline_id));
+    const deadlineType = deadline?.deadline_type_id ? candidateDeadlineTypeById.get(String(deadline.deadline_type_id)) : null;
     const entityName = entity?.name ?? "Entidad";
     const deadlineName = deadlineType?.name ?? "Vencimiento";
     return {

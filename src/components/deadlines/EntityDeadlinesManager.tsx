@@ -245,9 +245,49 @@ export default function EntityDeadlinesManager({
     return Number.isFinite(value) ? value : null;
   }, [usageLogValue]);
   const usageLogWouldDecrease = useMemo(() => {
-    if (usageLogValueNumber == null || latestNumericUsageValue == null) return false;
-    return usageLogValueNumber < latestNumericUsageValue;
-  }, [latestNumericUsageValue, usageLogValueNumber]);
+    const selected = String(usageLogLoggedAt ?? "").trim();
+    if (!selected || usageLogValueNumber == null) return false;
+    const previous = usageLogs
+      .filter((log) => {
+        const loggedOn = String(log.logged_on ?? "").trim();
+        return loggedOn && loggedOn < selected && Number.isFinite(Number(log.value));
+      })
+      .sort((a, b) => String(b.logged_on ?? "").localeCompare(String(a.logged_on ?? "")))[0];
+    return previous ? usageLogValueNumber < Number(previous.value) : false;
+  }, [usageLogLoggedAt, usageLogValueNumber, usageLogs]);
+  const usageLogWouldExceedNext = useMemo(() => {
+    const selected = String(usageLogLoggedAt ?? "").trim();
+    if (!selected || usageLogValueNumber == null) return false;
+    const next = usageLogs
+      .filter((log) => {
+        const loggedOn = String(log.logged_on ?? "").trim();
+        return loggedOn && loggedOn > selected && Number.isFinite(Number(log.value));
+      })
+      .sort((a, b) => String(a.logged_on ?? "").localeCompare(String(b.logged_on ?? "")))[0];
+    return next ? usageLogValueNumber > Number(next.value) : false;
+  }, [usageLogLoggedAt, usageLogValueNumber, usageLogs]);
+  const previousNumericUsageValue = useMemo(() => {
+    const selected = String(usageLogLoggedAt ?? "").trim();
+    if (!selected) return null;
+    const previous = usageLogs
+      .filter((log) => {
+        const loggedOn = String(log.logged_on ?? "").trim();
+        return loggedOn && loggedOn < selected && Number.isFinite(Number(log.value));
+      })
+      .sort((a, b) => String(b.logged_on ?? "").localeCompare(String(a.logged_on ?? "")))[0];
+    return previous ? Number(previous.value) : null;
+  }, [usageLogLoggedAt, usageLogs]);
+  const nextNumericUsageValue = useMemo(() => {
+    const selected = String(usageLogLoggedAt ?? "").trim();
+    if (!selected) return null;
+    const next = usageLogs
+      .filter((log) => {
+        const loggedOn = String(log.logged_on ?? "").trim();
+        return loggedOn && loggedOn > selected && Number.isFinite(Number(log.value));
+      })
+      .sort((a, b) => String(a.logged_on ?? "").localeCompare(String(b.logged_on ?? "")))[0];
+    return next ? Number(next.value) : null;
+  }, [usageLogLoggedAt, usageLogs]);
 
   const [lastDoneDate, setLastDoneDate] = useState<string>("");
   const [nextDueDate, setNextDueDate] = useState<string>("");
@@ -494,7 +534,12 @@ export default function EntityDeadlinesManager({
       return;
     }
     if (usageLogWouldDecrease) {
-      setUsageLogsMsg(`El valor no puede ser menor al último registro (${latestNumericUsageValue}).`);
+      setUsageLogsMsg(`El valor no puede ser menor al registro anterior (${previousNumericUsageValue}).`);
+      setUsageLogsBusy(false);
+      return;
+    }
+    if (usageLogWouldExceedNext) {
+      setUsageLogsMsg(`El valor no puede ser mayor al registro siguiente (${nextNumericUsageValue}).`);
       setUsageLogsBusy(false);
       return;
     }
@@ -771,7 +816,7 @@ export default function EntityDeadlinesManager({
 
                 <Button
                   onClick={createUsageLog}
-                  disabled={usageLogsBusy || usageLogExistsForSelectedDay || usageLogWouldDecrease}
+                  disabled={usageLogsBusy || usageLogExistsForSelectedDay || usageLogWouldDecrease || usageLogWouldExceedNext}
                   className="min-h-10"
                 >
                   {usageLogsBusy ? "Guardando..." : "Guardar uso"}
@@ -783,7 +828,12 @@ export default function EntityDeadlinesManager({
               ) : null}
               {usageLogWouldDecrease ? (
                 <p className="mt-2 text-sm text-amber-700">
-                  El valor no puede ser menor al último registro ({latestNumericUsageValue}).
+                  El valor no puede ser menor al registro anterior ({previousNumericUsageValue}).
+                </p>
+              ) : null}
+              {usageLogWouldExceedNext ? (
+                <p className="mt-2 text-sm text-amber-700">
+                  El valor no puede ser mayor al registro siguiente ({nextNumericUsageValue}).
                 </p>
               ) : null}
 

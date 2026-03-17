@@ -73,6 +73,56 @@ async function getLatestNumericUsageLog(db: DataClient, orgId: string, entityId:
   };
 }
 
+async function getNumericUsageBounds(db: DataClient, orgId: string, entityId: string, loggedOn: string) {
+  const [previousRes, nextRes] = await Promise.all([
+    db
+      .from("usage_logs")
+      .select("value, logged_on, logged_at")
+      .eq("organization_id", orgId)
+      .eq("entity_id", entityId)
+      .not("value", "is", null)
+      .lt("logged_on", loggedOn)
+      .order("logged_on", { ascending: false })
+      .order("logged_at", { ascending: false })
+      .limit(1),
+    db
+      .from("usage_logs")
+      .select("value, logged_on, logged_at")
+      .eq("organization_id", orgId)
+      .eq("entity_id", entityId)
+      .not("value", "is", null)
+      .gt("logged_on", loggedOn)
+      .order("logged_on", { ascending: true })
+      .order("logged_at", { ascending: true })
+      .limit(1),
+  ]);
+
+  if (previousRes.error) throw previousRes.error;
+  if (nextRes.error) throw nextRes.error;
+
+  const previousRow = (previousRes.data ?? [])[0] as { value: number; logged_on: string | null; logged_at: string } | undefined;
+  const nextRow = (nextRes.data ?? [])[0] as { value: number; logged_on: string | null; logged_at: string } | undefined;
+
+  return {
+    previous:
+      previousRow && Number.isFinite(Number(previousRow.value))
+        ? {
+            value: Number(previousRow.value),
+            logged_on: previousRow.logged_on ? String(previousRow.logged_on) : null,
+            logged_at: String(previousRow.logged_at),
+          }
+        : null,
+    next:
+      nextRow && Number.isFinite(Number(nextRow.value))
+        ? {
+            value: Number(nextRow.value),
+            logged_on: nextRow.logged_on ? String(nextRow.logged_on) : null,
+            logged_at: String(nextRow.logged_at),
+          }
+        : null,
+  };
+}
+
 function makeRepo(db: DataClient): UsageLogsRepo {
   return {
     requireEntityInOrg: (orgId, entityId) => requireEntityInOrg(db, orgId, entityId),
@@ -162,6 +212,7 @@ function makeRepo(db: DataClient): UsageLogsRepo {
       }));
     },
     getLatestNumericUsageLog: (orgId, entityId) => getLatestNumericUsageLog(db, orgId, entityId),
+    getNumericUsageBounds: (orgId, entityId, loggedOn) => getNumericUsageBounds(db, orgId, entityId, loggedOn),
     createUsageLog: async (orgId, entityId, value, valueText, loggedOn, loggedAt) => {
       const { data, error } = await db
         .from("usage_logs")
