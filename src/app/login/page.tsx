@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-type BusyAction = "password" | "register" | "magic_link" | "reset" | "oauth_google" | "oauth_microsoft" | null;
+type BusyAction = "password" | "register" | "magic_link" | "reset" | null;
 type AuthMode = "signin" | "signup";
 
 const AUTH_EMAIL_COOLDOWN_MS = 75_000;
@@ -108,20 +108,6 @@ export default function LoginPage() {
     }
   }
 
-  async function resolvePostAuthRoute(token: string) {
-    const res = await fetch("/api/platform/super-admin/status", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const json = await res.json().catch(() => ({}));
-    if (res.ok && json && json.has_super_admin === false) {
-      return "/setup-super-admin";
-    }
-    if (res.ok && json && json.is_super_admin === true) {
-      return "/app/super-admin";
-    }
-    return "/select-org";
-  }
-
   useEffect(() => {
     let cancelled = false;
 
@@ -134,8 +120,7 @@ export default function LoginPage() {
 
       const { data } = await supabaseAuth.auth.getSession();
       if (!cancelled && data.session) {
-        const route = await resolvePostAuthRoute(data.session.access_token);
-        router.replace(route);
+        router.replace("/select-org");
       }
     })();
 
@@ -178,10 +163,8 @@ export default function LoginPage() {
   async function finalizeSignedInSession() {
     await syncProfileFromSession();
     const { data } = await supabaseAuth.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) throw new Error("No se pudo validar sesión.");
-    const route = await resolvePostAuthRoute(token);
-    router.replace(route);
+    if (!data.session?.access_token) throw new Error("No se pudo validar sesión.");
+    router.replace("/select-org");
   }
 
   async function loginWithPassword(e: React.FormEvent) {
@@ -286,34 +269,6 @@ export default function LoginPage() {
     }
   }
 
-  async function startOAuth(provider: "google" | "azure") {
-    setMsg("");
-    if (inFlightRef.current) return;
-    const action: BusyAction = provider === "google" ? "oauth_google" : "oauth_microsoft";
-    inFlightRef.current = action;
-    setBusyAction(action);
-
-    try {
-      const { error } = await supabaseAuth.auth.signInWithOAuth({
-        provider,
-        options: {
-          redirectTo: `${getAuthPublicOrigin()}/auth/callback`,
-          queryParams:
-            provider === "azure"
-              ? { prompt: "select_account" }
-              : { prompt: "select_account" },
-        },
-      });
-
-      if (error) {
-        setMsg(humanizeAuthErrorMessage(error.message));
-      }
-    } finally {
-      setBusyAction(null);
-      inFlightRef.current = null;
-    }
-  }
-
   async function sendMagicLink() {
     setMsg("");
 
@@ -406,7 +361,7 @@ export default function LoginPage() {
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(15,118,110,0.12),transparent_26%),radial-gradient(circle_at_bottom_right,rgba(45,79,135,0.12),transparent_28%),linear-gradient(180deg,#f3f7fb_0%,#edf4f0_100%)] px-3 py-4 sm:px-4 sm:py-6">
-      <div className="mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1320px] gap-4 lg:grid-cols-[1.08fr_0.92fr]">
+      <div className="mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1320px] gap-4 lg:grid-cols-[1.15fr_0.85fr]">
         <section className="hidden overflow-hidden rounded-[34px] border border-white/45 bg-[linear-gradient(140deg,rgba(10,31,33,0.98),rgba(9,88,81,0.92))] px-8 py-8 text-white shadow-[0_30px_90px_rgba(15,23,42,0.16)] lg:flex lg:flex-col lg:justify-between">
           <div>
             <div className="flex items-center gap-4">
@@ -457,59 +412,21 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <section className="flex items-center justify-center">
-          <Card className="w-full max-w-[640px] overflow-hidden border-white/60 bg-[rgba(255,255,255,0.82)] backdrop-blur-md">
-            <CardHeader className="border-b border-[color:var(--border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(237,244,240,0.72))] pb-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-2">
-                  <div className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">Acceso seguro</div>
-                  <CardTitle className="text-3xl tracking-tight">
-                    {mode === "signin" ? "Entrar a Ops Ahead" : "Crear cuenta de acceso"}
-                  </CardTitle>
-                  <CardDescription className="max-w-xl text-sm leading-6">
-                    Prioriza SSO o contraseña. Magic link queda como respaldo para usuarios existentes y el acceso final puede depender de tu organización.
-                  </CardDescription>
-                </div>
-                {platformLogoUrl ? (
-                  <Image
-                    src={platformLogoUrl}
-                    alt="Logo plataforma"
-                    width={72}
-                    height={72}
-                    className="hidden h-[64px] w-[64px] rounded-2xl border border-black/5 object-cover shadow-sm sm:block"
-                  />
-                ) : null}
+        <section className="flex items-center justify-center lg:px-10">
+          <Card className="w-full max-w-md overflow-hidden bg-white/86 backdrop-blur">
+            <CardHeader className="pb-5">
+              <div className="space-y-2">
+                <div className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">Acceso seguro</div>
+                <CardTitle className="text-3xl tracking-tight">
+                  {mode === "signin" ? "Entrar a Ops Ahead" : "Crear cuenta de acceso"}
+                </CardTitle>
+                <CardDescription className="text-sm leading-6">
+                  Prioriza SSO o contraseña. Magic link queda como respaldo para usuarios existentes.
+                </CardDescription>
               </div>
             </CardHeader>
 
             <CardContent className="space-y-6 pt-6">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy}
-                  className="h-11 w-full justify-center rounded-2xl border-[rgba(17,32,28,0.1)] bg-white"
-                  onClick={() => void startOAuth("azure")}
-                >
-                  {busyAction === "oauth_microsoft" ? "Conectando..." : "Continuar con Microsoft"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy}
-                  className="h-11 w-full justify-center rounded-2xl border-[rgba(17,32,28,0.1)] bg-white"
-                  onClick={() => void startOAuth("google")}
-                >
-                  {busyAction === "oauth_google" ? "Conectando..." : "Continuar con Google"}
-                </Button>
-              </div>
-
-              <div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.22em] text-slate-400">
-                <div className="h-px flex-1 bg-[color:var(--border)]" />
-                <span>o continúa con correo</span>
-                <div className="h-px flex-1 bg-[color:var(--border)]" />
-              </div>
-
               <div className="grid grid-cols-2 gap-2 rounded-[18px] bg-[rgba(215,243,239,0.42)] p-1.5">
                 <button
                   type="button"
@@ -631,8 +548,8 @@ export default function LoginPage() {
                   </div>
 
                   <div className="rounded-[20px] border border-[rgba(17,32,28,0.08)] bg-[rgba(215,243,239,0.28)] px-4 py-3 text-sm leading-6 text-slate-600">
-                    Crear una cuenta no asigna acceso a una organización por sí solo. En entornos multiempresa, el
-                    acceso final depende de invitación, membresía o aprobación del superadmin.
+                    Crear una cuenta no asigna acceso por sí solo. En entornos multiempresa, el acceso final depende
+                    de invitación, membresía o aprobación del superadmin.
                   </div>
 
                   <Button type="submit" disabled={busy} className="h-11 w-full rounded-2xl">

@@ -97,21 +97,6 @@ export default function AuthCallbackPage() {
         return;
       }
 
-      const statusRes = await fetch("/api/platform/super-admin/status", {
-        headers: { Authorization: `Bearer ${data.session.access_token}` },
-      });
-      const statusJson = await statusRes.json().catch(() => ({}));
-
-      if (statusRes.ok && statusJson && statusJson.has_super_admin === false) {
-        router.replace("/setup-super-admin");
-        return;
-      }
-
-      if (statusRes.ok && statusJson && statusJson.is_super_admin === true) {
-        router.replace("/app/super-admin");
-        return;
-      }
-
       router.replace("/select-org");
     })();
   }, [router]);
