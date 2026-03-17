@@ -24,6 +24,13 @@ function isUsagePerDayUniqueViolation(error: unknown) {
   return maybe.code === "23505" && (text.includes("usage_logs_org_entity_logged_on_uidx") || text.includes("organization_id, entity_id, logged_on"));
 }
 
+function isUsageValueNotNullViolation(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const maybe = error as { code?: string; message?: string; details?: string };
+  const text = `${maybe.message ?? ""} ${maybe.details ?? ""}`.toLowerCase();
+  return maybe.code === "23502" && text.includes(`column "value"`) && text.includes("usage_logs");
+}
+
 async function requireEntityInOrg(db: DataClient, orgId: string, entityId: string) {
   const { data, error } = await db
     .from("entities")
@@ -242,6 +249,15 @@ export async function GET(req: Request) {
         { status: 409 }
       );
     }
+    if (isUsageValueNotNullViolation(error)) {
+      return NextResponse.json(
+        {
+          error: "La base actual todavía exige un valor numérico en usage_logs.value. Debe alinearse para permitir registros de texto.",
+          code: "LEGACY_USAGE_VALUE_NOT_NULL",
+        },
+        { status: 500 }
+      );
+    }
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
@@ -290,6 +306,15 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "Para esta fecha ya hay un registro de uso.", code: "USAGE_ALREADY_EXISTS_FOR_DAY" },
         { status: 409 }
+      );
+    }
+    if (isUsageValueNotNullViolation(error)) {
+      return NextResponse.json(
+        {
+          error: "La base actual todavía exige un valor numérico en usage_logs.value. Debe alinearse para permitir registros de texto.",
+          code: "LEGACY_USAGE_VALUE_NOT_NULL",
+        },
+        { status: 500 }
       );
     }
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });

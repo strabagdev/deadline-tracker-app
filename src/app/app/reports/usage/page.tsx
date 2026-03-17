@@ -574,6 +574,9 @@ export default function UsageReportsPage() {
               <Link href="/app/usage-capture">
                 <Button variant="outline" size="sm">Captura uso</Button>
               </Link>
+              <Link href="/app/reports/usage/gantt">
+                <Button variant="outline" size="sm">Carta Gantt</Button>
+              </Link>
               <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading || busy}>
                 Refrescar
               </Button>

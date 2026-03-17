@@ -10,8 +10,28 @@ import { canViewModule, canViewUsageCaptureEntityType, getOrgAccess } from "@/li
 type DataClient = ReturnType<typeof createDataServerClient>;
 
 function getErrorMessage(error: unknown): string {
+  if (typeof error === "string" && error.trim()) return error.trim();
   if (error instanceof Error && error.message) return error.message;
-  return "error";
+  if (error && typeof error === "object") {
+    const maybe = error as {
+      error?: unknown;
+      message?: unknown;
+      details?: unknown;
+      hint?: unknown;
+      code?: unknown;
+    };
+    const parts = [maybe.error, maybe.message, maybe.details, maybe.hint]
+      .map((value) => String(value ?? "").trim())
+      .filter((value) => value.length > 0);
+    if (parts.length > 0) return parts.join(" | ");
+    try {
+      const serialized = JSON.stringify(error);
+      if (serialized && serialized !== "{}") return serialized;
+    } catch {
+      // Ignore serialization failures and fall through to default message.
+    }
+  }
+  return "No se pudo guardar el registro de uso.";
 }
 
 function isUsagePerDayUniqueViolation(error: unknown) {
@@ -19,6 +39,13 @@ function isUsagePerDayUniqueViolation(error: unknown) {
   const maybe = error as { code?: string; message?: string; details?: string };
   const text = `${maybe.message ?? ""} ${maybe.details ?? ""}`.toLowerCase();
   return maybe.code === "23505" && (text.includes("usage_logs_org_entity_logged_on_uidx") || text.includes("organization_id, entity_id, logged_on"));
+}
+
+function isUsageValueNotNullViolation(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const maybe = error as { code?: string; message?: string; details?: string };
+  const text = `${maybe.message ?? ""} ${maybe.details ?? ""}`.toLowerCase();
+  return maybe.code === "23502" && text.includes(`column "value"`) && text.includes("usage_logs");
 }
 
 function makeRepo(db: DataClient): UsageLogsRepo {
@@ -34,7 +61,25 @@ function makeRepo(db: DataClient): UsageLogsRepo {
       return Boolean(data?.id);
     },
     listUsageLogs: async () => [],
-    getLatestNumericUsageLog: async () => null,
+    getLatestNumericUsageLog: async (orgId, entityId) => {
+      const { data, error } = await db
+        .from("usage_logs")
+        .select("value, logged_on, logged_at")
+        .eq("organization_id", orgId)
+        .eq("entity_id", entityId)
+        .not("value", "is", null)
+        .order("logged_on", { ascending: false })
+        .order("logged_at", { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      const row = (data ?? [])[0] as { value: number; logged_on: string | null; logged_at: string } | undefined;
+      if (!row || !Number.isFinite(Number(row.value))) return null;
+      return {
+        value: Number(row.value),
+        logged_on: row.logged_on ? String(row.logged_on) : null,
+        logged_at: String(row.logged_at),
+      };
+    },
     createUsageLog: async (orgId, entityId, value, valueText, loggedOn, loggedAt) => {
       const { data, error } = await db
         .from("usage_logs")
@@ -295,6 +340,21 @@ export async function GET(req: Request) {
       },
     });
   } catch (error: unknown) {
+    if (isUsagePerDayUniqueViolation(error)) {
+      return NextResponse.json(
+        { error: "Para esta fecha ya hay un registro de uso.", code: "USAGE_ALREADY_EXISTS_FOR_DAY" },
+        { status: 409 }
+      );
+    }
+    if (isUsageValueNotNullViolation(error)) {
+      return NextResponse.json(
+        {
+          error: "La base actual todavía exige un valor numérico en usage_logs.value. Debe alinearse para permitir registros de texto.",
+          code: "LEGACY_USAGE_VALUE_NOT_NULL",
+        },
+        { status: 500 }
+      );
+    }
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
@@ -420,7 +480,7 @@ export async function PUT(req: Request) {
 
     const { data: existing, error: existingErr } = await db
       .from("usage_logs")
-      .select("id")
+      .select("id, value, logged_on, logged_at")
       .eq("organization_id", organizationId)
       .eq("entity_id", parsed.entityId)
       .eq("logged_on", parsed.loggedOn)
@@ -428,6 +488,25 @@ export async function PUT(req: Request) {
     if (existingErr) throw existingErr;
     if (!existing?.id) {
       return NextResponse.json({ error: "usage log not found for day", code: "USAGE_LOG_NOT_FOUND" }, { status: 404 });
+    }
+
+    if (parsed.valueNumber != null) {
+      const latest = await makeRepo(db).getLatestNumericUsageLog(organizationId, parsed.entityId);
+      const existingValue = existing.value != null && Number.isFinite(Number(existing.value)) ? Number(existing.value) : null;
+      const latestComparableValue =
+        latest && latest.logged_on === parsed.loggedOn && existingValue != null
+          ? existingValue
+          : latest?.value ?? null;
+
+      if (latestComparableValue != null && parsed.valueNumber < latestComparableValue) {
+        return NextResponse.json(
+          {
+            error: `El valor no puede ser menor al último registro (${latestComparableValue}).`,
+            code: "USAGE_VALUE_CANNOT_DECREASE",
+          },
+          { status: 400 }
+        );
+      }
     }
 
     const { error: updateErr } = await db
@@ -479,6 +558,21 @@ export async function PUT(req: Request) {
 
     return NextResponse.json({ id: String(existing.id), entity_id: parsed.entityId, updated: true }, { status: 200 });
   } catch (error: unknown) {
+    if (isUsagePerDayUniqueViolation(error)) {
+      return NextResponse.json(
+        { error: "Para esta fecha ya hay un registro de uso.", code: "USAGE_ALREADY_EXISTS_FOR_DAY" },
+        { status: 409 }
+      );
+    }
+    if (isUsageValueNotNullViolation(error)) {
+      return NextResponse.json(
+        {
+          error: "La base actual todavía exige un valor numérico en usage_logs.value. Debe alinearse para permitir registros de texto.",
+          code: "LEGACY_USAGE_VALUE_NOT_NULL",
+        },
+        { status: 500 }
+      );
+    }
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
