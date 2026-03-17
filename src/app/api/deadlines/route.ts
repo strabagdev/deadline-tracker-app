@@ -22,7 +22,6 @@ type DeadlineTypeRow = {
   id: string;
   name: string;
   measure_by: MeasureBy;
-  requires_document: boolean;
   is_active: boolean;
 };
 
@@ -49,7 +48,6 @@ type DeadlineRow = {
   usage_daily_average: number | null;
   usage_daily_average_mode: string | null;
   created_at: string;
-  deadline_types?: DeadlineTypeRow | DeadlineTypeRow[] | null;
   measure_by?: MeasureBy | null;
 };
 
@@ -75,7 +73,14 @@ type DeadlineEventAction = "create" | "update" | "delete";
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "error";
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error !== null) {
+    const candidate = error as { message?: unknown; details?: unknown; hint?: unknown };
+    if (typeof candidate.message === "string" && candidate.message) return candidate.message;
+    if (typeof candidate.details === "string" && candidate.details) return candidate.details;
+    if (typeof candidate.hint === "string" && candidate.hint) return candidate.hint;
+  }
+  return "error";
 }
 
 async function getDeadlineSnapshot(db: DataClient, orgId: string, id: string): Promise<DeadlineSnapshot | null> {
@@ -144,7 +149,7 @@ async function safeLogDeadlineChangeEvent(
 async function getDeadlineType(db: DataClient, orgId: string, deadlineTypeId: string): Promise<DeadlineTypeRow | null> {
   const { data, error } = await db
     .from("deadline_types")
-    .select("id, name, measure_by, requires_document, is_active")
+    .select("id, name, measure_by, is_active")
     .eq("organization_id", orgId)
     .eq("id", deadlineTypeId)
     .maybeSingle();
@@ -233,15 +238,19 @@ async function computeAutoDailyAverage(db: DataClient, orgId: string, entityId: 
 }
 
 
-async function attachComputed(db: DataClient, orgId: string, entityId: string, deadline: DeadlineRow) {
-  const deadlineType = Array.isArray(deadline?.deadline_types)
-    ? deadline.deadline_types[0] ?? null
-    : deadline?.deadline_types ?? null;
+async function attachComputed(
+  db: DataClient,
+  orgId: string,
+  entityId: string,
+  deadline: DeadlineRow,
+  deadlineTypeById: Map<string, DeadlineTypeRow>
+) {
+  const deadlineType = deadlineTypeById.get(deadline.deadline_type_id) ?? null;
   const measureBy = (deadlineType?.measure_by ?? deadline?.measure_by) as MeasureBy | undefined;
-  if (!measureBy) return { ...deadline, computed: { status: "incomplete", reason: "missing_measure_by" } };
+  if (!measureBy) return { ...deadline, deadline_types: null, computed: { status: "incomplete", reason: "missing_measure_by" } };
 
   if (measureBy === "date") {
-    return { ...deadline, computed: computeDateStatus(deadline?.next_due_date ?? null) };
+    return { ...deadline, deadline_types: deadlineType, computed: computeDateStatus(deadline?.next_due_date ?? null) };
   }
 
   // usage
@@ -280,6 +289,7 @@ async function attachComputed(db: DataClient, orgId: string, entityId: string, d
 
   return {
     ...deadline,
+    deadline_types: deadlineType,
     computed: {
       ...status,
       current_usage: latestUsage,
@@ -296,15 +306,7 @@ function makeDeadlinesRepo(db: DataClient, actorUserId: string): DeadlinesRepo {
     getDeadlineById: async (orgId, id) => {
       const { data, error } = await db
         .from("deadlines")
-        .select(
-          `
-          id,
-          entity_id,
-          deadline_type_id,
-          usage_daily_average_mode,
-          deadline_types(id, name, measure_by, requires_document, is_active)
-        `
-        )
+        .select("id, entity_id, deadline_type_id, usage_daily_average_mode, next_due_date")
         .eq("organization_id", orgId)
         .eq("is_current", true)
         .eq("id", id)
@@ -315,7 +317,19 @@ function makeDeadlinesRepo(db: DataClient, actorUserId: string): DeadlinesRepo {
         entity_id: string;
         deadline_type_id: string;
         usage_daily_average_mode: string | null;
+        next_due_date?: string | null;
       } | null;
+    },
+    getCurrentDeadlineByEntityAndType: async (orgId, entityId, deadlineTypeId) => {
+      const row = await getCurrentDeadlineByEntityAndType(db, orgId, entityId, deadlineTypeId);
+      if (!row) return null;
+      return {
+        id: row.id,
+        entity_id: row.entity_id,
+        deadline_type_id: row.deadline_type_id,
+        usage_daily_average_mode: row.usage_daily_average_mode ?? null,
+        next_due_date: row.next_due_date ?? null,
+      };
     },
     getEntity: async (orgId, entityId) => {
       const entity = await getEntity(db, orgId, entityId);
@@ -576,27 +590,7 @@ export async function GET(req: Request) {
 
     let query = db
       .from("deadlines")
-      .select(
-        `
-        id,
-        entity_id,
-        deadline_type_id,
-        version_group_id,
-        version_no,
-        is_current,
-        superseded_at,
-        superseded_by_deadline_id,
-        last_done_date,
-        next_due_date,
-        last_done_usage,
-        frequency,
-        frequency_unit,
-        usage_daily_average,
-        usage_daily_average_mode,
-        created_at,
-        deadline_types(id, name, measure_by, requires_document, is_active)
-      `
-      )
+      .select("id, entity_id, deadline_type_id, version_group_id, version_no, is_current, superseded_at, superseded_by_deadline_id, last_done_date, next_due_date, last_done_usage, frequency, frequency_unit, usage_daily_average, usage_daily_average_mode, created_at")
       .eq("organization_id", orgId)
       .eq("entity_id", entityId)
       .order("created_at", { ascending: false });
@@ -606,12 +600,24 @@ export async function GET(req: Request) {
     if (error) throw error;
 
     const allDeadlines = (data ?? []) as DeadlineRow[];
+    const deadlineTypeIds = Array.from(new Set(allDeadlines.map((d) => d.deadline_type_id).filter(Boolean)));
+    const { data: deadlineTypesData, error: deadlineTypesErr } =
+      deadlineTypeIds.length > 0
+        ? await db
+            .from("deadline_types")
+            .select("id, name, measure_by, is_active")
+            .eq("organization_id", orgId)
+            .in("id", deadlineTypeIds)
+        : { data: [], error: null };
+    if (deadlineTypesErr) throw deadlineTypesErr;
+    const deadlineTypeById = new Map(((deadlineTypesData ?? []) as DeadlineTypeRow[]).map((dt) => [dt.id, dt]));
+
     const currentDeadlines = allDeadlines.filter((d) => d.is_current === true);
-    const computedCurrent = await Promise.all(currentDeadlines.map((d) => attachComputed(db, orgId, entityId, d)));
+    const computedCurrent = await Promise.all(currentDeadlines.map((d) => attachComputed(db, orgId, entityId, d, deadlineTypeById)));
     if (!includeHistory) {
       return NextResponse.json({ entity: { id: entity.id, tracks_usage: entity.tracks_usage }, deadlines: computedCurrent });
     }
-    const computedHistory = await Promise.all(allDeadlines.map((d) => attachComputed(db, orgId, entityId, d)));
+    const computedHistory = await Promise.all(allDeadlines.map((d) => attachComputed(db, orgId, entityId, d, deadlineTypeById)));
 
     return NextResponse.json({
       entity: { id: entity.id, tracks_usage: entity.tracks_usage },

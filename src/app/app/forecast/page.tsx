@@ -269,6 +269,9 @@ export default function ForecastPage() {
               <p className="mt-1 text-sm text-slate-500">Motor precalculado principal para vencimientos, riesgo y estado operativo.</p>
             </div>
             <div className="flex items-center gap-2">
+              <Link href="/app/forecast/gantt">
+                <Button variant="outline" size="sm">Carta Gantt</Button>
+              </Link>
               <Link href="/app">
                 <Button variant="outline" size="sm">Dashboard</Button>
               </Link>

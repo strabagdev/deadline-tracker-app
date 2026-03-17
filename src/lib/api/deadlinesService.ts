@@ -20,10 +20,12 @@ type ExistingDeadlineRow = {
   entity_id: string;
   deadline_type_id: string;
   usage_daily_average_mode: string | null;
+  next_due_date?: string | null;
 };
 
 export type DeadlinesRepo = {
   getDeadlineById: (orgId: string, id: string) => Promise<ExistingDeadlineRow | null>;
+  getCurrentDeadlineByEntityAndType: (orgId: string, entityId: string, deadlineTypeId: string) => Promise<ExistingDeadlineRow | null>;
   getEntity: (orgId: string, entityId: string) => Promise<EntityRow | null>;
   getDeadlineType: (orgId: string, deadlineTypeId: string) => Promise<DeadlineTypeRow | null>;
   createDateDeadline: (
@@ -80,6 +82,16 @@ export async function handleDeadlinesPost(orgId: string, rawBody: unknown, repo:
   const legacyMeasureBy = dt.measure_by;
 
   if (parsed.measureBy === "date") {
+    const current = await repo.getCurrentDeadlineByEntityAndType(orgId, entityId, deadlineTypeId);
+    if (current?.next_due_date && parsed.nextDueDate < current.next_due_date) {
+      return {
+        status: 400,
+        body: {
+          error: "La nueva fecha de vencimiento no puede ser anterior al vencimiento actual.",
+          code: "DEADLINE_CANNOT_MOVE_BACKWARDS",
+        },
+      };
+    }
     const created = await repo.createDateDeadline(orgId, {
       entityId,
       deadlineTypeId,
@@ -134,6 +146,15 @@ export async function handleDeadlinesPut(orgId: string, rawBody: unknown, repo: 
 
     if (nextDueDate !== undefined && !nextDueDate) {
       return { status: 400, body: { error: "next_due_date required for type measure_by=date", code: "BAD_REQUEST" } };
+    }
+    if (nextDueDate !== undefined && existing.next_due_date && nextDueDate < existing.next_due_date) {
+      return {
+        status: 400,
+        body: {
+          error: "La nueva fecha de vencimiento no puede ser anterior al vencimiento actual.",
+          code: "DEADLINE_CANNOT_MOVE_BACKWARDS",
+        },
+      };
     }
     if (nextDueDate !== undefined) patch.next_due_date = nextDueDate;
 

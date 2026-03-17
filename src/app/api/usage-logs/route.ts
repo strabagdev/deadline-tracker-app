@@ -265,6 +265,12 @@ export async function POST(req: Request) {
     }
     return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
+    if (isUsagePerDayUniqueViolation(error)) {
+      return NextResponse.json(
+        { error: "Para esta fecha ya hay un registro de uso.", code: "USAGE_ALREADY_EXISTS_FOR_DAY" },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

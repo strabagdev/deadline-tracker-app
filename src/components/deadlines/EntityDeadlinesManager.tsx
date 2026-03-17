@@ -225,6 +225,15 @@ export default function EntityDeadlinesManager({
     [availableTypes, deadlineTypeId]
   );
   const usageUnitNameSet = useMemo(() => new Set(usageUnits.map((u) => u.name)), [usageUnits]);
+  const usageLogExistsForSelectedDay = useMemo(() => {
+    const selected = String(usageLogLoggedAt ?? "").trim();
+    if (!selected) return false;
+    return usageLogs.some((log) => {
+      const loggedOn = String(log.logged_on ?? "").trim();
+      if (loggedOn) return loggedOn === selected;
+      return isoToLocalDateInput(log.logged_at) === selected;
+    });
+  }, [usageLogLoggedAt, usageLogs]);
 
   const [lastDoneDate, setLastDoneDate] = useState<string>("");
   const [nextDueDate, setNextDueDate] = useState<string>("");
@@ -467,6 +476,11 @@ export default function EntityDeadlinesManager({
     const valueNum = Number(usageLogValue);
     if (!Number.isFinite(valueNum)) {
       setUsageLogsMsg("Ingresa un valor numérico válido");
+      setUsageLogsBusy(false);
+      return;
+    }
+    if (usageLogExistsForSelectedDay) {
+      setUsageLogsMsg("Para esta fecha ya hay un registro.");
       setUsageLogsBusy(false);
       return;
     }
@@ -733,10 +747,14 @@ export default function EntityDeadlinesManager({
                   />
                 </label>
 
-                <Button onClick={createUsageLog} disabled={usageLogsBusy} className="min-h-10">
+                <Button onClick={createUsageLog} disabled={usageLogsBusy || usageLogExistsForSelectedDay} className="min-h-10">
                   {usageLogsBusy ? "Guardando..." : "Guardar uso"}
                 </Button>
               </div>
+
+              {usageLogExistsForSelectedDay ? (
+                <p className="mt-2 text-sm text-amber-700">Para esta fecha ya hay un registro.</p>
+              ) : null}
 
               <div className="mt-3 space-y-2">
                 <div className="text-xs font-semibold text-slate-700">Últimos registros</div>
