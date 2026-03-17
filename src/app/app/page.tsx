@@ -391,6 +391,12 @@ export default function AnalyticsDashboardPage() {
       .sort((a, b) => a.day.localeCompare(b.day));
   }, [filtered]);
 
+  const isAllTypesView = entityTypeFilter === "all";
+  const selectedEntityTypeName = useMemo(() => {
+    if (isAllTypesView) return "Todos los tipos";
+    return entityTypes.find((t) => t.id === entityTypeFilter)?.name ?? "Tipo seleccionado";
+  }, [entityTypeFilter, entityTypes, isAllTypesView]);
+
   if (loading) {
     return (
       <main className="mx-auto flex min-h-[60vh] max-w-[1400px] items-center justify-center px-4 py-4">
@@ -467,19 +473,34 @@ export default function AnalyticsDashboardPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-center text-base">Distribución por estado</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-center text-base">
+              {isAllTypesView ? "Distribución por estado" : `Distribución por estado · ${selectedEntityTypeName}`}
+            </CardTitle>
+          </CardHeader>
           <CardContent className="space-y-2">
             <DonutChart slices={statusDonutSlices} centerLabel="Distribución por estado" />
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-center text-base">Top por tipo de entidad</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            {byEntityType.length === 0 ? <p className="app-empty">Sin datos para graficar.</p> : null}
-            {byEntityType.length > 0 ? <DonutChart slices={entityTypeDonutSlices} centerLabel="Top por tipo de entidad" /> : null}
-          </CardContent>
-        </Card>
+        {isAllTypesView ? (
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-center text-base">Top por tipo de entidad</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {byEntityType.length === 0 ? <p className="app-empty">Sin datos para graficar.</p> : null}
+              {byEntityType.length > 0 ? <DonutChart slices={entityTypeDonutSlices} centerLabel="Top por tipo de entidad" /> : null}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-center text-base">Vista enfocada</CardTitle></CardHeader>
+            <CardContent>
+              <p className="app-empty text-center">
+                Estás viendo solo los gráficos asociados a <b>{selectedEntityTypeName}</b>.
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Card>
@@ -514,7 +535,13 @@ export default function AnalyticsDashboardPage() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-center text-base">Tendencia próximos 30 días (vencimientos previstos)</CardTitle></CardHeader>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-center text-base">
+            {isAllTypesView
+              ? "Tendencia próximos 30 días (vencimientos previstos)"
+              : `Tendencia próximos 30 días · ${selectedEntityTypeName}`}
+          </CardTitle>
+        </CardHeader>
         <CardContent>
           {dueTrend30.length === 0 ? (
             <p className="app-empty">No hay vencimientos previstos en los próximos 30 días con los filtros actuales.</p>
@@ -534,7 +561,15 @@ export default function AnalyticsDashboardPage() {
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-center text-base">Contexto</CardTitle></CardHeader>
         <CardContent className="text-center text-xs text-slate-500">
-          Entidades en organización: <b>{meta?.entity_count_in_org ?? entities.length}</b>. Este dashboard es analítico; la operación diaria se mantiene en <b>Operaciones</b>.
+          {isAllTypesView ? (
+            <>
+              Entidades en organización: <b>{meta?.entity_count_in_org ?? entities.length}</b>. Este dashboard es analítico; la operación diaria se mantiene en <b>Operaciones</b>.
+            </>
+          ) : (
+            <>
+              Vista filtrada por <b>{selectedEntityTypeName}</b>. Entidades visibles: <b>{filtered.length}</b> de <b>{meta?.entity_count_in_org ?? entities.length}</b>.
+            </>
+          )}
         </CardContent>
       </Card>
     </main>
