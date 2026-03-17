@@ -46,6 +46,26 @@ async function getUsageLogById(db: DataClient, orgId: string, id: string) {
   return data || null;
 }
 
+async function getLatestNumericUsageLog(db: DataClient, orgId: string, entityId: string) {
+  const { data, error } = await db
+    .from("usage_logs")
+    .select("value, logged_on, logged_at")
+    .eq("organization_id", orgId)
+    .eq("entity_id", entityId)
+    .not("value", "is", null)
+    .order("logged_on", { ascending: false })
+    .order("logged_at", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  const row = (data ?? [])[0] as { value: number; logged_on: string | null; logged_at: string } | undefined;
+  if (!row || !Number.isFinite(Number(row.value))) return null;
+  return {
+    value: Number(row.value),
+    logged_on: row.logged_on ? String(row.logged_on) : null,
+    logged_at: String(row.logged_at),
+  };
+}
+
 function makeRepo(db: DataClient): UsageLogsRepo {
   return {
     requireEntityInOrg: (orgId, entityId) => requireEntityInOrg(db, orgId, entityId),
@@ -134,6 +154,7 @@ function makeRepo(db: DataClient): UsageLogsRepo {
         field_values: byLogId[l.id] ?? [],
       }));
     },
+    getLatestNumericUsageLog: (orgId, entityId) => getLatestNumericUsageLog(db, orgId, entityId),
     createUsageLog: async (orgId, entityId, value, valueText, loggedOn, loggedAt) => {
       const { data, error } = await db
         .from("usage_logs")

@@ -30,6 +30,12 @@ type UsageFieldDef = {
   field_type: "text" | "number" | "date" | "boolean" | "select";
 };
 
+type LatestUsageValue = {
+  value: number;
+  logged_on: string | null;
+  logged_at: string;
+};
+
 type UsageLogFieldValueInput = {
   usageFieldId: string;
   value: unknown;
@@ -38,6 +44,7 @@ type UsageLogFieldValueInput = {
 export type UsageLogsRepo = {
   requireEntityInOrg: (orgId: string, entityId: string) => Promise<boolean>;
   listUsageLogs: (orgId: string, entityId: string, limit: number) => Promise<UsageLogRow[]>;
+  getLatestNumericUsageLog: (orgId: string, entityId: string) => Promise<LatestUsageValue | null>;
   createUsageLog: (
     orgId: string,
     entityId: string,
@@ -90,6 +97,19 @@ export async function handleUsageLogsPost(
   const { entityId, valueNumber, valueText, loggedAt, loggedOn, fieldValues } = parsed;
   const okEntity = await repo.requireEntityInOrg(orgId, entityId);
   if (!okEntity) return { status: 404, body: { error: "entity not found", code: "ENTITY_NOT_FOUND" } };
+
+  if (valueNumber != null) {
+    const latest = await repo.getLatestNumericUsageLog(orgId, entityId);
+    if (latest && valueNumber < latest.value) {
+      return {
+        status: 400,
+        body: {
+          error: `El valor no puede ser menor al último registro (${latest.value}).`,
+          code: "USAGE_VALUE_CANNOT_DECREASE",
+        },
+      };
+    }
+  }
 
   const created = await repo.createUsageLog(orgId, entityId, valueNumber, valueText, loggedOn, loggedAt);
   if (fieldValues.length > 0) {

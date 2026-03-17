@@ -11,6 +11,7 @@ function createRepo(overrides?: Partial<UsageLogsRepo>): UsageLogsRepo {
   return {
     requireEntityInOrg: async () => true,
     listUsageLogs: async () => [{ id: "u1", entity_id: "e1", value: 10, logged_at: "2026-01-01T00:00:00.000Z" }],
+    getLatestNumericUsageLog: async () => ({ value: 10, logged_on: "2026-01-01", logged_at: "2026-01-01T00:00:00.000Z" }),
     createUsageLog: async () => ({ id: "u1" }),
     getUsageFieldsByIds: async () => [],
     createUsageLogFieldValues: async () => undefined,

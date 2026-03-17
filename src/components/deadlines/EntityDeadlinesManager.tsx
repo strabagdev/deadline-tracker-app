@@ -234,6 +234,20 @@ export default function EntityDeadlinesManager({
       return isoToLocalDateInput(log.logged_at) === selected;
     });
   }, [usageLogLoggedAt, usageLogs]);
+  const latestNumericUsageValue = useMemo(() => {
+    const latest = usageLogs.find((log) => Number.isFinite(Number(log.value)));
+    return latest ? Number(latest.value) : null;
+  }, [usageLogs]);
+  const usageLogValueNumber = useMemo(() => {
+    const raw = String(usageLogValue ?? "").trim();
+    if (!raw) return null;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+  }, [usageLogValue]);
+  const usageLogWouldDecrease = useMemo(() => {
+    if (usageLogValueNumber == null || latestNumericUsageValue == null) return false;
+    return usageLogValueNumber < latestNumericUsageValue;
+  }, [latestNumericUsageValue, usageLogValueNumber]);
 
   const [lastDoneDate, setLastDoneDate] = useState<string>("");
   const [nextDueDate, setNextDueDate] = useState<string>("");
@@ -479,6 +493,11 @@ export default function EntityDeadlinesManager({
       setUsageLogsBusy(false);
       return;
     }
+    if (usageLogWouldDecrease) {
+      setUsageLogsMsg(`El valor no puede ser menor al último registro (${latestNumericUsageValue}).`);
+      setUsageLogsBusy(false);
+      return;
+    }
     if (usageLogExistsForSelectedDay) {
       setUsageLogsMsg("Para esta fecha ya hay un registro.");
       setUsageLogsBusy(false);
@@ -509,6 +528,9 @@ export default function EntityDeadlinesManager({
   }
 
   async function deleteUsageLog(id: string) {
+    const ok = window.confirm("¿Eliminar este registro de uso? Esta acción no se puede deshacer.");
+    if (!ok) return;
+
     setUsageLogsBusy(true);
     setUsageLogsMsg("");
 
@@ -747,13 +769,22 @@ export default function EntityDeadlinesManager({
                   />
                 </label>
 
-                <Button onClick={createUsageLog} disabled={usageLogsBusy || usageLogExistsForSelectedDay} className="min-h-10">
+                <Button
+                  onClick={createUsageLog}
+                  disabled={usageLogsBusy || usageLogExistsForSelectedDay || usageLogWouldDecrease}
+                  className="min-h-10"
+                >
                   {usageLogsBusy ? "Guardando..." : "Guardar uso"}
                 </Button>
               </div>
 
               {usageLogExistsForSelectedDay ? (
                 <p className="mt-2 text-sm text-amber-700">Para esta fecha ya hay un registro.</p>
+              ) : null}
+              {usageLogWouldDecrease ? (
+                <p className="mt-2 text-sm text-amber-700">
+                  El valor no puede ser menor al último registro ({latestNumericUsageValue}).
+                </p>
               ) : null}
 
               <div className="mt-3 space-y-2">

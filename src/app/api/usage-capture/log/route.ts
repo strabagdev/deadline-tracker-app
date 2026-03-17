@@ -34,6 +34,7 @@ function makeRepo(db: DataClient): UsageLogsRepo {
       return Boolean(data?.id);
     },
     listUsageLogs: async () => [],
+    getLatestNumericUsageLog: async () => null,
     createUsageLog: async (orgId, entityId, value, valueText, loggedOn, loggedAt) => {
       const { data, error } = await db
         .from("usage_logs")

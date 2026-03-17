@@ -10,6 +10,7 @@ import {
 function repo(overrides?: Partial<DeadlinesRepo>): DeadlinesRepo {
   return {
     getDeadlineById: async () => ({ id: "d1", entity_id: "e1", deadline_type_id: "dt1", usage_daily_average_mode: "manual" }),
+    getCurrentDeadlineByEntityAndType: async () => ({ id: "d1", entity_id: "e1", deadline_type_id: "dt1", usage_daily_average_mode: "manual", next_due_date: "2026-01-01" }),
     getEntity: async () => ({ id: "e1", tracks_usage: true }),
     getDeadlineType: async () => ({ id: "dt1", name: "Mantención", measure_by: "usage", is_active: true }),
     createDateDeadline: async () => ({ id: "d1" }),
