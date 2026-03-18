@@ -112,7 +112,9 @@ export async function GET(req: Request) {
     const entityTypeId = String(url.searchParams.get("entity_type_id") ?? "all").trim();
     const dateFrom = String(url.searchParams.get("date_from") ?? "").trim();
     const dateTo = String(url.searchParams.get("date_to") ?? "").trim();
+    const viewMode = String(url.searchParams.get("view_mode") ?? "detail").trim().toLowerCase();
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 1000), 1), 5000);
+    const includeFieldDetails = viewMode !== "timeline";
 
     if (dateFrom && !isIsoDateOnly(dateFrom)) {
       return NextResponse.json({ error: "date_from must be YYYY-MM-DD", code: "BAD_REQUEST" }, { status: 400 });
@@ -196,7 +198,7 @@ export async function GET(req: Request) {
 
     const entityProfileByEntityId: Record<string, Array<{ entity_field_id: string; name: string; value: string }>> = {};
     const entityFieldMetaById = new Map<string, { name: string; created_at: string }>();
-    if (filteredEntityIdsUnique.length > 0) {
+    if (includeFieldDetails && filteredEntityIdsUnique.length > 0) {
       const { data: entityFieldValuesData, error: entityFieldValuesErr } = await db
         .from("entity_field_values")
         .select("entity_id, entity_field_id, value_text")
@@ -241,7 +243,7 @@ export async function GET(req: Request) {
 
     const usageFieldMetaById = new Map<string, { name: string; created_at: string }>();
     const usageFieldValuesByLogId = new Map<string, UsageLogFieldValueRow[]>();
-    if (filteredUsageLogIds.length > 0) {
+    if (includeFieldDetails && filteredUsageLogIds.length > 0) {
       const { data: usageFieldValuesData, error: usageFieldValuesErr } = await db
         .from("usage_log_field_values")
         .select("usage_log_id, usage_field_id, value_text, value_number, value_date, value_boolean")
@@ -290,15 +292,17 @@ export async function GET(req: Request) {
       const mainValueText = String(row.value_text ?? "").trim();
       const mainValueNumber = row.value != null && Number.isFinite(Number(row.value)) ? Number(row.value) : null;
       const mainValue = mainValueText || (mainValueNumber != null ? String(mainValueNumber) : "—");
-      const fieldValues = (usageFieldValuesByLogId.get(String(row.id)) ?? []).map((valueRow) => {
-        const usageFieldId = String(valueRow.usage_field_id);
-        const fieldMeta = usageFieldMetaById.get(usageFieldId);
-        return {
-          usage_field_id: usageFieldId,
-          name: String(fieldMeta?.name ?? "Campo"),
-          value: renderFieldValue(valueRow),
-        };
-      });
+      const fieldValues = includeFieldDetails
+        ? (usageFieldValuesByLogId.get(String(row.id)) ?? []).map((valueRow) => {
+            const usageFieldId = String(valueRow.usage_field_id);
+            const fieldMeta = usageFieldMetaById.get(usageFieldId);
+            return {
+              usage_field_id: usageFieldId,
+              name: String(fieldMeta?.name ?? "Campo"),
+              value: renderFieldValue(valueRow),
+            };
+          })
+        : [];
       return {
         id: String(row.id),
         entity_id: String(row.entity_id),
@@ -312,7 +316,7 @@ export async function GET(req: Request) {
         value: mainValueNumber,
         value_text: mainValueText || null,
         value_display: mainValue,
-        entity_profile_values: entityProfileByEntityId[String(row.entity_id)] ?? [],
+        entity_profile_values: includeFieldDetails ? entityProfileByEntityId[String(row.entity_id)] ?? [] : [],
         field_values: fieldValues,
       };
     });
@@ -340,22 +344,26 @@ export async function GET(req: Request) {
       },
       entity_type_options: entityTypeOptions,
       column_order: {
-        entity_profile_columns: Array.from(entityFieldMetaById.entries())
+        entity_profile_columns: includeFieldDetails
+          ? Array.from(entityFieldMetaById.entries())
           .map(([id, meta]) => ({ id, name: meta.name, created_at: meta.created_at }))
           .sort((a, b) => {
             const ad = Date.parse(a.created_at || "");
             const bd = Date.parse(b.created_at || "");
             if (Number.isFinite(ad) && Number.isFinite(bd) && ad !== bd) return ad - bd;
             return a.name.localeCompare(b.name, "es", { sensitivity: "base" });
-          }),
-        usage_field_columns: Array.from(usageFieldMetaById.entries())
+          })
+          : [],
+        usage_field_columns: includeFieldDetails
+          ? Array.from(usageFieldMetaById.entries())
           .map(([id, meta]) => ({ id, name: meta.name, created_at: meta.created_at }))
           .sort((a, b) => {
             const ad = Date.parse(a.created_at || "");
             const bd = Date.parse(b.created_at || "");
             if (Number.isFinite(ad) && Number.isFinite(bd) && ad !== bd) return ad - bd;
             return a.name.localeCompare(b.name, "es", { sensitivity: "base" });
-          }),
+          })
+          : [],
       },
       rows,
     });

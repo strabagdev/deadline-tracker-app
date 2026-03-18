@@ -298,6 +298,7 @@ export default function UsageReportsPage() {
     if (periodRange?.from) qs.set("date_from", periodRange.from);
     if (periodRange?.to) qs.set("date_to", periodRange.to);
     if (entityTypeId && entityTypeId !== "all") qs.set("entity_type_id", entityTypeId);
+    qs.set("view_mode", viewMode);
     qs.set("limit", "5000");
 
     const res = await fetch(`/api/reporting/usage-values?${qs.toString()}`, {
@@ -350,7 +351,7 @@ export default function UsageReportsPage() {
     }
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodMode, dailyDate, weeklyReferenceDate, monthlyReferenceDate, entityTypeId]);
+  }, [periodMode, dailyDate, weeklyReferenceDate, monthlyReferenceDate, entityTypeId, viewMode]);
 
   const filteredRows = useMemo(() => {
     const needle = q.trim().toLowerCase();

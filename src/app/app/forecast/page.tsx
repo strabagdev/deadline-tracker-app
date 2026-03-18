@@ -136,18 +136,13 @@ export default function ForecastPage() {
     setSummary(json.summary ?? summary);
     setRows(Array.isArray(json.entities) ? json.entities : []);
     setComputedAt(String(json.computed_at ?? ""));
-
-    const sres = await fetch("/api/settings/semaphore", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const sjson = await sres.json().catch(() => ({}));
-    if (sres.ok && sjson?.settings) {
+    if (json?.labels) {
       setLabels({
-        red: String(sjson.settings.label_red ?? "Vencido"),
-        orange: String(sjson.settings.label_orange ?? "Por vencer"),
-        yellow: String(sjson.settings.label_yellow ?? "Aviso"),
-        green: String(sjson.settings.label_green ?? "Al día"),
-        none: "Sin info",
+        red: String(json.labels.red ?? "Vencido"),
+        orange: String(json.labels.orange ?? "Por vencer"),
+        yellow: String(json.labels.yellow ?? "Aviso"),
+        green: String(json.labels.green ?? "Al día"),
+        none: String(json.labels.none ?? "Sin info"),
       });
     }
 

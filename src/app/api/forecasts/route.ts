@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { canViewModule, getOrgAccess } from "@/lib/server/orgAccess";
+import { getSemaphoreSettings } from "@/lib/server/semaphoreSettings";
 
 type RiskLevel = "green" | "yellow" | "orange" | "red" | "none";
 
@@ -61,11 +62,14 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
 
-    const { data, error } = await db
-      .from("deadline_forecasts")
-      .select("entity_id, deadline_id, forecast_due_date, days_remaining, risk_level, risk_score, computed_at")
-      .eq("organization_id", orgId)
-      .order("computed_at", { ascending: false });
+    const [{ data, error }, semaphore] = await Promise.all([
+      db
+        .from("deadline_forecasts")
+        .select("entity_id, deadline_id, forecast_due_date, days_remaining, risk_level, risk_score, computed_at")
+        .eq("organization_id", orgId)
+        .order("computed_at", { ascending: false }),
+      getSemaphoreSettings(db, orgId),
+    ]);
 
     if (error) throw error;
     const rowsRaw = (data ?? []) as ForecastRowRaw[];
@@ -174,6 +178,13 @@ export async function GET(req: Request) {
       },
       entities: entitiesView,
       computed_at: computedAt,
+      labels: {
+        red: semaphore.labelRed,
+        orange: semaphore.labelOrange,
+        yellow: semaphore.labelYellow,
+        green: semaphore.labelGreen,
+        none: "Sin info",
+      },
     });
   } catch (error: unknown) {
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
