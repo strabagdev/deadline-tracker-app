@@ -9,18 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-type BusyAction = "password" | "register" | "magic_link" | "reset" | null;
+type BusyAction = "password" | "register" | null;
 type AuthMode = "signin" | "signup";
-
-const AUTH_EMAIL_COOLDOWN_MS = 75_000;
-
-function toStorageSafeEmail(email: string) {
-  return encodeURIComponent(email.trim().toLowerCase());
-}
-
-function getCooldownKey(kind: "magic" | "reset", email: string) {
-  return `auth:${kind}Cooldown:${toStorageSafeEmail(email)}`;
-}
 
 function getAuthPublicOrigin() {
   const envOrigin = String(process.env.NEXT_PUBLIC_APP_URL ?? "").trim();
@@ -38,19 +28,11 @@ export default function LoginPage() {
   const [platformLogoUrl, setPlatformLogoUrl] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showMagicLink, setShowMagicLink] = useState(false);
 
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const busy = busyAction !== null;
   const [msg, setMsg] = useState("");
   const inFlightRef = useRef<BusyAction>(null);
-
-  const [resetCooldownUntil, setResetCooldownUntil] = useState<number>(0);
-  const [magicCooldownUntil, setMagicCooldownUntil] = useState<number>(0);
-  const [nowTs, setNowTs] = useState(() => Date.now());
-
-  const canSendReset = nowTs > resetCooldownUntil;
-  const canSendMagicLink = nowTs > magicCooldownUntil;
 
   function humanizeAuthErrorMessage(raw: string) {
     const lower = raw.toLowerCase();
@@ -64,32 +46,6 @@ export default function LoginPage() {
       return "Tu correo aún no está confirmado. Si tu proyecto exige confirmación por email, revisa tu bandeja o usa SSO.";
     }
     return raw;
-  }
-
-  function getRetrySecondsFromMessage(raw: string): number | null {
-    const lower = raw.toLowerCase();
-    const match = lower.match(/(\d+)\s*seconds?/);
-    if (!match) return null;
-    const seconds = Number(match[1]);
-    return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
-  }
-
-  function persistCooldown(kind: "magic" | "reset", emailValue: string, cooldownUntil: number) {
-    if (!emailValue) return;
-    try {
-      window.localStorage.setItem(getCooldownKey(kind, emailValue), String(cooldownUntil));
-    } catch {
-      // noop
-    }
-  }
-
-  function applyCooldown(kind: "magic" | "reset", cooldownUntil: number) {
-    if (kind === "magic") {
-      setMagicCooldownUntil(cooldownUntil);
-    } else {
-      setResetCooldownUntil(cooldownUntil);
-    }
-    persistCooldown(kind, normalizedEmail, cooldownUntil);
   }
 
   async function syncProfileFromSession() {
@@ -128,37 +84,6 @@ export default function LoginPage() {
       cancelled = true;
     };
   }, [router]);
-
-  useEffect(() => {
-    if (!normalizedEmail) {
-      setMagicCooldownUntil(0);
-      setResetCooldownUntil(0);
-      return;
-    }
-
-    try {
-      const magicRaw = window.localStorage.getItem(getCooldownKey("magic", normalizedEmail));
-      const resetRaw = window.localStorage.getItem(getCooldownKey("reset", normalizedEmail));
-      const magicUntil = magicRaw ? Number(magicRaw) : 0;
-      const resetUntil = resetRaw ? Number(resetRaw) : 0;
-      setMagicCooldownUntil(Number.isFinite(magicUntil) ? magicUntil : 0);
-      setResetCooldownUntil(Number.isFinite(resetUntil) ? resetUntil : 0);
-    } catch {
-      setMagicCooldownUntil(0);
-      setResetCooldownUntil(0);
-    }
-  }, [normalizedEmail]);
-
-  useEffect(() => {
-    const hasActiveCooldown = magicCooldownUntil > nowTs || resetCooldownUntil > nowTs;
-    if (!hasActiveCooldown) return;
-
-    const id = window.setInterval(() => {
-      setNowTs(Date.now());
-    }, 1000);
-
-    return () => window.clearInterval(id);
-  }, [magicCooldownUntil, resetCooldownUntil, nowTs]);
 
   async function finalizeSignedInSession() {
     await syncProfileFromSession();
@@ -269,96 +194,6 @@ export default function LoginPage() {
     }
   }
 
-  async function sendMagicLink() {
-    setMsg("");
-
-    if (!normalizedEmail) {
-      setMsg("Ingresa un email válido para continuar con magic link.");
-      return;
-    }
-
-    if (!canSendMagicLink) {
-      const seconds = Math.max(1, Math.ceil((magicCooldownUntil - Date.now()) / 1000));
-      setMsg(`Espera ${seconds}s para reenviar el magic link.`);
-      return;
-    }
-
-    if (inFlightRef.current) return;
-    inFlightRef.current = "magic_link";
-    setBusyAction("magic_link");
-    applyCooldown("magic", Date.now() + AUTH_EMAIL_COOLDOWN_MS);
-
-    try {
-      const { error } = await supabaseAuth.auth.signInWithOtp({
-        email: normalizedEmail,
-        options: {
-          emailRedirectTo: `${getAuthPublicOrigin()}/auth/callback`,
-          shouldCreateUser: false,
-        },
-      });
-
-      if (error) {
-        const retrySeconds = getRetrySecondsFromMessage(error.message);
-        if (retrySeconds) {
-          applyCooldown("magic", Date.now() + retrySeconds * 1000 + 2_000);
-        }
-        setMsg(humanizeAuthErrorMessage(error.message));
-        return;
-      }
-
-      setMsg("Te envié un magic link. Úsalo como método de respaldo si no quieres entrar con contraseña o SSO.");
-    } finally {
-      setBusyAction(null);
-      inFlightRef.current = null;
-    }
-  }
-
-  async function sendPasswordReset() {
-    setMsg("");
-
-    if (!normalizedEmail) {
-      setMsg("Ingresa un email válido para restablecer contraseña.");
-      return;
-    }
-
-    if (!canSendReset) {
-      const seconds = Math.max(1, Math.ceil((resetCooldownUntil - Date.now()) / 1000));
-      setMsg(`Espera ${seconds}s para reenviar el correo de restablecimiento.`);
-      return;
-    }
-
-    if (inFlightRef.current) return;
-    inFlightRef.current = "reset";
-    setBusyAction("reset");
-    applyCooldown("reset", Date.now() + AUTH_EMAIL_COOLDOWN_MS);
-
-    try {
-      const res = await fetch("/api/auth/password-reset/request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: normalizedEmail,
-        }),
-      });
-
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const message = String(json?.error || "No se pudo enviar el correo de restablecimiento.");
-        const retrySeconds = getRetrySecondsFromMessage(message);
-        if (retrySeconds) {
-          applyCooldown("reset", Date.now() + retrySeconds * 1000 + 2_000);
-        }
-        setMsg(humanizeAuthErrorMessage(message));
-        return;
-      }
-
-      setMsg("Te envié un correo para restablecer tu contraseña.");
-    } finally {
-      setBusyAction(null);
-      inFlightRef.current = null;
-    }
-  }
-
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(15,118,110,0.12),transparent_26%),radial-gradient(circle_at_bottom_right,rgba(45,79,135,0.12),transparent_28%),linear-gradient(180deg,#f3f7fb_0%,#edf4f0_100%)] px-3 py-4 sm:px-4 sm:py-6">
       <div className="mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1320px] gap-4 lg:grid-cols-[1.15fr_0.85fr]">
@@ -413,7 +248,7 @@ export default function LoginPage() {
         </section>
 
         <section className="flex items-center justify-center lg:px-10">
-          <Card className="w-full max-w-md overflow-hidden bg-white/86 backdrop-blur">
+          <Card className="w-full max-w-md bg-white/86 backdrop-blur">
             <CardHeader className="pb-5">
               <div className="space-y-2">
                 <div className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">Acceso seguro</div>
@@ -421,18 +256,20 @@ export default function LoginPage() {
                   {mode === "signin" ? "Entrar a Ops Ahead" : "Crear cuenta de acceso"}
                 </CardTitle>
                 <CardDescription className="text-sm leading-6">
-                  Prioriza SSO o contraseña. Magic link queda como respaldo para usuarios existentes.
+                  Ingresa con tu correo y contraseña o crea una cuenta para solicitar acceso.
                 </CardDescription>
               </div>
             </CardHeader>
 
             <CardContent className="space-y-6 pt-6">
-              <div className="grid grid-cols-2 gap-2 rounded-[18px] bg-[rgba(215,243,239,0.42)] p-1.5">
+              <div className="grid grid-cols-2 gap-2 rounded-[18px] bg-[var(--accent-soft)] p-1.5">
                 <button
                   type="button"
                   onClick={() => setMode("signin")}
                   className={`rounded-[14px] px-3 py-2.5 text-sm font-medium transition-colors ${
-                    mode === "signin" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
+                    mode === "signin"
+                      ? "bg-[var(--accent)] text-[var(--accent-foreground)] shadow-sm"
+                      : "text-[var(--accent)]/75"
                   }`}
                 >
                   Entrar
@@ -441,7 +278,9 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => setMode("signup")}
                   className={`rounded-[14px] px-3 py-2.5 text-sm font-medium transition-colors ${
-                    mode === "signup" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
+                    mode === "signup"
+                      ? "bg-[var(--accent)] text-[var(--accent-foreground)] shadow-sm"
+                      : "text-[var(--accent)]/75"
                   }`}
                 >
                   Crear cuenta
@@ -481,22 +320,9 @@ export default function LoginPage() {
                     </div>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                  <div className="grid gap-3">
                     <Button type="submit" disabled={busy} className="h-11 w-full rounded-2xl">
                       {busyAction === "password" ? "Entrando..." : "Entrar"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={busy || !normalizedEmail}
-                      onClick={sendPasswordReset}
-                      className="h-11 w-full rounded-2xl sm:w-auto"
-                    >
-                      {busyAction === "reset"
-                        ? "Enviando..."
-                        : !canSendReset
-                        ? `Espera ${Math.max(1, Math.ceil((resetCooldownUntil - nowTs) / 1000))}s`
-                        : "Restablecer"}
                     </Button>
                   </div>
                 </form>
@@ -547,7 +373,7 @@ export default function LoginPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-[20px] border border-[rgba(17,32,28,0.08)] bg-[rgba(215,243,239,0.28)] px-4 py-3 text-sm leading-6 text-slate-600">
+                  <div className="rounded-[20px] border border-[var(--accent)]/12 bg-[var(--accent-soft)] px-4 py-3 text-sm leading-6 text-slate-700">
                     Crear una cuenta no asigna acceso por sí solo. En entornos multiempresa, el acceso final depende
                     de invitación, membresía o aprobación del superadmin.
                   </div>
@@ -558,52 +384,22 @@ export default function LoginPage() {
                 </form>
               )}
 
-              <div className="rounded-[22px] border border-dashed border-[color:var(--border)] bg-[rgba(244,247,251,0.7)] p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-medium text-slate-900">Magic link</div>
-                    <div className="text-sm leading-6 text-slate-500">
-                      Déjalo como respaldo si tu organización ya opera con ese flujo.
-                    </div>
-                  </div>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setShowMagicLink((v) => !v)}>
-                    {showMagicLink ? "Ocultar" : "Mostrar"}
-                  </Button>
-                </div>
-
-                {showMagicLink ? (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
-                    <Input
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="tu@empresa.com"
-                      type="email"
-                      autoComplete="email"
-                      inputMode="email"
-                      className="h-11 rounded-2xl bg-white"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={busy || !normalizedEmail || !canSendMagicLink}
-                      onClick={sendMagicLink}
-                      className="h-11 w-full rounded-2xl sm:w-auto"
-                    >
-                      {busyAction === "magic_link"
-                        ? "Enviando..."
-                        : !canSendMagicLink
-                        ? `Espera ${Math.max(1, Math.ceil((magicCooldownUntil - nowTs) / 1000))}s`
-                        : "Enviar magic link"}
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-
               {msg ? (
-                <div className="rounded-[18px] border border-[rgba(17,32,28,0.08)] bg-white px-4 py-3 text-sm leading-6 text-slate-700">
+                <div className="rounded-2xl border border-[var(--accent)]/12 bg-[var(--accent-soft)] px-4 py-3 text-sm leading-6 text-slate-700">
                   {msg}
                 </div>
               ) : null}
+
+              <div className="flex items-center justify-between gap-4 text-sm text-[var(--muted-foreground)]">
+                <button
+                  type="button"
+                  onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+                  className="font-medium text-[var(--accent)]"
+                >
+                  {mode === "signin" ? "¿Necesitas una cuenta?" : "¿Ya tienes una cuenta?"}
+                </button>
+                <span>{mode === "signin" ? "Cambiar a crear cuenta" : "Cambiar a entrar"}</span>
+              </div>
             </CardContent>
           </Card>
         </section>
