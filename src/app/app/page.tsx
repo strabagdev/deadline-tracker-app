@@ -487,7 +487,9 @@ export default function AnalyticsDashboardPage() {
               Tipo de entidad
               <select
                 value={entityTypeFilter}
-                onChange={(e) => setEntityTypeFilter(e.target.value)}
+                onChange={(e) => {
+                  setEntityTypeFilter(e.target.value);
+                }}
                 className="h-11 w-full rounded-2xl border border-[var(--input)] bg-white px-3 text-sm text-slate-800"
               >
                 <option value="all">Todos los tipos</option>
@@ -502,7 +504,9 @@ export default function AnalyticsDashboardPage() {
                 {isAllTypesView ? (
                   <>Estás viendo la distribución total de la organización y las comparativas entre frentes.</>
                 ) : (
-                  <>Estás viendo solo indicadores y gráficos asociados a <b>{selectedEntityTypeName}</b>.</>
+                  <>
+                    Estás viendo solo indicadores y gráficos asociados a <b>{selectedEntityTypeName}</b>.
+                  </>
                 )}
               </div>
             </div>
