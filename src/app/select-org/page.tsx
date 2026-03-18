@@ -9,11 +9,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Loader } from "@/components/ui/loader";
 
 type Org = { id: string; name: string; role: string };
-type SuperAdminStatus = {
-  has_super_admin?: boolean;
-  is_super_admin?: boolean;
-  primary_super_admin_email?: string | null;
-};
 type AccessRequest = {
   id: string;
   status: "pending" | "approved" | "rejected";
@@ -75,21 +70,6 @@ export default function SelectOrgPage() {
       return;
     }
 
-    const superRes = await fetch("/api/platform/super-admin/status", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const superJson = (await superRes.json().catch(() => ({}))) as SuperAdminStatus & { error?: string };
-    if (!superRes.ok) {
-      setError(superJson.error || "No se pudo validar estado de super admin");
-      setLoading(false);
-      return;
-    }
-
-    if (superJson.is_super_admin) {
-      router.replace("/app/super-admin");
-      return;
-    }
-
     let res = await fetch("/api/orgs", {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -108,6 +88,11 @@ export default function SelectOrgPage() {
     if (!res.ok) {
       setError(json.error || "Error cargando organizaciones");
       setLoading(false);
+      return;
+    }
+
+    if (json.is_super_admin) {
+      router.replace("/app/super-admin");
       return;
     }
 
@@ -138,10 +123,10 @@ export default function SelectOrgPage() {
     }
 
     if (list.length === 0) {
-      const hasSuperAdmin = Boolean(superJson.has_super_admin);
-      const currentIsSuperAdmin = Boolean(superJson.is_super_admin);
+      const hasSuperAdmin = Boolean(json.has_super_admin);
+      const currentIsSuperAdmin = Boolean(json.is_super_admin);
       setIsSuperAdmin(currentIsSuperAdmin);
-      setPrimarySuperAdminEmail(String(superJson.primary_super_admin_email || ""));
+      setPrimarySuperAdminEmail(String(json.primary_super_admin_email || ""));
 
       if (!hasSuperAdmin) {
         router.replace("/setup-super-admin");

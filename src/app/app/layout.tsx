@@ -312,38 +312,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        const [statusRes, platformRes] = await Promise.all([
-          fetch("/api/platform/super-admin/status", {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch("/api/platform/branding", {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-        ]);
-
-        const json = await statusRes.json().catch(() => ({}));
-        const platformJson = await platformRes.json().catch(() => ({}));
+        const bootstrapRes = await fetch("/api/app/bootstrap", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const bootstrapJson = await bootstrapRes.json().catch(() => ({}));
         if (cancelled) return;
+        if (!bootstrapRes.ok) {
+          throw new Error(String(bootstrapJson?.error || "No se pudo cargar el contexto inicial"));
+        }
 
-        const currentIsSuperAdmin = Boolean(json?.is_super_admin);
-        setPlatformLogoUrl(platformJson?.platform?.logo_url ?? "");
+        const currentIsSuperAdmin = Boolean(bootstrapJson?.access?.is_super_admin);
+        setPlatformLogoUrl(bootstrapJson?.platform?.logo_url ?? "");
         setIsSuperAdmin(currentIsSuperAdmin);
         if (!currentIsSuperAdmin) {
-          const [orgRes, accessRes] = await Promise.all([
-            fetch("/api/orgs/active", {
-              headers: { Authorization: `Bearer ${token}` },
-            }),
-            fetch("/api/me/module-access", {
-              headers: { Authorization: `Bearer ${token}` },
-            }),
-          ]);
-          const orgJson = await orgRes.json().catch(() => ({}));
-          const accessJson = await accessRes.json().catch(() => ({}));
-          if (cancelled) return;
-          setActiveOrgName(orgJson?.organization?.name ?? "");
-          setActiveOrgLogoUrl(orgJson?.organization?.logo_url ?? "");
-          if (accessRes.ok && Array.isArray(accessJson?.allowed_modules)) {
-            const modules = new Set<string>(accessJson.allowed_modules.map((v: unknown) => String(v)));
+          setActiveOrgName(bootstrapJson?.access?.active_organization?.name ?? "");
+          setActiveOrgLogoUrl(bootstrapJson?.access?.active_organization?.logo_url ?? "");
+          if (Array.isArray(bootstrapJson?.access?.allowed_modules)) {
+            const modules = new Set<string>(bootstrapJson.access.allowed_modules.map((v: unknown) => String(v)));
             if (modules.has("dashboard")) {
               modules.add("analytics_dashboard");
               modules.add("operations_dashboard");

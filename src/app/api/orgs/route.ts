@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { isSuperAdmin } from "@/lib/server/superAdmin";
+import { getSuperAdminStatus } from "@/lib/server/superAdmin";
 
 type OrgJoinRow = {
   role: string;
@@ -26,9 +26,15 @@ export async function GET(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
-    const globalOnly = await isSuperAdmin(db, user.id);
-    if (globalOnly) {
-      return NextResponse.json({ error: "super admin global only", code: "FORBIDDEN" }, { status: 403 });
+    const superStatus = await getSuperAdminStatus(db, user.id);
+    if (superStatus.isCurrentSuperAdmin) {
+      return NextResponse.json({
+        orgs: [],
+        access_request: null,
+        has_super_admin: superStatus.hasSuperAdmin,
+        is_super_admin: true,
+        primary_super_admin_email: superStatus.primarySuperAdminEmail,
+      });
     }
 
     // Obtenemos memberships y el nombre de la org (join)
@@ -60,7 +66,13 @@ export async function GET(req: Request) {
       accessRequest = (requestData as AccessRequestRow | null) ?? null;
     }
 
-    return NextResponse.json({ orgs, access_request: accessRequest });
+    return NextResponse.json({
+      orgs,
+      access_request: accessRequest,
+      has_super_admin: superStatus.hasSuperAdmin,
+      is_super_admin: false,
+      primary_super_admin_email: superStatus.primarySuperAdminEmail,
+    });
   } catch (e: unknown) {
     return NextResponse.json(
       { error: getErrorMessage(e) },
