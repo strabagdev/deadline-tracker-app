@@ -205,6 +205,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/app", label: "Dashboard", moduleKey: "analytics_dashboard", icon: <IconHome /> },
   { href: "/app/operations", label: "Operaciones", moduleKey: "operations_dashboard", icon: <IconEntities /> },
   { href: "/app/forecast", label: "Forecast", moduleKey: "forecast", icon: <IconForecast /> },
+  { href: "/app/reports/deadlines", label: "Vencimientos", moduleKey: "reports_usage", icon: <IconReport /> },
   { href: "/app/entities", label: "Entidades", moduleKey: "entities", icon: <IconEntities /> },
   { href: "/app/usage-capture", label: "Captura uso", moduleKey: "usage_capture", icon: <IconUsage /> },
   { href: "/app/bi-integrations", label: "Integraciones BI", moduleKey: "bi_integrations", icon: <IconReport /> },
@@ -226,6 +227,7 @@ function getModuleByPath(pathname: string): ModuleKey | null {
   if (pathname.startsWith("/app/usage-capture")) return "usage_capture";
   if (pathname.startsWith("/app/bi-integrations")) return "bi_integrations";
   if (pathname.startsWith("/app/reports/usage")) return "reports_usage";
+  if (pathname.startsWith("/app/reports/deadlines")) return "reports_usage";
   if (pathname.startsWith("/app/settings/semaphore")) return "semaphore";
   if (pathname.startsWith("/app/entity-types")) return "entity_types";
   if (pathname.startsWith("/app/deadline-types")) return "deadline_types";
@@ -242,7 +244,7 @@ function getRouteByModule(moduleKey: ModuleKey): string {
   if (moduleKey === "entities") return "/app/entities";
   if (moduleKey === "usage_capture") return "/app/usage-capture";
   if (moduleKey === "bi_integrations") return "/app/bi-integrations";
-  if (moduleKey === "reports_usage") return "/app/reports/usage";
+  if (moduleKey === "reports_usage") return "/app/reports/deadlines";
   if (moduleKey === "semaphore") return "/app/settings/semaphore";
   if (moduleKey === "entity_types") return "/app/entity-types";
   if (moduleKey === "deadline_types") return "/app/deadline-types";

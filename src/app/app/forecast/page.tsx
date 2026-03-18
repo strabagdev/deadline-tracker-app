@@ -267,6 +267,9 @@ export default function ForecastPage() {
               <Link href="/app/forecast/gantt">
                 <Button variant="outline" size="sm">Carta Gantt</Button>
               </Link>
+              <Link href="/app/reports/deadlines">
+                <Button variant="outline" size="sm">Reporte</Button>
+              </Link>
               <Link href="/app">
                 <Button variant="outline" size="sm">Dashboard</Button>
               </Link>
