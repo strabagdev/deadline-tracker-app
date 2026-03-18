@@ -92,56 +92,6 @@ function statusPriority(s: Status) {
   return 4;
 }
 
-function IconStatus({ status }: { status: Status | "all" }) {
-  if (status === "all") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
-        <path d="M4 5h16" />
-        <path d="M7 12h10" />
-        <path d="M10 19h4" />
-      </svg>
-    );
-  }
-
-  const colorClass =
-    status === "red"
-      ? "text-rose-600"
-      : status === "orange"
-        ? "text-orange-600"
-        : status === "yellow"
-          ? "text-amber-500"
-          : status === "green"
-            ? "text-emerald-600"
-            : "text-slate-400";
-
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={cn("h-3.5 w-3.5", colorClass)} aria-hidden>
-      <circle cx="12" cy="12" r="8" />
-    </svg>
-  );
-}
-
-function statusChipClasses(s: Status | "all", active: boolean) {
-  const tone =
-    s === "red"
-      ? "!border-rose-300 !bg-rose-100 !text-rose-800 hover:!bg-rose-200"
-      : s === "orange"
-        ? "!border-orange-300 !bg-orange-100 !text-orange-800 hover:!bg-orange-200"
-        : s === "yellow"
-          ? "!border-amber-300 !bg-amber-100 !text-amber-800 hover:!bg-amber-200"
-          : s === "green"
-            ? "!border-emerald-300 !bg-emerald-100 !text-emerald-800 hover:!bg-emerald-200"
-            : s === "none"
-              ? "!border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200"
-              : "!border-blue-300 !bg-blue-100 !text-blue-800 hover:!bg-blue-200";
-
-  return cn(
-    "min-w-[54px] justify-center border font-semibold",
-    tone,
-    active ? "!border-slate-500 opacity-100" : "opacity-80"
-  );
-}
-
 function statusBadgeClasses(status: Status) {
   return status === "red"
     ? "border-rose-300 bg-rose-100 text-rose-800"
@@ -194,12 +144,11 @@ export default function EntitiesPage() {
   const [errorMsg, setErrorMsg] = useState<string>("");
 
   const [q, setQ] = useState("");
-  const [filterStatus, setFilterStatus] = useState<Status | "all">("all");
   const [filterEntityType, setFilterEntityType] = useState<string>("all");
+  const [filterSecondary, setFilterSecondary] = useState<string>("all");
   const [sortMode, setSortMode] = useState<SortMode>("critical");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [searchPanelCollapsed, setSearchPanelCollapsed] = useState(true);
 
   const [semaphore, setSemaphore] = useState<SemaphoreSettings>({
     yellow_days: 60,
@@ -211,17 +160,6 @@ export default function EntitiesPage() {
     label_red: "Vencido",
   });
 
-  const statusFilterMeta = useMemo<Array<{ key: Status | "all"; title: string }>>(
-    () => [
-      { key: "all", title: "Todos" },
-      { key: "red", title: semaphore.label_red || "Vencido" },
-      { key: "orange", title: semaphore.label_orange || "Por vencer" },
-      { key: "yellow", title: semaphore.label_yellow || "Aviso" },
-      { key: "green", title: semaphore.label_green || "Al día" },
-      { key: "none", title: "Sin info" },
-    ],
-    [semaphore.label_green, semaphore.label_yellow, semaphore.label_orange, semaphore.label_red]
-  );
   const importProgressClamped = Math.max(0, Math.min(100, importProgress));
   const importRingRadius = 46;
   const importRingCircumference = 2 * Math.PI * importRingRadius;
@@ -532,30 +470,47 @@ export default function EntitiesPage() {
     });
   }, [entities, usage, semaphore]);
 
-  const countsAll = useMemo(() => {
-    let red = 0;
-    let orange = 0;
-    let yellow = 0;
-    let green = 0;
-    let none = 0;
-
-    for (const r of computedAll) {
-      if (r.status === "red") red++;
-      else if (r.status === "orange") orange++;
-      else if (r.status === "yellow") yellow++;
-      else if (r.status === "green") green++;
-      else none++;
+  const secondaryFilterOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of computedAll) {
+      if (filterEntityType !== "all" && row.entity.entity_type_id !== filterEntityType) continue;
+      const matchesNeedle = q.trim().length === 0
+        || row.entity.name.toLowerCase().includes(q.trim().toLowerCase())
+        || (row.entity.entity_types?.name ?? "").toLowerCase().includes(q.trim().toLowerCase())
+        || (row.nearest?.typeName ?? "").toLowerCase().includes(q.trim().toLowerCase());
+      if (!matchesNeedle) continue;
+      const values = new Set(
+        (row.entity.card_fields ?? [])
+          .map((field) => String(field.value_text ?? "").trim())
+          .filter((value) => value.length > 0)
+      );
+      for (const value of values) {
+        counts.set(value, (counts.get(value) ?? 0) + 1);
+      }
     }
+    return Array.from(counts.entries())
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, "es", { sensitivity: "base" }));
+  }, [computedAll, filterEntityType, q]);
 
-    return { red, orange, yellow, green, none, total: computedAll.length };
-  }, [computedAll]);
+  useEffect(() => {
+    if (filterSecondary === "all") return;
+    if (!secondaryFilterOptions.some((option) => option.value === filterSecondary)) {
+      setFilterSecondary("all");
+    }
+  }, [filterSecondary, secondaryFilterOptions]);
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
 
     const out = computedAll.filter((r) => {
       if (filterEntityType !== "all" && r.entity.entity_type_id !== filterEntityType) return false;
-      if (filterStatus !== "all" && r.status !== filterStatus) return false;
+      if (filterSecondary !== "all") {
+        const matchesSecondary = (r.entity.card_fields ?? []).some(
+          (field) => String(field.value_text ?? "").trim() === filterSecondary
+        );
+        if (!matchesSecondary) return false;
+      }
       if (needle) {
         const name = r.entity.name.toLowerCase();
         const typeName = (r.entity.entity_types?.name ?? "").toLowerCase();
@@ -584,26 +539,17 @@ export default function EntitiesPage() {
     });
 
     return out;
-  }, [computedAll, filterEntityType, filterStatus, q, sortMode]);
+  }, [computedAll, filterEntityType, filterSecondary, q, sortMode]);
 
   useEffect(() => {
     setPage(1);
-  }, [filterEntityType, filterStatus, q, sortMode, pageSize]);
+  }, [filterEntityType, filterSecondary, q, sortMode, pageSize]);
 
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * pageSize;
   const pagedRows = rows.slice(pageStart, pageStart + pageSize);
-  const hasActiveFilters = q.trim().length > 0 || filterEntityType !== "all" || filterStatus !== "all" || sortMode !== "critical";
-
-  function countByStatus(s: Status | "all") {
-    if (s === "all") return countsAll.total;
-    if (s === "red") return countsAll.red;
-    if (s === "orange") return countsAll.orange;
-    if (s === "yellow") return countsAll.yellow;
-    if (s === "green") return countsAll.green;
-    return countsAll.none;
-  }
+  const hasActiveFilters = q.trim().length > 0 || filterEntityType !== "all" || filterSecondary !== "all" || sortMode !== "critical";
 
   return (
     <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-4 sm:space-y-6">
@@ -1017,101 +963,92 @@ export default function EntitiesPage() {
         </div>
       ) : null}
 
-      <Card>
+      <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.82)]">
         <CardHeader className="pb-3">
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
-            <CardTitle className="shrink-0 text-base">Búsqueda y filtros</CardTitle>
-            <div className="min-w-0 lg:flex-1">
-              <div className="flex w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
-                {statusFilterMeta.map((s) => (
-                  <Button
-                    key={s.key}
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setFilterStatus(s.key)}
-                    className={cn("shrink-0", statusChipClasses(s.key, filterStatus === s.key))}
-                    title={s.title}
-                  >
-                    <IconStatus status={s.key} />
-                    <span className="hidden sm:inline">{s.title}</span>
-                    <span>{countByStatus(s.key)}</span>
-                  </Button>
-                ))}
-              </div>
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Exploración</div>
+              <CardTitle className="mt-1 text-base sm:text-lg">Filtros de navegación</CardTitle>
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                Esta vista está pensada para encontrar entidades rápido, no para analizar el semáforo.
+              </p>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setSearchPanelCollapsed((v) => !v)}
-              className="min-h-[var(--control-h)] min-w-[108px] shrink-0 justify-between"
+            <div className="text-xs text-slate-500">{rows.length} resultado(s)</div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="grid gap-2 md:grid-cols-[minmax(240px,1fr)_190px_200px_170px_140px_auto]">
+            <Input
+              id="entities_search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar por entidad, tipo o vencimiento..."
+            />
+            <select
+              id="entities_type_filter"
+              aria-label="Filtrar por tipo"
+              value={filterEntityType}
+              onChange={(e) => setFilterEntityType(e.target.value)}
+              className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
             >
-              <span>{searchPanelCollapsed ? "Buscar" : "Ocultar"}</span>
-              <span className="text-xs">{searchPanelCollapsed ? "▼" : "▲"}</span>
+              <option value="all">Todos los tipos</option>
+              {entityTypeOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+            <select
+              id="entities_secondary_filter"
+              aria-label="Filtro secundario"
+              value={filterSecondary}
+              onChange={(e) => setFilterSecondary(e.target.value)}
+              className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
+            >
+              <option value="all">Todos los secundarios</option>
+              {secondaryFilterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.value} ({option.count})
+                </option>
+              ))}
+            </select>
+            <select
+              id="entities_sort_mode"
+              aria-label="Ordenar"
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as SortMode)}
+              className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
+            >
+              <option value="critical">Más próximo</option>
+              <option value="name">Nombre</option>
+              <option value="type">Tipo</option>
+              <option value="created">Creación</option>
+            </select>
+            <select
+              id="entities_page_size"
+              aria-label="Filas por página"
+              value={String(pageSize)}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
+            >
+              <option value="25">25 / pág</option>
+              <option value="50">50 / pág</option>
+              <option value="100">100 / pág</option>
+            </select>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setQ("");
+                setFilterEntityType("all");
+                setFilterSecondary("all");
+                setSortMode("critical");
+              }}
+              disabled={!hasActiveFilters}
+            >
+              Limpiar
             </Button>
           </div>
-          <div className="pt-1 text-xs text-slate-500">{rows.length} resultado(s)</div>
-        </CardHeader>
-        {!searchPanelCollapsed ? (
-          <CardContent className="pt-0">
-            <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_190px_170px_140px_auto]">
-              <Input
-                id="entities_search"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Buscar por entidad, tipo o vencimiento..."
-              />
-              <select
-                id="entities_type_filter"
-                aria-label="Filtrar por tipo"
-                value={filterEntityType}
-                onChange={(e) => setFilterEntityType(e.target.value)}
-                className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
-              >
-                <option value="all">Todos los tipos</option>
-                {entityTypeOptions.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                id="entities_sort_mode"
-                aria-label="Ordenar"
-                value={sortMode}
-                onChange={(e) => setSortMode(e.target.value as SortMode)}
-                className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
-              >
-                <option value="critical">Más crítico</option>
-                <option value="name">Nombre</option>
-                <option value="type">Tipo</option>
-                <option value="created">Creación</option>
-              </select>
-              <select
-                id="entities_page_size"
-                aria-label="Filas por página"
-                value={String(pageSize)}
-                onChange={(e) => setPageSize(Number(e.target.value))}
-                className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
-              >
-                <option value="25">25 / pág</option>
-                <option value="50">50 / pág</option>
-                <option value="100">100 / pág</option>
-              </select>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setQ("");
-                  setFilterEntityType("all");
-                  setFilterStatus("all");
-                  setSortMode("critical");
-                }}
-                disabled={!hasActiveFilters}
-              >
-                Limpiar
-              </Button>
-            </div>
-          </CardContent>
-        ) : null}
+        </CardContent>
       </Card>
 
       <section className="space-y-4">
