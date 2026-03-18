@@ -34,6 +34,16 @@ type DynamicFieldDistribution = {
   values: Array<{ label: string; count: number }>;
 };
 
+type SemaphoreResponse = {
+  yellow_days: number;
+  orange_days: number;
+  red_days: number;
+  label_green: string;
+  label_yellow: string;
+  label_orange: string;
+  label_red: string;
+};
+
 function normalizeAnalyticsMode(value: string | null | undefined): AnalyticsMode {
   if (value === "trend" || value === "count" || value === "distribution") return value;
   return "distribution";
@@ -398,10 +408,30 @@ export async function GET(req: Request) {
     if (entityTypesErr) throw entityTypesErr;
     const entityTypeById = new Map(((entityTypesData ?? []) as Array<{ id: string; name: string }>).map((row) => [String(row.id), row]));
 
-    const [latestUsageByEntity, cardFieldsByEntity, dynamicDistributionByEntityType] = await Promise.all([
-      getLatestUsageByEntity(db, orgId, entityIds),
-      getCardFieldsByEntity(db, orgId, entityIds),
-      getDynamicDistributionByEntityType(db, orgId, entities.map((e) => ({ id: e.id, entity_type_id: e.entity_type_id }))),
+    const needsOperationsData = mode === "operations";
+    const needsAnalyticsData = mode !== "operations";
+
+    const [latestUsageByEntity, cardFieldsByEntity, dynamicDistributionByEntityType, semaphoreResponse] = await Promise.all([
+      needsOperationsData
+        ? getLatestUsageByEntity(db, orgId, entityIds)
+        : Promise.resolve<Record<string, { value: number; logged_at: string; logged_on: string | null }>>({}),
+      needsOperationsData
+        ? getCardFieldsByEntity(db, orgId, entityIds)
+        : Promise.resolve<Record<string, Array<{ name: string; value_text: string }>>>({}),
+      needsAnalyticsData
+        ? getDynamicDistributionByEntityType(db, orgId, entities.map((e) => ({ id: e.id, entity_type_id: e.entity_type_id })))
+        : Promise.resolve<Record<string, DynamicFieldDistribution[]>>({}),
+      needsOperationsData
+        ? getSemaphoreSettings(db, orgId).then<SemaphoreResponse>((settings) => ({
+            yellow_days: settings.yellowDays,
+            orange_days: settings.orangeDays,
+            red_days: settings.redDays,
+            label_green: settings.labelGreen,
+            label_yellow: settings.labelYellow,
+            label_orange: settings.labelOrange,
+            label_red: settings.labelRed,
+          }))
+        : Promise.resolve(null),
     ]);
 
     const nearestForecastByEntity = new Map<
@@ -502,11 +532,18 @@ export async function GET(req: Request) {
         }
       }
 
-      const semaphore = await getSemaphoreSettings(db, orgId);
+      const fallbackSemaphore =
+        semaphoreResponse == null
+          ? await getSemaphoreSettings(db, orgId)
+          : {
+              yellowDays: semaphoreResponse.yellow_days,
+              orangeDays: semaphoreResponse.orange_days,
+              redDays: semaphoreResponse.red_days,
+            };
       const thresholds = {
-        yellow: semaphore.yellowDays,
-        orange: semaphore.orangeDays,
-        red: semaphore.redDays,
+        yellow: fallbackSemaphore.yellowDays,
+        orange: fallbackSemaphore.orangeDays,
+        red: fallbackSemaphore.redDays,
       };
 
       const { data: deadlinesData, error: deadlinesErr } = await db
@@ -662,6 +699,7 @@ export async function GET(req: Request) {
         page_size: pageSize > 0 ? pageSize : null,
         status_counts: statusCounts,
         secondary_options: secondaryOptions,
+        semaphore: semaphoreResponse,
       },
       entities: entitiesOut,
       latest_usage_by_entity: latestUsageFiltered,

@@ -42,6 +42,7 @@ type DashboardMeta = {
   page_size?: number | null;
   status_counts?: Partial<Record<Status, number>>;
   secondary_options?: Array<{ value: string; count: number }>;
+  semaphore?: SemaphoreSettings | null;
 };
 
 type Status = "red" | "orange" | "yellow" | "green" | "none";
@@ -210,18 +211,15 @@ export default function OperationsPage() {
     setMeta(json.meta ?? null);
     setEntities(json.entities ?? []);
     setUsage(json.latest_usage_by_entity ?? {});
-
-    const sres = await fetch("/api/settings/semaphore", { headers: { Authorization: `Bearer ${token}` } });
-    const sjson = await sres.json().catch(() => ({}));
-    if (sres.ok && sjson?.settings) {
+    if (json?.meta?.semaphore) {
       setSemaphore({
-        yellow_days: Number(sjson.settings.yellow_days ?? 60),
-        orange_days: Number(sjson.settings.orange_days ?? 30),
-        red_days: Number(sjson.settings.red_days ?? 15),
-        label_green: String(sjson.settings.label_green ?? "Al día"),
-        label_yellow: String(sjson.settings.label_yellow ?? "Aviso"),
-        label_orange: String(sjson.settings.label_orange ?? "Por vencer"),
-        label_red: String(sjson.settings.label_red ?? "Vencido"),
+        yellow_days: Number(json.meta.semaphore.yellow_days ?? 60),
+        orange_days: Number(json.meta.semaphore.orange_days ?? 30),
+        red_days: Number(json.meta.semaphore.red_days ?? 15),
+        label_green: String(json.meta.semaphore.label_green ?? "Al día"),
+        label_yellow: String(json.meta.semaphore.label_yellow ?? "Aviso"),
+        label_orange: String(json.meta.semaphore.label_orange ?? "Por vencer"),
+        label_red: String(json.meta.semaphore.label_red ?? "Vencido"),
       });
     }
 

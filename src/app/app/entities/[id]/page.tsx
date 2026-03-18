@@ -339,9 +339,14 @@ export default function EntityDetailPage() {
           <Card>
             <CardHeader className="pb-2">
               {!editMode ? (
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3 md:overflow-x-auto md:whitespace-nowrap md:pb-1">
-                  <CardTitle className="shrink-0">{entity.name}</CardTitle>
-                  <div className="flex flex-wrap items-center gap-2 md:shrink-0 md:flex-nowrap">
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Entidad</div>
+                    <CardTitle className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+                      {entity.name}
+                    </CardTitle>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline">Tipo: {entity.entity_type?.name ?? "(sin tipo)"}</Badge>
                     <Badge variant="outline">{entity.tracks_usage ? "Registra uso" : "Sin uso"}</Badge>
                     {entity.tracks_usage ? (
