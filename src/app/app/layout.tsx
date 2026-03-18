@@ -37,17 +37,6 @@ type TypeNavItem = {
   moduleKey: "entity_types" | "deadline_types" | "usage_units";
 };
 
-function IconTraffic({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
-      <rect x="7" y="2" width="10" height="20" rx="4" />
-      <circle cx="12" cy="7" r="1.4" />
-      <circle cx="12" cy="12" r="1.4" />
-      <circle cx="12" cy="17" r="1.4" />
-    </svg>
-  );
-}
-
 function IconRefresh({ className = "h-4 w-4" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
@@ -219,8 +208,6 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/app/entities", label: "Entidades", moduleKey: "entities", icon: <IconEntities /> },
   { href: "/app/usage-capture", label: "Captura uso", moduleKey: "usage_capture", icon: <IconUsage /> },
   { href: "/app/bi-integrations", label: "Integraciones BI", moduleKey: "bi_integrations", icon: <IconReport /> },
-  { href: "/app/reports/usage", label: "Reportes uso", moduleKey: "reports_usage", icon: <IconReport /> },
-  { href: "/app/settings/semaphore", label: "Semáforo", moduleKey: "semaphore", icon: <IconTraffic /> },
   { href: "/app/users", label: "Usuarios", moduleKey: "users", icon: <IconUsers /> },
 ];
 

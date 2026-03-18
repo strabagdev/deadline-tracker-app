@@ -39,6 +39,20 @@ test("entities POST crea entidad y devuelve 201", async () => {
   assert.equal((res.body.entity as { id: string }).id, "e1");
 });
 
+test("entities POST devuelve 409 cuando el nombre ya existe en el mismo tipo", async () => {
+  const res = await handleEntitiesPost(
+    "o1",
+    { name: "Equipo A", entity_type_id: "t1", tracks_usage: true, field_values: [] },
+    repo({
+      createEntity: async () => {
+        throw { code: "23505", message: "duplicate key value violates unique constraint \"entities_org_type_name_unique\"" };
+      },
+    })
+  );
+  assert.equal(res.status, 409);
+  assert.equal(res.body.code, "DUPLICATE_ENTITY_NAME");
+});
+
 test("entities PUT devuelve 400 sin id", async () => {
   const res = await handleEntitiesPut("o1", "", {}, repo());
   assert.equal(res.status, 400);
@@ -64,6 +78,21 @@ test("entities PUT actualiza y devuelve ok", async () => {
   );
   assert.equal(res.status, 200);
   assert.equal(res.body.ok, true);
+});
+
+test("entities PUT devuelve 409 cuando renombra a un nombre duplicado en el mismo tipo", async () => {
+  const res = await handleEntitiesPut(
+    "o1",
+    "e1",
+    { name: "Equipo B" },
+    repo({
+      updateEntity: async () => {
+        throw { code: "23505", message: "duplicate key value violates unique constraint \"entities_org_type_name_unique\"" };
+      },
+    })
+  );
+  assert.equal(res.status, 409);
+  assert.equal(res.body.code, "DUPLICATE_ENTITY_NAME");
 });
 
 test("entities DELETE exige id", async () => {

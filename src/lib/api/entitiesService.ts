@@ -4,6 +4,7 @@ import {
   parseEntityUpdateBody,
   splitUpdateFieldValues,
 } from "./entitiesInput";
+import { buildDuplicateEntityNameMessage, isDuplicateEntityNameError } from "./entityNameConflicts";
 
 type EntityRow = {
   id: string;
@@ -43,7 +44,18 @@ export async function handleEntitiesPost(orgId: string, rawBody: unknown, repo: 
     const exists = await repo.usageUnitExistsInOrg(orgId, usageUnitId);
     if (!exists) return { status: 400, body: { error: "invalid usage_unit_id", code: "BAD_REQUEST" } };
   }
-  const entity = await repo.createEntity(orgId, { name, entityTypeId, tracksUsage, usageUnitId });
+  let entity: EntityRow;
+  try {
+    entity = await repo.createEntity(orgId, { name, entityTypeId, tracksUsage, usageUnitId });
+  } catch (error: unknown) {
+    if (isDuplicateEntityNameError(error)) {
+      return {
+        status: 409,
+        body: { error: buildDuplicateEntityNameMessage(name), code: "DUPLICATE_ENTITY_NAME" },
+      };
+    }
+    throw error;
+  }
 
   const rows = normalizeFieldValues(fieldValues).map((fv) => ({
     organization_id: orgId,
@@ -85,7 +97,17 @@ export async function handleEntitiesPut(
   }
 
   if (Object.keys(patch).length) {
-    await repo.updateEntity(orgId, entityId, patch);
+    try {
+      await repo.updateEntity(orgId, entityId, patch);
+    } catch (error: unknown) {
+      if (isDuplicateEntityNameError(error)) {
+        return {
+          status: 409,
+          body: { error: buildDuplicateEntityNameMessage(String(parsed.name ?? "")), code: "DUPLICATE_ENTITY_NAME" },
+        };
+      }
+      throw error;
+    }
   }
 
   if (parsed.fieldValues) {

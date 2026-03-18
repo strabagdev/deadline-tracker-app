@@ -3,6 +3,7 @@ import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { canViewModule, getOrgAccess, isAdminRole } from "@/lib/server/orgAccess";
 import { parseCsv } from "@/lib/csv/simpleCsv";
+import { buildDuplicateEntityNameMessage, isDuplicateEntityNameError } from "@/lib/api/entityNameConflicts";
 
 type ParsedRow = {
   line: number;
@@ -400,6 +401,10 @@ export async function POST(req: Request) {
           if (upsertErr) throw upsertErr;
         }
       } catch (e: unknown) {
+        if (isDuplicateEntityNameError(e)) {
+          applyErrors.push({ line: row.line, message: buildDuplicateEntityNameMessage(row.name) });
+          continue;
+        }
         applyErrors.push({ line: row.line, message: getErrorMessage(e) });
       }
     }

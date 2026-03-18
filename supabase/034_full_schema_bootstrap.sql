@@ -196,6 +196,9 @@ create index if not exists entities_org_entity_type_idx
 create index if not exists entities_org_usage_unit_idx
   on public.entities (organization_id, usage_unit_id);
 
+create unique index if not exists entities_org_type_name_unique
+  on public.entities (organization_id, entity_type_id, lower(trim(name)));
+
 create table if not exists public.entity_fields (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,

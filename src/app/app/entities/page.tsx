@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { SemaphoreSettingsPanel, type SemaphoreSettings } from "@/components/semaphore/SemaphoreSettingsPanel";
 import { cn } from "@/lib/utils";
 import { parseCsv } from "@/lib/csv/simpleCsv";
 
@@ -69,16 +70,6 @@ type LatestUsageByEntity = Record<string, { value: number; logged_at: string }>;
 type Status = "red" | "orange" | "yellow" | "green" | "none";
 type SortMode = "critical" | "name" | "type" | "created";
 
-type SemaphoreSettings = {
-  yellow_days: number;
-  orange_days: number;
-  red_days: number;
-  label_green: string;
-  label_yellow: string;
-  label_orange: string;
-  label_red: string;
-};
-
 function fmtDate(d: Date | null) {
   if (!d) return "—";
   return d.toLocaleDateString();
@@ -137,6 +128,7 @@ export default function EntitiesPage() {
   const [importMode, setImportMode] = useState<"update" | "create">("update");
   const [bulkPanel, setBulkPanel] = useState<"import" | "export">("import");
   const [bulkEntityTypeId, setBulkEntityTypeId] = useState<string>("all");
+  const [semaphoreOpen, setSemaphoreOpen] = useState<boolean>(false);
 
   const [entities, setEntities] = useState<EntityRow[]>([]);
   const [usage, setUsage] = useState<LatestUsageByEntity>({});
@@ -586,6 +578,9 @@ export default function EntitiesPage() {
               >
                 Carga masiva
               </Button>
+              <Button onClick={() => setSemaphoreOpen(true)} variant="outline" size="sm">
+                Semáforo
+              </Button>
               <Link href="/app">
                 <Button variant="outline" size="sm">Dashboard</Button>
               </Link>
@@ -959,6 +954,25 @@ export default function EntitiesPage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {semaphoreOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
+          <div className="max-h-[88vh] w-full max-w-[980px] overflow-y-auto rounded-2xl border bg-white p-4 shadow-xl">
+            <SemaphoreSettingsPanel
+              title="Semáforo de entidades"
+              description="Edita aquí los nombres y umbrales usados para priorizar vencimientos por fecha y por uso."
+              headerActions={
+                <Button onClick={() => setSemaphoreOpen(false)} variant="outline" size="sm">
+                  Cerrar
+                </Button>
+              }
+              onSaved={(nextSettings) => {
+                setSemaphore(nextSettings);
+              }}
+            />
           </div>
         </div>
       ) : null}
