@@ -19,6 +19,36 @@ function toSlugKey(input: string) {
 
 const ALLOWED_FIELD_TYPES = new Set(["text", "number", "date", "boolean", "select"]);
 
+async function listUsageFieldKeys(
+  db: ReturnType<typeof createDataServerClient>,
+  organizationId: string,
+  usageUnitId: string,
+  excludeId?: string
+) {
+  const { data, error } = await db
+    .from("usage_fields")
+    .select("id, key")
+    .eq("organization_id", organizationId)
+    .eq("usage_unit_id", usageUnitId);
+  if (error) throw error;
+  return new Set(
+    ((data ?? []) as Array<{ id: string; key: string | null }>)
+      .filter((row) => !excludeId || String(row.id) !== excludeId)
+      .map((row) => String(row.key ?? "").trim())
+      .filter(Boolean)
+  );
+}
+
+function nextAvailableKey(baseKey: string, existingKeys: Set<string>) {
+  if (!existingKeys.has(baseKey)) return baseKey;
+  let seq = 2;
+  for (;;) {
+    const candidate = `${baseKey}_${seq}`;
+    if (!existingKeys.has(candidate)) return candidate;
+    seq += 1;
+  }
+}
+
 export async function GET(req: Request) {
   try {
     const { user } = await requireAuthUser(req);
@@ -85,14 +115,19 @@ export async function POST(req: Request) {
     const name = String(body?.name ?? "").trim();
     const fieldType = String(body?.field_type ?? "text").trim();
     const rawKey = body?.key ? String(body.key) : name;
-    const key = toSlugKey(rawKey);
+    const baseKey = toSlugKey(rawKey);
 
     if (!usageUnitId) return NextResponse.json({ error: "usage_unit_id required", code: "BAD_REQUEST" }, { status: 400 });
     if (!name) return NextResponse.json({ error: "name required", code: "BAD_REQUEST" }, { status: 400 });
-    if (!key) return NextResponse.json({ error: "key required", code: "BAD_REQUEST" }, { status: 400 });
+    if (!baseKey) return NextResponse.json({ error: "key required", code: "BAD_REQUEST" }, { status: 400 });
     if (!ALLOWED_FIELD_TYPES.has(fieldType)) {
       return NextResponse.json({ error: "invalid field_type", code: "BAD_REQUEST" }, { status: 400 });
     }
+
+    const existingKeys = await listUsageFieldKeys(db, access.organizationId, usageUnitId);
+    const key = body?.key
+      ? baseKey
+      : nextAvailableKey(baseKey, existingKeys);
 
     const options = body?.options ?? null;
     const { data, error } = await db

@@ -46,6 +46,15 @@ function normalizeOptions(raw: unknown) {
     .filter((v, i, arr) => arr.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i);
 }
 
+function toSlugKey(input: string) {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s_-]/g, "")
+    .replace(/[\s_-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 function IconAdd({ className = "h-4 w-4" }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
@@ -436,6 +445,8 @@ export default function UsageUnitsPage() {
       return;
     }
 
+    const normalizedKey = toSlugKey(String(fieldDraft.key ?? "").trim()) || toSlugKey(fieldDraft.name);
+
     const res = await fetch(`/api/usage-fields?id=${encodeURIComponent(editingFieldId)}`, {
       method: "PUT",
       headers: {
@@ -444,6 +455,7 @@ export default function UsageUnitsPage() {
       },
       body: JSON.stringify({
         ...fieldDraft,
+        key: normalizedKey,
         options: String(fieldDraft.options_text ?? "")
           .split(",")
           .map((v) => v.trim())
@@ -850,7 +862,18 @@ export default function UsageUnitsPage() {
                               <input
                                 value={fieldDraft?.name ?? ""}
                                 onChange={(e) =>
-                                  setFieldDraft((prev) => (prev ? { ...prev, name: e.target.value } : prev))
+                                  setFieldDraft((prev) => {
+                                    if (!prev) return prev;
+                                    const nextName = e.target.value;
+                                    const nextNameSlug = toSlugKey(nextName);
+                                    const currentNameSlug = toSlugKey(prev.name);
+                                    const shouldSyncKey = prev.key === currentNameSlug;
+                                    return {
+                                      ...prev,
+                                      name: nextName,
+                                      key: shouldSyncKey ? nextNameSlug : prev.key,
+                                    };
+                                  })
                                 }
                                 style={{ width: "100%", padding: 8 }}
                                 disabled={busy}
