@@ -170,13 +170,16 @@ alter table public.usage_units
 create index if not exists usage_units_org_active_idx
   on public.usage_units (organization_id, is_active, created_at desc);
 
+create unique index if not exists usage_units_org_id_id_uidx
+  on public.usage_units (organization_id, id);
+
 create table if not exists public.entities (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   entity_type_id uuid not null references public.entity_types(id) on delete restrict,
   name text not null,
   tracks_usage boolean not null default false,
-  usage_unit_id uuid null references public.usage_units(id) on delete set null,
+  usage_unit_id uuid null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (char_length(trim(name)) > 0)
@@ -184,7 +187,7 @@ create table if not exists public.entities (
 
 alter table public.entities
   add column if not exists tracks_usage boolean not null default false,
-  add column if not exists usage_unit_id uuid null references public.usage_units(id) on delete set null,
+  add column if not exists usage_unit_id uuid null,
   add column if not exists updated_at timestamptz not null default now();
 
 create index if not exists entities_org_created_idx
@@ -195,6 +198,19 @@ create index if not exists entities_org_entity_type_idx
 
 create index if not exists entities_org_usage_unit_idx
   on public.entities (organization_id, usage_unit_id);
+
+alter table public.entities
+  drop constraint if exists entities_usage_unit_id_fkey;
+
+alter table public.entities
+  drop constraint if exists entities_org_usage_unit_fkey;
+
+alter table public.entities
+  add constraint entities_org_usage_unit_fkey
+  foreign key (organization_id, usage_unit_id)
+  references public.usage_units (organization_id, id)
+  on update cascade
+  on delete restrict;
 
 create unique index if not exists entities_org_type_name_unique
   on public.entities (organization_id, entity_type_id, lower(trim(name)));
@@ -389,7 +405,7 @@ create index if not exists alert_events_org_type_idx
 create table if not exists public.usage_fields (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
-  usage_unit_id uuid not null references public.usage_units(id) on delete cascade,
+  usage_unit_id uuid not null,
   name text not null,
   key text not null,
   field_type text not null,
@@ -402,6 +418,19 @@ create table if not exists public.usage_fields (
 
 alter table public.usage_fields
   add column if not exists updated_at timestamptz not null default now();
+
+alter table public.usage_fields
+  drop constraint if exists usage_fields_usage_unit_id_fkey;
+
+alter table public.usage_fields
+  drop constraint if exists usage_fields_org_usage_unit_fkey;
+
+alter table public.usage_fields
+  add constraint usage_fields_org_usage_unit_fkey
+  foreign key (organization_id, usage_unit_id)
+  references public.usage_units (organization_id, id)
+  on update cascade
+  on delete cascade;
 
 create index if not exists usage_fields_org_unit_created_idx
   on public.usage_fields (organization_id, usage_unit_id, created_at);

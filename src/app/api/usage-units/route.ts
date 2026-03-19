@@ -209,6 +209,61 @@ export async function DELETE(req: Request) {
     const hardDelete = url.searchParams.get("hard") === "1";
     if (!id) return NextResponse.json({ error: "id required", code: "BAD_REQUEST" }, { status: 400 });
 
+    if (hardDelete) {
+      const { data: usageUnit, error: usageUnitErr } = await db
+        .from("usage_units")
+        .select("id, name")
+        .eq("organization_id", access.organizationId)
+        .eq("id", id)
+        .maybeSingle();
+      if (usageUnitErr) throw usageUnitErr;
+      if (!usageUnit) {
+        return NextResponse.json({ error: "usage unit not found", code: "USAGE_UNIT_NOT_FOUND" }, { status: 404 });
+      }
+
+      const [{ count: entitiesCount, error: entitiesErr }, { count: fieldsCount, error: fieldsErr }, { count: deadlinesCount, error: deadlinesErr }] = await Promise.all([
+        db
+          .from("entities")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", access.organizationId)
+          .eq("usage_unit_id", id),
+        db
+          .from("usage_fields")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", access.organizationId)
+          .eq("usage_unit_id", id),
+        db
+          .from("deadlines")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", access.organizationId)
+          .eq("measure_by", "usage")
+          .eq("frequency_unit", String(usageUnit.name ?? "")),
+      ]);
+      if (entitiesErr) throw entitiesErr;
+      if (fieldsErr) throw fieldsErr;
+      if (deadlinesErr) throw deadlinesErr;
+
+      const blockers: string[] = [];
+      if ((entitiesCount ?? 0) > 0) blockers.push(`${entitiesCount} entidades`);
+      if ((fieldsCount ?? 0) > 0) blockers.push(`${fieldsCount} campos dinámicos`);
+      if ((deadlinesCount ?? 0) > 0) blockers.push(`${deadlinesCount} vencimientos medidos por uso`);
+
+      if (blockers.length > 0) {
+        return NextResponse.json(
+          {
+            error: `No se puede eliminar la unidad "${usageUnit.name}" porque está siendo utilizada por ${blockers.join(", ")}.`,
+            code: "USAGE_UNIT_IN_USE",
+            details: {
+              entities: entitiesCount ?? 0,
+              usage_fields: fieldsCount ?? 0,
+              deadlines: deadlinesCount ?? 0,
+            },
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     const op = hardDelete
       ? db.from("usage_units").delete().eq("organization_id", access.organizationId).eq("id", id)
       : db.from("usage_units").update({ is_active: false }).eq("organization_id", access.organizationId).eq("id", id);
