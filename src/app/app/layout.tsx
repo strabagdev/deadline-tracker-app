@@ -24,17 +24,20 @@ type ModuleKey =
   | "bi_integrations"
   | "users";
 
-type NavItem = {
-  href: string;
+type SectionKey = "home" | "operations" | "risk" | "reports" | "settings";
+
+type PrimaryNavItem = {
+  key: SectionKey;
   label: string;
-  moduleKey: ModuleKey;
   icon: React.ReactNode;
 };
 
-type TypeNavItem = {
+type SecondaryNavItem = {
   href: string;
   label: string;
-  moduleKey: "entity_types" | "deadline_types" | "usage_units";
+  moduleKey: ModuleKey;
+  sectionKey: SectionKey;
+  icon: React.ReactNode;
 };
 
 function IconRefresh({ className = "h-4 w-4" }: { className?: string }) {
@@ -146,6 +149,15 @@ function IconReport({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+function IconSettings({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 1-2 0 1.65 1.65 0 0 0-1-.6 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 1 0-2 1.65 1.65 0 0 0 .6-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 1 2 0 1.65 1.65 0 0 0 1 .6 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c0 .38.14.74.4 1a1.65 1.65 0 0 1 0 2c-.26.26-.4.62-.4 1Z" />
+    </svg>
+  );
+}
+
 function IconMenu({ className = "h-4 w-4" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
@@ -156,65 +168,75 @@ function IconMenu({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
-function NavLink({ href, label, icon }: { href: string; label: string; icon: React.ReactNode }) {
+function PrimaryNavLink({
+  href,
+  label,
+  icon,
+  active,
+}: {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition-all",
+        active
+          ? "bg-slate-900 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.8)]"
+          : "text-slate-600 hover:bg-white/75 hover:text-slate-900"
+      )}
+    >
+      {icon}
+      <span>{label}</span>
+    </Link>
+  );
+}
+
+function SecondaryNavLink({ href, label, icon }: { href: string; label: string; icon: React.ReactNode }) {
   const pathname = usePathname();
   const active = pathname === href || (href !== "/app" && pathname.startsWith(href + "/"));
   return (
     <Link
       href={href}
-      title={label}
-      aria-label={label}
       className={cn(
-        "inline-flex h-9 w-9 items-center justify-center rounded-xl border bg-transparent text-sm text-slate-700 transition-colors sm:h-10 sm:w-10",
-        active ? "border-slate-300 text-slate-900" : "border-transparent hover:border-slate-300"
+        "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-all",
+        active
+          ? "bg-white text-slate-900 shadow-[0_8px_18px_-16px_rgba(15,23,42,0.45)] ring-1 ring-slate-200/80"
+          : "text-slate-500 hover:bg-white/70 hover:text-slate-800"
       )}
     >
       {icon}
+      <span>{label}</span>
     </Link>
   );
 }
 
-function NavActionButton({
-  label,
-  icon,
-  active,
-  onClick,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-9 w-9 items-center justify-center rounded-xl border bg-transparent text-sm text-slate-700 transition-colors sm:h-10 sm:w-10",
-        active ? "border-slate-300 text-slate-900" : "border-transparent hover:border-slate-300"
-      )}
-    >
-      {icon}
-    </button>
-  );
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { href: "/app", label: "Dashboard", moduleKey: "analytics_dashboard", icon: <IconHome /> },
-  { href: "/app/operations", label: "Operaciones", moduleKey: "operations_dashboard", icon: <IconEntities /> },
-  { href: "/app/forecast", label: "Forecast", moduleKey: "forecast", icon: <IconForecast /> },
-  { href: "/app/entities", label: "Entidades", moduleKey: "entities", icon: <IconEntities /> },
-  { href: "/app/usage-capture", label: "Captura uso", moduleKey: "usage_capture", icon: <IconUsage /> },
-  { href: "/app/bi-integrations", label: "Integraciones BI", moduleKey: "bi_integrations", icon: <IconReport /> },
-  { href: "/app/users", label: "Usuarios", moduleKey: "users", icon: <IconUsers /> },
+const PRIMARY_NAV_ITEMS: PrimaryNavItem[] = [
+  { key: "home", label: "Inicio", icon: <IconHome /> },
+  { key: "operations", label: "Operacion", icon: <IconEntities /> },
+  { key: "risk", label: "Riesgo", icon: <IconAlert /> },
+  { key: "reports", label: "Reportes", icon: <IconReport /> },
+  { key: "settings", label: "Configuracion", icon: <IconSettings /> },
 ];
 
-const TYPE_NAV_ITEMS: TypeNavItem[] = [
-  { href: "/app/entity-types", label: "Tipos entidad", moduleKey: "entity_types" },
-  { href: "/app/deadline-types", label: "Tipos vencimiento", moduleKey: "deadline_types" },
-  { href: "/app/usage-units", label: "Unidades uso", moduleKey: "usage_units" },
+const SECONDARY_NAV_ITEMS: SecondaryNavItem[] = [
+  { href: "/app", label: "Resumen", moduleKey: "analytics_dashboard", sectionKey: "home", icon: <IconHome /> },
+  { href: "/app/operations", label: "Vista operativa", moduleKey: "operations_dashboard", sectionKey: "operations", icon: <IconEntities /> },
+  { href: "/app/entities", label: "Entidades", moduleKey: "entities", sectionKey: "operations", icon: <IconEntities /> },
+  { href: "/app/usage-capture", label: "Captura de uso", moduleKey: "usage_capture", sectionKey: "operations", icon: <IconUsage /> },
+  { href: "/app/forecast", label: "Forecast", moduleKey: "forecast", sectionKey: "risk", icon: <IconForecast /> },
+  { href: "/app/alerts", label: "Alertas", moduleKey: "alerts", sectionKey: "risk", icon: <IconAlert /> },
+  { href: "/app/reports/deadlines", label: "Vencimientos", moduleKey: "reports_usage", sectionKey: "reports", icon: <IconReport /> },
+  { href: "/app/reports/usage", label: "Uso", moduleKey: "reports_usage", sectionKey: "reports", icon: <IconUsage /> },
+  { href: "/app/entity-types", label: "Tipos de entidad", moduleKey: "entity_types", sectionKey: "settings", icon: <IconTag /> },
+  { href: "/app/deadline-types", label: "Tipos de vencimiento", moduleKey: "deadline_types", sectionKey: "settings", icon: <IconTag /> },
+  { href: "/app/usage-units", label: "Unidades de uso", moduleKey: "usage_units", sectionKey: "settings", icon: <IconUsage /> },
+  { href: "/app/settings/semaphore", label: "Semaforo", moduleKey: "semaphore", sectionKey: "settings", icon: <IconAlert /> },
+  { href: "/app/users", label: "Usuarios", moduleKey: "users", sectionKey: "settings", icon: <IconUsers /> },
+  { href: "/app/bi-integrations", label: "Integraciones BI", moduleKey: "bi_integrations", sectionKey: "settings", icon: <IconReport /> },
 ];
 
 function getModuleByPath(pathname: string): ModuleKey | null {
@@ -232,6 +254,22 @@ function getModuleByPath(pathname: string): ModuleKey | null {
   if (pathname.startsWith("/app/deadline-types")) return "deadline_types";
   if (pathname.startsWith("/app/usage-units")) return "usage_units";
   if (pathname.startsWith("/app/users")) return "users";
+  return null;
+}
+
+function getSectionByPath(pathname: string): SectionKey | null {
+  if (pathname === "/app" || pathname.startsWith("/app/profile")) return "home";
+  if (pathname.startsWith("/app/operations") || pathname.startsWith("/app/entities") || pathname.startsWith("/app/usage-capture")) return "operations";
+  if (pathname.startsWith("/app/forecast") || pathname.startsWith("/app/alerts")) return "risk";
+  if (pathname.startsWith("/app/reports")) return "reports";
+  if (
+    pathname.startsWith("/app/entity-types") ||
+    pathname.startsWith("/app/deadline-types") ||
+    pathname.startsWith("/app/usage-units") ||
+    pathname.startsWith("/app/settings/semaphore") ||
+    pathname.startsWith("/app/users") ||
+    pathname.startsWith("/app/bi-integrations")
+  ) return "settings";
   return null;
 }
 
@@ -262,7 +300,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [allowedModules, setAllowedModules] = React.useState<Set<string> | null>(null);
   const [moduleAccessLoaded, setModuleAccessLoaded] = React.useState(false);
   const [mobileHeaderMenuOpen, setMobileHeaderMenuOpen] = React.useState(false);
-  const [typesModalOpen, setTypesModalOpen] = React.useState(false);
   const [frontendRev, setFrontendRev] = React.useState("...");
   const [backendRev, setBackendRev] = React.useState("...");
   const [deployEnv, setDeployEnv] = React.useState("...");
@@ -358,18 +395,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (isSuperAdmin || !allowedModules) return;
     const routeModule = getModuleByPath(pathname);
     if (routeModule && !allowedModules.has(routeModule)) {
-      const nextItem = NAV_ITEMS.find((item) => allowedModules.has(item.moduleKey));
+      const nextItem = SECONDARY_NAV_ITEMS.find((item) => allowedModules.has(item.moduleKey));
       if (!nextItem) {
         router.replace("/select-org");
         return;
       }
-      router.replace(getRouteByModule(nextItem.moduleKey));
+      router.replace(nextItem.href || getRouteByModule(nextItem.moduleKey));
     }
   }, [allowedModules, isSuperAdmin, pathname, router]);
 
   React.useEffect(() => {
     setMobileHeaderMenuOpen(false);
-    setTypesModalOpen(false);
   }, [pathname]);
 
   React.useEffect(() => {
@@ -393,23 +429,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const visibleNavItems = React.useMemo(() => {
+  const visibleSecondaryNavItems = React.useMemo(() => {
     if (!moduleAccessLoaded && !isSuperAdmin) return [];
-    if (!allowedModules) return NAV_ITEMS;
-    return NAV_ITEMS.filter((item) => allowedModules.has(item.moduleKey));
+    if (!allowedModules) return SECONDARY_NAV_ITEMS;
+    return SECONDARY_NAV_ITEMS.filter((item) => allowedModules.has(item.moduleKey));
   }, [allowedModules, isSuperAdmin, moduleAccessLoaded]);
 
-  const visibleTypeNavItems = React.useMemo(() => {
-    if (!moduleAccessLoaded && !isSuperAdmin) return [];
-    if (!allowedModules) return TYPE_NAV_ITEMS;
-    return TYPE_NAV_ITEMS.filter((item) => allowedModules.has(item.moduleKey));
-  }, [allowedModules, isSuperAdmin, moduleAccessLoaded]);
-
-  const isTypesRoute =
-    pathname.startsWith("/app/entity-types") ||
-    pathname.startsWith("/app/deadline-types") ||
-    pathname.startsWith("/app/usage-units");
-
+  const activeSection = React.useMemo(() => getSectionByPath(pathname), [pathname]);
+  const visiblePrimaryNavItems = React.useMemo(
+    () =>
+      PRIMARY_NAV_ITEMS.filter((section) =>
+        visibleSecondaryNavItems.some((item) => item.sectionKey === section.key)
+      ),
+    [visibleSecondaryNavItems]
+  );
+  const visibleSecondaryItemsBySection = React.useMemo(() => {
+    const grouped = new Map<SectionKey, SecondaryNavItem[]>();
+    for (const item of visibleSecondaryNavItems) {
+      const list = grouped.get(item.sectionKey) ?? [];
+      list.push(item);
+      grouped.set(item.sectionKey, list);
+    }
+    return grouped;
+  }, [visibleSecondaryNavItems]);
+  const activeSectionItems = activeSection ? (visibleSecondaryItemsBySection.get(activeSection) ?? []) : [];
+  const sectionHrefByKey = React.useMemo(() => {
+    const entries = PRIMARY_NAV_ITEMS.map((section) => {
+      const firstVisible = visibleSecondaryNavItems.find((item) => item.sectionKey === section.key);
+      return [section.key, firstVisible?.href ?? "/app"] as const;
+    });
+    return new Map<SectionKey, string>(entries);
+  }, [visibleSecondaryNavItems]);
 
   async function logout() {
     await supabaseAuth.auth.signOut();
@@ -425,7 +475,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   const userInfoCapsuleDesktop = !isSuperAdmin ? (
-    <div className="hidden min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1 xl:flex">
+    <div className="hidden min-w-0 items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-slate-200/70 backdrop-blur-sm xl:flex">
       {activeOrgLogoUrl ? (
         <img
           src={activeOrgLogoUrl}
@@ -447,7 +497,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   ) : null;
 
   const userInfoCapsuleMobile = !isSuperAdmin ? (
-    <div className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1">
+    <div className="flex min-w-0 items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-slate-200/70 backdrop-blur-sm">
       {activeOrgLogoUrl ? (
         <img
           src={activeOrgLogoUrl}
@@ -473,101 +523,114 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-40 px-2 py-2 backdrop-blur sm:px-3">
         <div className={cn("mx-auto", isSuperAdmin ? "max-w-[1100px]" : "max-w-[1400px]")}>
           <div
-            className="flex flex-col gap-2 px-4 py-2 lg:flex-row lg:items-center lg:justify-between"
+            className="flex flex-col gap-3 px-4 py-3"
             style={{
-              background: "linear-gradient(120deg, rgba(236, 253, 245, 0.8), rgba(239, 246, 255, 0.9), rgba(255, 255, 255, 1))",
-              border: "1px solid #d6e0ea",
-              borderRadius: "14px",
-              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)",
+              background: "linear-gradient(125deg, rgba(241, 248, 245, 0.96), rgba(246, 250, 253, 0.98), rgba(255, 255, 255, 1))",
+              border: "1px solid rgba(212, 222, 230, 0.92)",
+              borderRadius: "18px",
+              boxShadow: "0 20px 36px -32px rgba(15, 23, 42, 0.28)",
             }}
           >
-            <div className="flex min-w-0 items-center gap-2">
-              {platformLogoUrl ? (
-                <img
-                  src={platformLogoUrl}
-                  alt="Logo plataforma"
-                  width={38}
-                  height={38}
-                  className="h-11 w-11 rounded-lg object-cover sm:h-9 sm:w-9"
-                />
-              ) : null}
-              <Link href={isSuperAdmin ? "/app/super-admin" : "/app"} className="min-w-0 truncate text-base font-semibold text-slate-900 sm:text-base">
-                OpsAhead
-              </Link>
-              {isSuperAdmin ? <Badge variant="secondary" className="shrink-0">Global</Badge> : null}
-              {!isSuperAdmin ? <div className="min-w-0 flex-1 lg:hidden">{userInfoCapsuleMobile}</div> : null}
-              {!isSuperAdmin ? (
-                <div className="shrink-0 lg:hidden">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setMobileHeaderMenuOpen(true)}
-                    className="h-11 w-11 px-0 bg-transparent"
-                    aria-label="Abrir menú"
-                    title="Menú"
-                  >
-                    <IconMenu className="h-6 w-6" />
-                  </Button>
+            <div className="flex min-w-0 items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                {platformLogoUrl ? (
+                  <img
+                    src={platformLogoUrl}
+                    alt="Logo plataforma"
+                    width={38}
+                    height={38}
+                    className="h-11 w-11 rounded-lg object-cover sm:h-9 sm:w-9"
+                  />
+                ) : null}
+                <div className="min-w-0">
+                  <Link href={isSuperAdmin ? "/app/super-admin" : "/app"} className="min-w-0 truncate text-base font-semibold text-slate-900 sm:text-base">
+                    OpsAhead
+                  </Link>
+                  {!isSuperAdmin ? <div className="hidden text-xs text-slate-500 lg:block">Navegacion simplificada por flujo de trabajo</div> : null}
                 </div>
-              ) : null}
-            </div>
-
-            {isSuperAdmin ? (
-              <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:w-auto">
-                <Link href="/app/super-admin">
-                  <Button variant="outline" size="sm" className="bg-transparent">
-                    Panel global
-                  </Button>
-                </Link>
-                <Button onClick={logout} variant="outline" size="sm" className="bg-transparent">
-                  Salir
-                </Button>
+                {isSuperAdmin ? <Badge variant="secondary" className="shrink-0">Global</Badge> : null}
               </div>
-            ) : (
-              <div className="flex w-full min-w-0 flex-col gap-2 lg:flex-1 lg:flex-row lg:items-center lg:gap-2">
-                <nav className="hidden min-w-0 flex-nowrap items-center gap-1 overflow-x-auto p-1 lg:flex lg:flex-1 lg:overflow-visible">
-                  {visibleNavItems.map((item) => (
-                    <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} />
-                  ))}
-                  {visibleTypeNavItems.length > 0 ? (
-                    <NavActionButton
-                      label="Tipos"
-                      icon={<IconTag />}
-                      active={isTypesRoute}
-                      onClick={() => setTypesModalOpen(true)}
-                    />
-                  ) : null}
-                </nav>
-                <div className="hidden min-w-0 items-center gap-2 lg:flex lg:flex-nowrap">
-                  <Button
-                    onClick={refreshApp}
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 bg-transparent sm:h-10 sm:w-10"
-                    title="Refrescar"
-                    aria-label="Refrescar"
-                  >
-                    <IconRefresh />
-                  </Button>
-                  <Link href="/app/profile" className="block">
-                    <Button variant="outline" size="icon" className="h-9 w-9 bg-transparent sm:h-10 sm:w-10" title="Perfil" aria-label="Perfil">
-                      <IconUser />
+
+              {isSuperAdmin ? (
+                <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:w-auto">
+                  <Link href="/app/super-admin">
+                    <Button variant="outline" size="sm" className="bg-transparent">
+                      Panel global
                     </Button>
                   </Link>
-                  <Button
-                    onClick={logout}
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 bg-transparent sm:h-10 sm:w-10"
-                    title="Salir"
-                    aria-label="Salir"
-                  >
-                    <IconLogout />
+                  <Button onClick={logout} variant="outline" size="sm" className="bg-transparent">
+                    Salir
                   </Button>
-                  {userInfoCapsuleDesktop}
                 </div>
+              ) : (
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="min-w-0 lg:hidden">{userInfoCapsuleMobile}</div>
+                  <div className="shrink-0 lg:hidden">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setMobileHeaderMenuOpen(true)}
+                      className="h-11 w-11 rounded-full border-white/70 bg-white/70 px-0 shadow-none backdrop-blur-sm"
+                      aria-label="Abrir menú"
+                      title="Menú"
+                    >
+                      <IconMenu className="h-6 w-6" />
+                    </Button>
+                  </div>
+                  <div className="hidden min-w-0 items-center gap-2 lg:flex lg:flex-nowrap">
+                    <Button
+                      onClick={refreshApp}
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 rounded-full border-white/70 bg-white/70 shadow-none backdrop-blur-sm sm:h-10 sm:w-10"
+                      title="Refrescar"
+                      aria-label="Refrescar"
+                    >
+                      <IconRefresh />
+                    </Button>
+                    <Link href="/app/profile" className="block">
+                      <Button variant="outline" size="icon" className="h-9 w-9 rounded-full border-white/70 bg-white/70 shadow-none backdrop-blur-sm sm:h-10 sm:w-10" title="Perfil" aria-label="Perfil">
+                        <IconUser />
+                      </Button>
+                    </Link>
+                    <Button
+                      onClick={logout}
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 rounded-full border-white/70 bg-white/70 shadow-none backdrop-blur-sm sm:h-10 sm:w-10"
+                      title="Salir"
+                      aria-label="Salir"
+                    >
+                      <IconLogout />
+                    </Button>
+                    {userInfoCapsuleDesktop}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {!isSuperAdmin ? (
+              <div className="hidden lg:block">
+                <nav className="flex flex-wrap items-center gap-2 rounded-full bg-white/55 p-1.5 ring-1 ring-white/85 backdrop-blur-md">
+                  {visiblePrimaryNavItems.map((item) => (
+                    <PrimaryNavLink
+                      key={item.key}
+                      href={sectionHrefByKey.get(item.key) ?? "/app"}
+                      label={item.label}
+                      icon={item.icon}
+                      active={activeSection === item.key}
+                    />
+                  ))}
+                </nav>
+                {activeSectionItems.length > 1 ? (
+                  <nav className="mt-2 flex flex-wrap items-center gap-2 pl-1">
+                    {activeSectionItems.map((item) => (
+                      <SecondaryNavLink key={item.href} href={item.href} label={item.label} icon={item.icon} />
+                    ))}
+                  </nav>
+                ) : null}
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </header>
@@ -575,7 +638,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {mobileHeaderMenuOpen ? (
         <div className="fixed inset-0 z-[120] bg-slate-900/35 lg:hidden" onClick={() => setMobileHeaderMenuOpen(false)}>
           <aside
-            className="absolute right-0 top-0 flex h-full w-72 max-w-[90vw] flex-col border-l bg-white p-3 shadow-xl"
+            className="absolute right-0 top-0 flex h-full w-72 max-w-[90vw] flex-col border-l border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(255,255,255,1))] p-3 shadow-xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
@@ -592,31 +655,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </Button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="grid gap-1">
-                {visibleNavItems.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileHeaderMenuOpen(false)}
-                    className="inline-flex items-center gap-2 rounded-lg border border-transparent px-2 py-2 text-sm text-slate-700 hover:border-slate-300"
-                  >
-                    {item.icon}
-                    <span className="truncate">{item.label}</span>
-                  </Link>
-                ))}
-                {visibleTypeNavItems.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileHeaderMenuOpen(false);
-                      setTypesModalOpen(true);
-                    }}
-                    className="inline-flex items-center gap-2 rounded-lg border border-transparent px-2 py-2 text-sm text-slate-700 hover:border-slate-300"
-                  >
-                    <IconTag />
-                    <span className="truncate">Tipos</span>
-                  </button>
-                ) : null}
+              <div className="grid gap-4">
+                {visiblePrimaryNavItems.map((section) => {
+                  const items = visibleSecondaryItemsBySection.get(section.key) ?? [];
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={section.key} className="grid gap-1">
+                      <div className="px-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                        {section.label}
+                      </div>
+                      {items.map((item) => {
+                        const active = pathname === item.href || (item.href !== "/app" && pathname.startsWith(item.href + "/"));
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={() => setMobileHeaderMenuOpen(false)}
+                            className={cn(
+                              "inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm transition-all",
+                              active
+                                ? "bg-slate-900 text-white"
+                                : "text-slate-700 hover:bg-slate-100"
+                            )}
+                          >
+                            {item.icon}
+                            <span className="truncate">{item.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
               </div>
             </div>
             <div className="mt-3 border-t pt-3">
@@ -655,44 +724,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           </aside>
-        </div>
-      ) : null}
-
-      {typesModalOpen ? (
-        <div className="fixed inset-0 z-[130] bg-slate-900/40 px-4 py-6" onClick={() => setTypesModalOpen(false)}>
-          <div
-            className="mx-auto mt-10 w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div>
-                <h3 className="text-base font-semibold text-slate-900">Tipos</h3>
-                <p className="text-xs text-slate-500">Elige el módulo de tipos al que quieres ir.</p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 bg-transparent"
-                onClick={() => setTypesModalOpen(false)}
-              >
-                Cerrar
-              </Button>
-            </div>
-            <div className="grid gap-2">
-              {visibleTypeNavItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setTypesModalOpen(false)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                >
-                  <IconTag className="h-4 w-4" />
-                  <span>{item.label}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
         </div>
       ) : null}
 
