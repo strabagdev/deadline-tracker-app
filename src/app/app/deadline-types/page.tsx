@@ -3,7 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Loader } from "@/components/ui/loader";
+import { cn } from "@/lib/utils";
 
 type DeadlineType = {
   id: string;
@@ -18,6 +23,12 @@ const MEASURE_BY_OPTIONS = [
   { value: "date", label: "Por fecha" },
   { value: "usage", label: "Por uso" },
 ] as const;
+
+function measureTone(measureBy: DeadlineType["measure_by"]) {
+  return measureBy === "usage"
+    ? "border-cyan-200 bg-cyan-50 text-cyan-700"
+    : "border-violet-200 bg-violet-50 text-violet-700";
+}
 
 async function getTokenOrRedirect(router: { replace: (href: string) => void }) {
   const { data } = await supabaseAuth.auth.getSession();
@@ -37,12 +48,11 @@ export default function DeadlineTypesPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string>("");
 
-  // create
   const [name, setName] = useState("");
   const [measureBy, setMeasureBy] = useState<"date" | "usage">("date");
   const [requiresDoc, setRequiresDoc] = useState(false);
+  const [search, setSearch] = useState("");
 
-  // edit row
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editMeasureBy, setEditMeasureBy] = useState<"date" | "usage">("date");
@@ -50,6 +60,13 @@ export default function DeadlineTypesPage() {
   const [editIsActive, setEditIsActive] = useState(true);
 
   const canCreate = useMemo(() => name.trim().length > 0, [name]);
+  const filteredItems = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return items;
+    return items.filter((item) => item.name.toLowerCase().includes(needle));
+  }, [items, search]);
+  const activeCount = useMemo(() => items.filter((item) => item.is_active).length, [items]);
+  const usageCount = useMemo(() => items.filter((item) => item.measure_by === "usage").length, [items]);
 
   useEffect(() => {
     void refresh();
@@ -128,7 +145,6 @@ export default function DeadlineTypesPage() {
     setName("");
     setMeasureBy("date");
     setRequiresDoc(false);
-
     await refresh();
     setBusy(false);
   }
@@ -204,159 +220,245 @@ export default function DeadlineTypesPage() {
     setBusy(false);
   }
 
-  const cardStyle: React.CSSProperties = {
-    border: "1px solid #eee",
-    borderRadius: 14,
-    padding: 14,
-    background: "white",
-  };
-
   return (
-    <main style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Tipos de vencimiento</h2>
-          <p style={{ marginTop: 6, opacity: 0.75 }}>
-            Catálogo por organización. Los vencimientos se crean siempre a partir de un tipo.
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={refresh} style={{ padding: 10 }} disabled={busy}>
-            Refrescar
-          </button>
-        </div>
-      </div>
-
-      {msg && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{msg}</p>}
-
-      <section style={{ marginTop: 14, ...cardStyle }}>
-        <h3 style={{ marginTop: 0 }}>Crear tipo</h3>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 220px 220px", gap: 12 }}>
+    <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
+      <section className="rounded-[26px] border border-[rgba(17,32,28,0.08)] bg-[linear-gradient(180deg,rgba(251,253,252,0.98),rgba(245,249,248,0.96))] p-4 shadow-[0_20px_60px_-44px_rgba(15,23,42,0.3)]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <label>Nombre</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ej: Certificado de gases"
-              style={{ width: "100%", padding: 10, marginTop: 6 }}
-              disabled={busy}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="bg-slate-900 text-white hover:bg-slate-900">Configuración</Badge>
+              <Badge variant="secondary" className="bg-cyan-50 text-cyan-700 hover:bg-cyan-50">
+                Tipos de vencimiento
+              </Badge>
+            </div>
+            <h1 className="mt-2 text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
+              Catálogo operativo de vencimientos
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Define cómo se mide cada vencimiento y si exige respaldo documental.
+            </p>
           </div>
-
-          <div>
-            <label>Medición</label>
-            <select
-              value={measureBy}
-              onChange={(e) => setMeasureBy(e.target.value as "date" | "usage")}
-              style={{ width: "100%", padding: 10, marginTop: 6 }}
-              disabled={busy}
-            >
-              {MEASURE_BY_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <Card className="border-slate-200/80 bg-white shadow-none">
+              <CardContent className="px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Tipos</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{items.length}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200/80 bg-white shadow-none">
+              <CardContent className="px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Activos</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{activeCount}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200/80 bg-white shadow-none">
+              <CardContent className="px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Por uso</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{usageCount}</div>
+              </CardContent>
+            </Card>
           </div>
-
-          <div style={{ display: "flex", alignItems: "flex-end" }}>
-            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={requiresDoc}
-                onChange={(e) => setRequiresDoc(e.target.checked)}
-                disabled={busy}
-              />
-              Requiere documento
-            </label>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
-          <button onClick={create} style={{ padding: 10, fontWeight: 700 }} disabled={busy || !canCreate}>
-            {busy ? "Creando..." : "Crear"}
-          </button>
         </div>
       </section>
 
-      <section style={{ marginTop: 14 }}>
-        <h3 style={{ marginTop: 0 }}>Listado</h3>
+      {msg ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {msg}
+        </div>
+      ) : null}
 
-        {loading ? (
-          <div style={{ display: "flex", minHeight: "60vh", alignItems: "center", justifyContent: "center", padding: "12px 0" }}>
-            <Loader label="Cargando tipos..." />
-          </div>
-        ) : items.length === 0 ? (
-          <p style={{ opacity: 0.7 }}>Aún no hay tipos creados.</p>
-        ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {items.map((row) => {
-              const isEditing = editingId === row.id;
+      <section className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
+        <div className="space-y-4">
+          <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.84)]">
+            <CardHeader className="pb-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Nuevo tipo</div>
+              <CardTitle className="text-base sm:text-lg">Crear regla de vencimiento</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid gap-2">
+                <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Nombre</label>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ej: Certificado de gases"
+                  disabled={busy}
+                />
+              </div>
 
-              return (
-                <div key={row.id} style={cardStyle}>
-                  {!isEditing ? (
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-                      <div>
-                        <div style={{ fontWeight: 800, display: "flex", gap: 10, alignItems: "center" }}>
-                          <span>{row.name}</span>
-                          {!row.is_active && (
-                            <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #ddd", borderRadius: 999, opacity: 0.8 }}>
-                              inactivo
-                            </span>
-                          )}
+              <div className="grid gap-2">
+                <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Medición</label>
+                <select
+                  value={measureBy}
+                  onChange={(e) => setMeasureBy(e.target.value as "date" | "usage")}
+                  className="h-10 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 text-sm"
+                  disabled={busy}
+                >
+                  {MEASURE_BY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <label className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 py-2.5 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={requiresDoc}
+                  onChange={(e) => setRequiresDoc(e.target.checked)}
+                  disabled={busy}
+                />
+                Requiere documento de respaldo
+              </label>
+
+              <Button onClick={create} disabled={busy || !canCreate} className="w-full">
+                Crear tipo
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.84)]">
+            <CardHeader className="pb-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Navegación</div>
+              <CardTitle className="text-base sm:text-lg">Tipos disponibles</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar tipo..."
+                disabled={busy}
+              />
+              <div className="grid gap-2">
+                {filteredItems.length === 0 ? (
+                  <p className="text-sm text-slate-500">No hay tipos para mostrar.</p>
+                ) : (
+                  filteredItems.map((item) => (
+                    <div key={item.id} className="rounded-2xl border border-slate-200 bg-white px-3 py-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-slate-900">{item.name}</div>
+                          <div className="mt-1 flex flex-wrap gap-2">
+                            <Badge variant="secondary" className={cn("border", measureTone(item.measure_by))}>
+                              {item.measure_by === "usage" ? "Por uso" : "Por fecha"}
+                            </Badge>
+                            {!item.is_active ? (
+                              <Badge variant="secondary" className="border border-slate-200 bg-slate-100 text-slate-600">
+                                Inactivo
+                              </Badge>
+                            ) : null}
+                          </div>
                         </div>
-                        <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                          {row.measure_by === "date" ? "por fecha" : "por uso"} ·{" "}
-                          {row.requires_document ? "requiere doc" : "sin doc"} ·{" "}
-                          {new Date(row.created_at).toLocaleString()}
-                        </div>
-                      </div>
-
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button onClick={() => startEdit(row)} style={{ padding: 10 }} disabled={busy}>
-                          Editar
-                        </button>
-                        {row.is_active && (
-                          <button onClick={() => deactivate(row.id)} style={{ padding: 10 }} disabled={busy}>
-                            Desactivar
-                          </button>
-                        )}
                       </div>
                     </div>
-                  ) : (
-                    <>
-                      <h4 style={{ marginTop: 0 }}>Editar</h4>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 220px 220px", gap: 12 }}>
-                        <div>
-                          <label>Nombre</label>
-                          <input
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            style={{ width: "100%", padding: 10, marginTop: 6 }}
-                            disabled={busy}
-                          />
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.84)]">
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Listado</div>
+                <CardTitle className="text-base sm:text-lg">Configuración existente</CardTitle>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={busy || loading}>
+                Refrescar
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0">
+            {loading ? (
+              <div className="flex min-h-[60vh] items-center justify-center py-6">
+                <Loader label="Cargando tipos..." />
+              </div>
+            ) : filteredItems.length === 0 ? (
+              <p className="text-sm text-slate-500">Aún no hay tipos creados.</p>
+            ) : (
+              filteredItems.map((row) => {
+                const isEditing = editingId === row.id;
+
+                return (
+                  <div
+                    key={row.id}
+                    className="rounded-[22px] border border-slate-200/80 bg-white px-4 py-4 shadow-[0_16px_40px_-36px_rgba(15,23,42,0.45)]"
+                  >
+                    {!isEditing ? (
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="text-base font-semibold text-slate-900">{row.name}</div>
+                            <Badge variant="secondary" className={cn("border", measureTone(row.measure_by))}>
+                              {row.measure_by === "usage" ? "Por uso" : "Por fecha"}
+                            </Badge>
+                            {row.requires_document ? (
+                              <Badge variant="secondary" className="border border-emerald-200 bg-emerald-50 text-emerald-700">
+                                Requiere documento
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="border border-slate-200 bg-slate-50 text-slate-600">
+                                Sin documento
+                              </Badge>
+                            )}
+                            {!row.is_active ? (
+                              <Badge variant="secondary" className="border border-slate-200 bg-slate-100 text-slate-600">
+                                Inactivo
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            Creado el {new Date(row.created_at).toLocaleString()}
+                          </div>
                         </div>
 
+                        <div className="flex flex-wrap gap-2">
+                          <Button variant="outline" size="sm" onClick={() => startEdit(row)} disabled={busy}>
+                            Editar
+                          </Button>
+                          {row.is_active ? (
+                            <Button variant="outline" size="sm" onClick={() => void deactivate(row.id)} disabled={busy}>
+                              Desactivar
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
                         <div>
-                          <label>Medición</label>
-                          <select
-                            value={editMeasureBy}
-                            onChange={(e) => setEditMeasureBy(e.target.value as "date" | "usage")}
-                            style={{ width: "100%", padding: 10, marginTop: 6 }}
-                            disabled={busy}
-                          >
-                            {MEASURE_BY_OPTIONS.map((o) => (
-                              <option key={o.value} value={o.value}>
-                                {o.label}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Edición</div>
+                          <div className="mt-1 text-base font-semibold text-slate-900">Actualizar tipo</div>
                         </div>
 
-                        <div style={{ display: "grid", gap: 8 }}>
-                          <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 2 }}>
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1.3fr)_180px_220px_180px]">
+                          <div className="grid gap-2">
+                            <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Nombre</label>
+                            <Input
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              disabled={busy}
+                            />
+                          </div>
+
+                          <div className="grid gap-2">
+                            <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Medición</label>
+                            <select
+                              value={editMeasureBy}
+                              onChange={(e) => setEditMeasureBy(e.target.value as "date" | "usage")}
+                              className="h-10 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 text-sm"
+                              disabled={busy}
+                            >
+                              {MEASURE_BY_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <label className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 py-2.5 text-sm text-slate-700">
                             <input
                               type="checkbox"
                               checked={editRequiresDoc}
@@ -366,7 +468,7 @@ export default function DeadlineTypesPage() {
                             Requiere documento
                           </label>
 
-                          <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <label className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 py-2.5 text-sm text-slate-700">
                             <input
                               type="checkbox"
                               checked={editIsActive}
@@ -376,23 +478,23 @@ export default function DeadlineTypesPage() {
                             Activo
                           </label>
                         </div>
-                      </div>
 
-                      <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                        <button onClick={cancelEdit} style={{ padding: 10 }} disabled={busy}>
-                          Cancelar
-                        </button>
-                        <button onClick={saveEdit} style={{ padding: 10, fontWeight: 700 }} disabled={busy}>
-                          {busy ? "Guardando..." : "Guardar"}
-                        </button>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button variant="outline" size="sm" onClick={cancelEdit} disabled={busy}>
+                            Cancelar
+                          </Button>
+                          <Button size="sm" onClick={saveEdit} disabled={busy}>
+                            {busy ? "Guardando..." : "Guardar cambios"}
+                          </Button>
+                        </div>
                       </div>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
       </section>
     </main>
   );

@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Loader } from "@/components/ui/loader";
 
@@ -39,6 +40,7 @@ export default function BiIntegrationsPage() {
   const [newDatasetKey, setNewDatasetKey] = useState("");
 
   const datasetLabelByKey = useMemo(() => new Map(datasets.map((d) => [d.key, d.label])), [datasets]);
+  const activeEndpoints = useMemo(() => endpoints.filter((endpoint) => endpoint.is_active).length, [endpoints]);
 
   async function fetchJsonWithTimeout(path: string, init: RequestInit, timeoutMs = 12000) {
     const controller = new AbortController();
@@ -205,8 +207,8 @@ export default function BiIntegrationsPage() {
     setBusy(false);
   }
 
-  async function removeEndpoint(endpointId: string) {
-    if (!confirm("¿Eliminar endpoint?")) return;
+  async function removeEndpoint(endpointId: string, label: string) {
+    if (!confirm(`¿Eliminar endpoint "${label}"?`)) return;
     setBusy(true);
     setErrorMsg("");
     setOkMsg("");
@@ -232,100 +234,165 @@ export default function BiIntegrationsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-4 sm:space-y-6">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle className="app-page-title">Integraciones BI</CardTitle>
-              <p className="app-page-subtitle">Administra endpoints externos para Power BI y otras herramientas.</p>
+    <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
+      <section className="rounded-[26px] border border-[rgba(17,32,28,0.08)] bg-[linear-gradient(180deg,rgba(251,253,252,0.98),rgba(245,249,248,0.96))] p-4 shadow-[0_20px_60px_-44px_rgba(15,23,42,0.3)]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="bg-slate-900 text-white hover:bg-slate-900">Configuración</Badge>
+              <Badge variant="secondary" className="bg-sky-50 text-sky-700 hover:bg-sky-50">
+                Integraciones BI
+              </Badge>
             </div>
-            <div className="flex items-center gap-2">
-              <Link href="/app/reports/usage">
-                <Button variant="outline" size="sm">Reportes</Button>
-              </Link>
-              <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading || busy}>
-                Refrescar
+            <h1 className="mt-2 text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
+              Exposición segura de datasets
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Administra endpoints externos para Power BI y herramientas analíticas sin perder control del acceso.
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <Card className="border-slate-200/80 bg-white shadow-none">
+              <CardContent className="px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Datasets</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{datasets.length}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200/80 bg-white shadow-none">
+              <CardContent className="px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Endpoints</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{endpoints.length}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200/80 bg-white shadow-none">
+              <CardContent className="px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Activos</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{activeEndpoints}</div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {errorMsg ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 whitespace-pre-wrap">{errorMsg}</div> : null}
+      {okMsg ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{okMsg}</div> : null}
+
+      <section className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <div className="space-y-4">
+          <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.84)]">
+            <CardHeader className="pb-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Nuevo endpoint</div>
+              <CardTitle className="text-base sm:text-lg">Publicar dataset</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid gap-2">
+                <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Nombre interno</label>
+                <Input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="Ej: Reporte operativo" />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Dataset</label>
+                <select
+                  value={newDatasetKey}
+                  onChange={(e) => setNewDatasetKey(e.target.value)}
+                  className="h-10 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 text-sm"
+                >
+                  {datasets.map((dataset) => (
+                    <option key={dataset.key} value={dataset.key}>
+                      {dataset.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <p className="text-xs text-slate-500">
+                El slug se genera automáticamente con dos palabras y guion para facilitar integraciones.
+              </p>
+
+              <Button onClick={() => void createEndpoint()} disabled={busy || !newLabel.trim() || !newDatasetKey} className="w-full">
+                Crear endpoint
               </Button>
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
+            </CardContent>
+          </Card>
 
-      {errorMsg ? <div className="app-alert app-alert-error whitespace-pre-wrap">{errorMsg}</div> : null}
-      {okMsg ? <div className="app-alert app-alert-success">{okMsg}</div> : null}
+          <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.84)]">
+            <CardHeader className="pb-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Accesos relacionados</div>
+              <CardTitle className="text-base sm:text-lg">Atajos</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              <Link href="/app/reports/usage">
+                <Button variant="outline" className="w-full justify-start">Ir a reportes de uso</Button>
+              </Link>
+              <Button variant="outline" className="justify-start" onClick={() => void load()} disabled={loading || busy}>
+                Refrescar configuración
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Nuevo endpoint</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <div className="grid gap-2 md:grid-cols-[220px_minmax(220px,1fr)_auto]">
-            <Input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="Nombre interno" />
-            <select
-              value={newDatasetKey}
-              onChange={(e) => setNewDatasetKey(e.target.value)}
-              className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
-            >
-              {datasets.map((d) => (
-                <option key={d.key} value={d.key}>{d.label}</option>
-              ))}
-            </select>
-            <Button onClick={() => void createEndpoint()} disabled={busy || !newLabel.trim() || !newDatasetKey}>
-              Crear
-            </Button>
-          </div>
-          <p className="mt-2 text-xs text-[var(--muted-foreground)]">El slug se genera automáticamente con 2 palabras y guion.</p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Endpoints configurados</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0">
-          {loading ? (
-            <div className="flex min-h-[60vh] items-center justify-center py-6">
-              <Loader label="Cargando integraciones..." />
-            </div>
-          ) : endpoints.length === 0 ? (
-            <p className="app-empty">No hay endpoints BI configurados.</p>
-          ) : (
-            <div className="grid gap-2">
-              {endpoints.map((ep) => {
-                const url = `${baseUrl()}/api/reporting/external/${encodeURIComponent(ep.slug)}?token=${encodeURIComponent(ep.endpoint_token)}`;
+        <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.84)]">
+          <CardHeader className="pb-3">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Endpoints publicados</div>
+            <CardTitle className="text-base sm:text-lg">Conectores disponibles</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0">
+            {loading ? (
+              <div className="flex min-h-[60vh] items-center justify-center py-6">
+                <Loader label="Cargando integraciones..." />
+              </div>
+            ) : endpoints.length === 0 ? (
+              <p className="text-sm text-slate-500">No hay endpoints BI configurados.</p>
+            ) : (
+              endpoints.map((endpoint) => {
+                const url = `${baseUrl()}/api/reporting/external/${encodeURIComponent(endpoint.slug)}?token=${encodeURIComponent(endpoint.endpoint_token)}`;
                 return (
-                  <div key={ep.id} className="rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--card)] p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-[var(--foreground)]">{ep.label}</div>
-                        <div className="truncate text-xs text-[var(--muted-foreground)]">
-                          Dataset: {datasetLabelByKey.get(ep.dataset_key) ?? ep.dataset_key} · Slug: {ep.slug}
+                  <div
+                    key={endpoint.id}
+                    className="rounded-[22px] border border-slate-200/80 bg-white px-4 py-4 shadow-[0_16px_40px_-36px_rgba(15,23,42,0.45)]"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="truncate text-base font-semibold text-slate-900">{endpoint.label}</div>
+                          <Badge
+                            variant="secondary"
+                            className={endpoint.is_active ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-50" : "bg-slate-100 text-slate-600 hover:bg-slate-100"}
+                          >
+                            {endpoint.is_active ? "Activo" : "Inactivo"}
+                          </Badge>
                         </div>
-                        <div className="truncate text-xs text-[var(--muted-foreground)]">{url}</div>
+                        <div className="text-xs text-slate-500">
+                          Dataset: {datasetLabelByKey.get(endpoint.dataset_key) ?? endpoint.dataset_key}
+                        </div>
+                        <div className="text-xs text-slate-500">Slug: {endpoint.slug}</div>
+                        <div className="break-all rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                          {url}
+                        </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
+
+                      <div className="flex flex-wrap gap-2">
                         <Button size="sm" variant="outline" onClick={() => void navigator.clipboard.writeText(url)}>
                           Copiar URL
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => void toggleActive(ep)} disabled={busy}>
-                          {ep.is_active ? "Desactivar" : "Activar"}
+                        <Button size="sm" variant="outline" onClick={() => void toggleActive(endpoint)} disabled={busy}>
+                          {endpoint.is_active ? "Desactivar" : "Activar"}
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => void rotateToken(ep.id)} disabled={busy}>
+                        <Button size="sm" variant="outline" onClick={() => void rotateToken(endpoint.id)} disabled={busy}>
                           Rotar token
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => void removeEndpoint(ep.id)} disabled={busy}>
+                        <Button size="sm" variant="outline" onClick={() => void removeEndpoint(endpoint.id, endpoint.label)} disabled={busy}>
                           Eliminar
                         </Button>
                       </div>
                     </div>
                   </div>
                 );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              })
+            )}
+          </CardContent>
+        </Card>
+      </section>
     </main>
   );
 }

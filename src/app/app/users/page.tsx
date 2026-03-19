@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Loader } from "@/components/ui/loader";
 import { USAGE_CAPTURE_SUBMODULE_PREFIX } from "@/lib/access/moduleKeys";
 
@@ -152,6 +156,8 @@ export default function UsersAdminPage() {
     [selectedEditMemberType, usageCaptureSubmodules]
   );
   const canInviteEmail = nowTs >= inviteCooldownUntil;
+  const activeTemplateCount = useMemo(() => memberTypes.filter((type) => type.is_active).length, [memberTypes]);
+  const ownerCount = useMemo(() => members.filter((member) => member.role === "owner").length, [members]);
 
   async function getTokenOrRedirect() {
     const { data } = await supabaseAuth.auth.getSession();
@@ -541,221 +547,256 @@ export default function UsersAdminPage() {
 
   if (loading) {
     return (
-      <main style={{ minHeight: "60vh", padding: 16, maxWidth: 980, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Loader label="Cargando usuarios..." />
+      <main className="mx-auto flex min-h-[60vh] max-w-[1400px] items-center justify-center px-4 py-4">
+        <Loader label="Cargando usuarios..." />
       </main>
     );
   }
 
   return (
-    <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
-      <h2>Usuarios</h2>
-      <p style={{ opacity: 0.75, marginTop: 6 }}>
-        Invita usuarios por correo y gestiona accesos de esta organización.
-      </p>
-
-      {(error || message) && (
-        <div style={{ marginTop: 12 }}>
-          {error && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{error}</p>}
-          {message && <p style={{ color: "green", whiteSpace: "pre-wrap" }}>{message}</p>}
-        </div>
-      )}
-
-      <section style={{ marginTop: 16, border: "1px solid #eee", padding: 12 }}>
-        <h3 style={{ marginTop: 0 }}>Invitar usuario</h3>
-        <p style={{ marginTop: 4, opacity: 0.75 }}>
-          La invitación define el acceso base. Los permisos finos se pueden ajustar después por miembro.
-        </p>
-
-        <div style={{ display: "grid", gap: 10 }}>
+    <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
+      <section className="rounded-[26px] border border-[rgba(17,32,28,0.08)] bg-[linear-gradient(180deg,rgba(251,253,252,0.98),rgba(245,249,248,0.96))] p-4 shadow-[0_20px_60px_-44px_rgba(15,23,42,0.3)]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <label>Email</label>
-            <input
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                setError("");
-              }}
-              placeholder="persona@empresa.com"
-              type="email"
-              style={{ width: "100%", padding: 10, marginTop: 6 }}
-              disabled={busy}
-            />
-            {!canInviteEmail && normalizedEmail ? (
-              <div style={{ marginTop: 6, fontSize: 12, color: "#92400e" }}>
-                Supabase enfrió este correo. Reintenta en {Math.max(1, Math.ceil((inviteCooldownUntil - nowTs) / 1000))}s.
-              </div>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="bg-slate-900 text-white hover:bg-slate-900">Configuración</Badge>
+              <Badge variant="secondary" className="bg-amber-50 text-amber-700 hover:bg-amber-50">
+                Usuarios
+              </Badge>
+            </div>
+            <h1 className="mt-2 text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
+              Accesos, invitaciones y plantillas
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Administra miembros de la organización, roles base y plantillas de permisos reutilizables.
+            </p>
           </div>
-
-          <div>
-            <label>Rol base</label>
-            <select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value as Role)}
-              style={{ width: "100%", padding: 10, marginTop: 6 }}
-              disabled={busy}
-            >
-              <option value="viewer">viewer</option>
-              <option value="member">member</option>
-              <option value="admin">admin</option>
-              {canManageTypes ? <option value="owner">owner</option> : null}
-            </select>
+          <div className="grid gap-2 sm:grid-cols-4">
+            <Card className="border-slate-200/80 bg-white shadow-none">
+              <CardContent className="px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Miembros</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{members.length}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200/80 bg-white shadow-none">
+              <CardContent className="px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Plantillas</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{memberTypes.length}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200/80 bg-white shadow-none">
+              <CardContent className="px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Activas</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{activeTemplateCount}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200/80 bg-white shadow-none">
+              <CardContent className="px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Owners</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{ownerCount}</div>
+              </CardContent>
+            </Card>
           </div>
-
-          <div>
-            <label>Plantilla de permisos</label>
-            <select
-              value={memberTypeId}
-              onChange={(e) => setMemberTypeId(e.target.value)}
-              style={{ width: "100%", padding: 10, marginTop: 6 }}
-              disabled={busy}
-            >
-              <option value="">Sin plantilla</option>
-              {inviteCompatibleMemberTypes.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-            {inviteMemberTypeSummary ? (
-              <div style={{ marginTop: 8, padding: 10, border: "1px solid #eee", borderRadius: 8, background: "#fafafa" }}>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
-                  Plantilla activa: {selectedInviteMemberType?.name} · rol base {inviteMemberTypeSummary.baseRole}
-                </div>
-                <div style={{ fontSize: 12, opacity: 0.85 }}>
-                  Módulos: {inviteMemberTypeSummary.baseModules.join(", ") || "Sin módulos visibles"}
-                </div>
-                {inviteMemberTypeSummary.usageSubmodules.length > 0 ? (
-                  <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>
-                    Captura enfocada: {inviteMemberTypeSummary.usageSubmodules.join(", ")}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-
-          <button onClick={invite} disabled={busy || !canInviteEmail} style={{ padding: 12, width: "100%" }}>
-            {busy ? "Invitando..." : !canInviteEmail ? `Espera ${Math.max(1, Math.ceil((inviteCooldownUntil - nowTs) / 1000))}s` : "Invitar"}
-          </button>
         </div>
       </section>
 
-      {canManageTypes ? (
-        <section style={{ marginTop: 16, border: "1px solid #eee", padding: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-            <h3 style={{ marginTop: 0, marginBottom: 0 }}>Tipos de miembro (owner)</h3>
-            <button
-              onClick={() => setShowCreateTypeForm((v) => !v)}
-              disabled={busy}
-              style={{ padding: 10 }}
-            >
-              {showCreateTypeForm ? "Ocultar creación" : "Nueva plantilla"}
-            </button>
-          </div>
+      {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 whitespace-pre-wrap">{error}</div> : null}
+      {message ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 whitespace-pre-wrap">{message}</div> : null}
 
-          {showCreateTypeForm ? (
-            <div style={{ display: "grid", gap: 10, marginTop: 12, marginBottom: 12 }}>
-              <input
-                value={newTypeName}
-                onChange={(e) => setNewTypeName(e.target.value)}
-                placeholder="Ej: Operador, Auditor"
-                style={{ width: "100%", padding: 10 }}
-                disabled={busy}
-              />
-              <div>
-                <label>Rol base de la plantilla</label>
-                <select
-                  value={newTypeBaseRole}
-                  onChange={(e) => setNewTypeBaseRole(e.target.value as Role)}
-                  style={{ width: "100%", padding: 10, marginTop: 6 }}
+      <section className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
+        <div className="space-y-4">
+          <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.84)]">
+            <CardHeader className="pb-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Invitación</div>
+              <CardTitle className="text-base sm:text-lg">Invitar usuario</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-slate-500">
+                La invitación define el acceso base. Los permisos finos se pueden ajustar después por miembro.
+              </p>
+
+              <div className="grid gap-2">
+                <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Email</label>
+                <Input
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setError("");
+                  }}
+                  placeholder="persona@empresa.com"
+                  type="email"
                   disabled={busy}
-                >
-                  <option value="viewer">viewer</option>
-                  <option value="member">member</option>
-                  <option value="admin">admin</option>
-                  <option value="owner">owner</option>
-                </select>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8 }}>
-                {MODULE_KEYS.map((m) => (
-                  <label key={m} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                    <input
-                      type="checkbox"
-                      checked={newTypeModules.includes(m)}
-                      onChange={() => toggleNewTypeModule(m)}
-                      disabled={busy}
-                    />
-                    {m}
-                  </label>
-                ))}
-              </div>
-              {newTypeModules.includes("usage_capture") && usageCaptureSubmodules.length > 0 ? (
-                <div style={{ display: "grid", gap: 6, padding: 8, border: "1px solid #eee", borderRadius: 8 }}>
-                  <div style={{ fontSize: 12, opacity: 0.8 }}>Submódulos captura enfocada (tipos de entidad)</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8 }}>
-                    {usageCaptureSubmodules.map((s) => (
-                      <label key={s.module_key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                        <input
-                          type="checkbox"
-                          checked={newTypeModules.includes(s.module_key)}
-                          onChange={() => toggleNewTypeModule(s.module_key)}
-                          disabled={busy}
-                        />
-                        {s.entity_type_name}
-                      </label>
-                    ))}
+                />
+                {!canInviteEmail && normalizedEmail ? (
+                  <div className="text-xs text-amber-700">
+                    Supabase enfrió este correo. Reintenta en {Math.max(1, Math.ceil((inviteCooldownUntil - nowTs) / 1000))}s.
                   </div>
+                ) : null}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="grid gap-2">
+                  <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Rol base</label>
+                  <select
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value as Role)}
+                    className="h-10 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 text-sm"
+                    disabled={busy}
+                  >
+                    <option value="viewer">viewer</option>
+                    <option value="member">member</option>
+                    <option value="admin">admin</option>
+                    {canManageTypes ? <option value="owner">owner</option> : null}
+                  </select>
+                </div>
+
+                <div className="grid gap-2">
+                  <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Plantilla</label>
+                  <select
+                    value={memberTypeId}
+                    onChange={(e) => setMemberTypeId(e.target.value)}
+                    className="h-10 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 text-sm"
+                    disabled={busy}
+                  >
+                    <option value="">Sin plantilla</option>
+                    {inviteCompatibleMemberTypes.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {inviteMemberTypeSummary ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm">
+                  <div className="font-medium text-slate-800">
+                    Plantilla activa: {selectedInviteMemberType?.name} · rol base {inviteMemberTypeSummary.baseRole}
+                  </div>
+                  <div className="mt-1 text-slate-500">
+                    Módulos: {inviteMemberTypeSummary.baseModules.join(", ") || "Sin módulos visibles"}
+                  </div>
+                  {inviteMemberTypeSummary.usageSubmodules.length > 0 ? (
+                    <div className="mt-1 text-slate-500">
+                      Captura enfocada: {inviteMemberTypeSummary.usageSubmodules.join(", ")}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button onClick={createMemberType} disabled={busy} style={{ padding: 10, width: 220 }}>
-                  Crear tipo
-                </button>
-                <button
-                  onClick={() => setShowCreateTypeForm(false)}
-                  disabled={busy}
-                  style={{ padding: 10 }}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          ) : null}
 
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Tipo</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Rol base</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Módulos visibles</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Acción</th>
-                </tr>
-              </thead>
-              <tbody>
+              <Button onClick={invite} disabled={busy || !canInviteEmail} className="w-full">
+                {busy ? "Invitando..." : !canInviteEmail ? `Espera ${Math.max(1, Math.ceil((inviteCooldownUntil - nowTs) / 1000))}s` : "Invitar"}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {canManageTypes ? (
+            <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.84)]">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Plantillas</div>
+                    <CardTitle className="text-base sm:text-lg">Tipos de miembro</CardTitle>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setShowCreateTypeForm((v) => !v)} disabled={busy}>
+                    {showCreateTypeForm ? "Ocultar" : "Nueva plantilla"}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {showCreateTypeForm ? (
+                  <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <Input
+                      value={newTypeName}
+                      onChange={(e) => setNewTypeName(e.target.value)}
+                      placeholder="Ej: Operador, Auditor"
+                      disabled={busy}
+                    />
+                    <div className="grid gap-2">
+                      <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Rol base</label>
+                      <select
+                        value={newTypeBaseRole}
+                        onChange={(e) => setNewTypeBaseRole(e.target.value as Role)}
+                        className="h-10 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 text-sm"
+                        disabled={busy}
+                      >
+                        <option value="viewer">viewer</option>
+                        <option value="member">member</option>
+                        <option value="admin">admin</option>
+                        <option value="owner">owner</option>
+                      </select>
+                    </div>
+                    <div className="grid gap-2">
+                      <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Módulos visibles</div>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {MODULE_KEYS.map((m) => (
+                          <label key={m} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={newTypeModules.includes(m)}
+                              onChange={() => toggleNewTypeModule(m)}
+                              disabled={busy}
+                            />
+                            {m}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    {newTypeModules.includes("usage_capture") && usageCaptureSubmodules.length > 0 ? (
+                      <div className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3">
+                        <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
+                          Submódulos de captura
+                        </div>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          {usageCaptureSubmodules.map((s) => (
+                            <label key={s.module_key} className="flex items-center gap-2 text-sm text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={newTypeModules.includes(s.module_key)}
+                                onChange={() => toggleNewTypeModule(s.module_key)}
+                                disabled={busy}
+                              />
+                              {s.entity_type_name}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="flex gap-2">
+                      <Button onClick={createMemberType} disabled={busy}>Crear tipo</Button>
+                      <Button variant="outline" onClick={() => setShowCreateTypeForm(false)} disabled={busy}>Cancelar</Button>
+                    </div>
+                  </div>
+                ) : null}
+                <p className="text-sm text-slate-500">
+                  Las plantillas permiten reutilizar combinaciones de módulos y restringir capturas por tipo de entidad.
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
+        </div>
+
+        <div className="space-y-4">
+          {canManageTypes ? (
+            <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.84)]">
+              <CardHeader className="pb-3">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Plantillas existentes</div>
+                <CardTitle className="text-base sm:text-lg">Catálogo de tipos de miembro</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 pt-0">
                 {memberTypes.map((t) => (
-                  <tr key={t.id}>
-                    <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
-                      {editingTypeId === t.id ? (
-                        <input
+                  <div key={t.id} className="rounded-[22px] border border-slate-200/80 bg-white px-4 py-4 shadow-[0_16px_40px_-36px_rgba(15,23,42,0.45)]">
+                    {editingTypeId === t.id ? (
+                      <div className="space-y-4">
+                        <Input
                           value={editTypeName}
                           onChange={(e) => setEditTypeName(e.target.value)}
-                          style={{ width: "100%", padding: 8 }}
                           disabled={busy}
                         />
-                      ) : (
-                        <>
-                          {t.name} {t.is_system ? "(sistema)" : ""} {t.is_active ? "" : "[inactivo]"}
-                        </>
-                      )}
-                    </td>
-                    <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
-                      {editingTypeId === t.id ? (
                         <select
                           value={editTypeBaseRole}
                           onChange={(e) => setEditTypeBaseRole(e.target.value as Role)}
-                          style={{ width: "100%", padding: 8 }}
+                          className="h-10 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 text-sm"
                           disabled={busy}
                         >
                           <option value="viewer">viewer</option>
@@ -763,139 +804,144 @@ export default function UsersAdminPage() {
                           <option value="admin">admin</option>
                           <option value="owner">owner</option>
                         </select>
-                      ) : (
-                        t.base_role
-                      )}
-                    </td>
-                    <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8, fontSize: 12 }}>
-                      {editingTypeId === t.id ? (
-                        <>
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8 }}>
-                            {MODULE_KEYS.map((m) => (
-                              <label key={m} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <input
-                                  type="checkbox"
-                                  checked={editTypeModules.includes(m)}
-                                  onChange={() => toggleEditTypeModule(m)}
-                                  disabled={busy}
-                                />
-                                {m}
-                              </label>
-                            ))}
-                          </div>
-                          {editTypeModules.includes("usage_capture") && usageCaptureSubmodules.length > 0 ? (
-                            <div style={{ display: "grid", gap: 6, marginTop: 8, padding: 8, border: "1px solid #eee", borderRadius: 8 }}>
-                              <div style={{ fontSize: 12, opacity: 0.8 }}>Submódulos captura enfocada (tipos de entidad)</div>
-                              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8 }}>
-                                {usageCaptureSubmodules.map((s) => (
-                                  <label key={s.module_key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                    <input
-                                      type="checkbox"
-                                      checked={editTypeModules.includes(s.module_key)}
-                                      onChange={() => toggleEditTypeModule(s.module_key)}
-                                      disabled={busy}
-                                    />
-                                    {s.entity_type_name}
-                                  </label>
-                                ))}
-                              </div>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          {MODULE_KEYS.map((m) => (
+                            <label key={m} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={editTypeModules.includes(m)}
+                                onChange={() => toggleEditTypeModule(m)}
+                                disabled={busy}
+                              />
+                              {m}
+                            </label>
+                          ))}
+                        </div>
+                        {editTypeModules.includes("usage_capture") && usageCaptureSubmodules.length > 0 ? (
+                          <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Submódulos de captura</div>
+                            <div className="grid gap-2 md:grid-cols-2">
+                              {usageCaptureSubmodules.map((s) => (
+                                <label key={s.module_key} className="flex items-center gap-2 text-sm text-slate-700">
+                                  <input
+                                    type="checkbox"
+                                    checked={editTypeModules.includes(s.module_key)}
+                                    onChange={() => toggleEditTypeModule(s.module_key)}
+                                    disabled={busy}
+                                  />
+                                  {s.entity_type_name}
+                                </label>
+                              ))}
                             </div>
-                          ) : null}
-                        </>
-                      ) : (
-                        t.modules.filter((m) => m.can_view).map((m) => m.module_key).join(", ") || "—"
-                      )}
-                    </td>
-                    <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
-                      {!t.is_system ? (
-                        editingTypeId === t.id ? (
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <button onClick={() => void saveMemberTypeEdits(t.id)} disabled={busy} style={{ padding: 8 }}>
-                              Guardar
-                            </button>
-                            <button onClick={cancelEditMemberType} disabled={busy} style={{ padding: 8 }}>
-                              Cancelar
-                            </button>
+                          </div>
+                        ) : null}
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" onClick={() => void saveMemberTypeEdits(t.id)} disabled={busy}>Guardar</Button>
+                          <Button variant="outline" size="sm" onClick={cancelEditMemberType} disabled={busy}>Cancelar</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="text-base font-semibold text-slate-900">{t.name}</div>
+                            <Badge variant="secondary" className="bg-slate-100 text-slate-700 hover:bg-slate-100">{t.base_role}</Badge>
+                            {t.is_system ? <Badge variant="secondary" className="bg-sky-50 text-sky-700 hover:bg-sky-50">Sistema</Badge> : null}
+                            {!t.is_active ? <Badge variant="secondary" className="bg-slate-100 text-slate-600 hover:bg-slate-100">Inactivo</Badge> : null}
+                          </div>
+                          <div className="text-sm text-slate-500">
+                            {t.modules.filter((m) => m.can_view).map((m) => m.module_key).join(", ") || "Sin módulos visibles"}
+                          </div>
+                        </div>
+                        {!t.is_system ? (
+                          <div className="flex flex-wrap gap-2">
+                            <Button variant="outline" size="sm" onClick={() => startEditMemberType(t)} disabled={busy}>Editar</Button>
+                            <Button variant="outline" size="sm" onClick={() => void deleteMemberType(t.id)} disabled={busy}>Eliminar</Button>
                           </div>
                         ) : (
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <button onClick={() => startEditMemberType(t)} disabled={busy} style={{ padding: 8 }}>
-                              Editar
-                            </button>
-                            <button onClick={() => void deleteMemberType(t.id)} disabled={busy} style={{ padding: 8 }}>
-                              Eliminar
-                            </button>
-                          </div>
-                        )
-                      ) : (
-                        <span style={{ opacity: 0.6, fontSize: 12 }}>Protegido</span>
-                      )}
-                    </td>
-                  </tr>
+                          <div className="text-xs text-slate-500">Protegido por sistema</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
+              </CardContent>
+            </Card>
+          ) : null}
 
-      <section style={{ marginTop: 16, border: "1px solid #eee", padding: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-          <h3 style={{ marginTop: 0 }}>Miembros</h3>
-          <button onClick={() => void loadMembers()} disabled={busy || loading} style={{ padding: 10 }}>
-            Refrescar
-          </button>
-        </div>
-
-        {members.length === 0 ? (
-          <p style={{ opacity: 0.75 }}>No hay miembros para mostrar (o no tienes permisos admin/owner).</p>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Email</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Rol base</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Plantilla permisos</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Creado</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 8 }}>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {members.map((m) => {
+          <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.84)]">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Miembros</div>
+                  <CardTitle className="text-base sm:text-lg">Accesos actuales</CardTitle>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => void loadMembers()} disabled={busy || loading}>
+                  Refrescar
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-0">
+              {members.length === 0 ? (
+                <p className="text-sm text-slate-500">No hay miembros para mostrar o no tienes permisos suficientes.</p>
+              ) : (
+                members.map((m) => {
                   const display = m.email || m.user_id;
                   const isOwner = m.role === "owner";
                   const isEditing = editingMemberId === m.user_id;
 
                   return (
-                    <tr key={m.user_id}>
-                      <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
-                        {m.email || <span style={{ opacity: 0.6 }}>(sin email)</span>}
-                      </td>
-                      <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
-                        {isEditing ? (
-                          <select
-                            value={editMemberRole}
-                            onChange={(e) => setEditMemberRole(e.target.value as Role)}
-                            style={{ width: "100%", padding: 8 }}
-                            disabled={busy}
-                          >
-                            <option value="viewer">viewer</option>
-                            <option value="member">member</option>
-                            <option value="admin">admin</option>
-                            {canManageTypes ? <option value="owner">owner</option> : null}
-                          </select>
-                        ) : (
-                          m.role
-                        )}
-                      </td>
-                      <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
-                        {isEditing ? (
-                          <div style={{ display: "grid", gap: 8 }}>
+                    <div key={m.user_id} className="rounded-[22px] border border-slate-200/80 bg-white px-4 py-4 shadow-[0_16px_40px_-36px_rgba(15,23,42,0.45)]">
+                      {!isEditing ? (
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="text-base font-semibold text-slate-900">{m.email || "(sin email)"}</div>
+                              <Badge variant="secondary" className="bg-slate-100 text-slate-700 hover:bg-slate-100">{m.role}</Badge>
+                              {m.member_type_name ? <Badge variant="secondary" className="bg-amber-50 text-amber-700 hover:bg-amber-50">{m.member_type_name}</Badge> : null}
+                            </div>
+                            <div className="text-xs text-slate-500">Creado el {new Date(m.created_at).toLocaleString()}</div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => startEditMember(m)}
+                              disabled={busy || (isOwner && myRole !== "owner")}
+                              title={isOwner && myRole !== "owner" ? "Solo owner puede editar a otro owner" : "Editar permisos"}
+                            >
+                              Editar permisos
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => removeAccess(m.user_id, display)}
+                              disabled={busy || isOwner}
+                              title={isOwner ? "No se puede remover al owner" : "Quitar acceso"}
+                            >
+                              Quitar acceso
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="text-sm font-medium text-slate-900">{m.email || "(sin email)"}</div>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <select
+                              value={editMemberRole}
+                              onChange={(e) => setEditMemberRole(e.target.value as Role)}
+                              className="h-10 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 text-sm"
+                              disabled={busy}
+                            >
+                              <option value="viewer">viewer</option>
+                              <option value="member">member</option>
+                              <option value="admin">admin</option>
+                              {canManageTypes ? <option value="owner">owner</option> : null}
+                            </select>
                             <select
                               value={editMemberTypeId}
                               onChange={(e) => setEditMemberTypeId(e.target.value)}
-                              style={{ width: "100%", padding: 8 }}
+                              className="h-10 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 text-sm"
                               disabled={busy}
                             >
                               <option value="">Sin plantilla</option>
@@ -905,69 +951,35 @@ export default function UsersAdminPage() {
                                 </option>
                               ))}
                             </select>
-                            {editMemberTypeSummary ? (
-                              <div style={{ padding: 8, border: "1px solid #eee", borderRadius: 8, background: "#fafafa", fontSize: 12 }}>
-                                <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                                  {selectedEditMemberType?.name} · rol base {editMemberTypeSummary.baseRole}
-                                </div>
-                                <div>
-                                  Módulos: {editMemberTypeSummary.baseModules.join(", ") || "Sin módulos visibles"}
-                                </div>
-                                {editMemberTypeSummary.usageSubmodules.length > 0 ? (
-                                  <div style={{ marginTop: 4 }}>
-                                    Captura enfocada: {editMemberTypeSummary.usageSubmodules.join(", ")}
-                                  </div>
-                                ) : null}
-                              </div>
-                            ) : null}
                           </div>
-                        ) : (
-                          m.member_type_name || "—"
-                        )}
-                      </td>
-                      <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>{new Date(m.created_at).toLocaleString()}</td>
-                      <td style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          {isEditing ? (
-                            <>
-                              <button
-                                onClick={() => void saveMemberAccess(m.user_id)}
-                                disabled={busy}
-                                style={{ padding: 8 }}
-                              >
-                                Guardar
-                              </button>
-                              <button onClick={cancelEditMember} disabled={busy} style={{ padding: 8 }}>
-                                Cancelar
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              onClick={() => startEditMember(m)}
-                              disabled={busy || (isOwner && myRole !== "owner")}
-                              style={{ padding: 8 }}
-                              title={isOwner && myRole !== "owner" ? "Solo owner puede editar a otro owner" : "Editar permisos"}
-                            >
-                              Editar permisos
-                            </button>
-                          )}
-                          <button
-                            onClick={() => removeAccess(m.user_id, display)}
-                            disabled={busy || isOwner}
-                            style={{ padding: 8 }}
-                            title={isOwner ? "No se puede remover al owner" : "Quitar acceso"}
-                          >
-                            Quitar acceso
-                          </button>
+                          {editMemberTypeSummary ? (
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
+                              <div className="font-medium text-slate-800">
+                                {selectedEditMemberType?.name} · rol base {editMemberTypeSummary.baseRole}
+                              </div>
+                              <div className="mt-1">
+                                Módulos: {editMemberTypeSummary.baseModules.join(", ") || "Sin módulos visibles"}
+                              </div>
+                              {editMemberTypeSummary.usageSubmodules.length > 0 ? (
+                                <div className="mt-1">
+                                  Captura enfocada: {editMemberTypeSummary.usageSubmodules.join(", ")}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" onClick={() => void saveMemberAccess(m.user_id)} disabled={busy}>Guardar</Button>
+                            <Button variant="outline" size="sm" onClick={cancelEditMember} disabled={busy}>Cancelar</Button>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
+                      )}
+                    </div>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                })
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </section>
     </main>
   );
