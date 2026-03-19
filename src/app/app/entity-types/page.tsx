@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 type EntityType = { id: string; name: string; icon: string | null };
 type EntityField = {
@@ -30,6 +35,30 @@ function normalizeAnalyticsMode(value: unknown): EntityField["analytics_mode"] {
   return "none";
 }
 
+function toSlugKey(input: string) {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s_-]/g, "")
+    .replace(/[\s_-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function fieldTypeTone(fieldType: EntityField["field_type"]) {
+  if (fieldType === "number") return "border-sky-200 bg-sky-50 text-sky-700";
+  if (fieldType === "date") return "border-violet-200 bg-violet-50 text-violet-700";
+  if (fieldType === "boolean") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (fieldType === "select") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function analyticsTone(mode: EntityField["analytics_mode"]) {
+  if (mode === "distribution") return "border-cyan-200 bg-cyan-50 text-cyan-700";
+  if (mode === "trend") return "border-indigo-200 bg-indigo-50 text-indigo-700";
+  if (mode === "count") return "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700";
+  return "border-slate-200 bg-slate-50 text-slate-500";
+}
+
 async function getTokenOrRedirect(router: { replace: (href: string) => void }) {
   const { data } = await supabaseAuth.auth.getSession();
   const token = data.session?.access_token;
@@ -45,12 +74,6 @@ export default function EntityTypesPage() {
 
   const [types, setTypes] = useState<EntityType[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
-
-  const selected = useMemo(
-    () => types.find((t) => t.id === selectedId) ?? null,
-    [types, selectedId]
-  );
-
   const [fields, setFields] = useState<EntityField[]>([]);
 
   const [newTypeName, setNewTypeName] = useState("");
@@ -60,36 +83,19 @@ export default function EntityTypesPage() {
   const [newAnalyticsMode, setNewAnalyticsMode] = useState<EntityField["analytics_mode"]>("none");
   const [editingFieldId, setEditingFieldId] = useState<string>("");
   const [fieldDraft, setFieldDraft] = useState<FieldDraft | null>(null);
+  const [typeSearch, setTypeSearch] = useState("");
 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string>("");
-  const [isMobile, setIsMobile] = useState(false);
-  const controlStyle: React.CSSProperties = {
-    width: "100%",
-    minWidth: 0,
-    padding: "10px 12px",
-    border: "1px solid #d9e0ea",
-    borderRadius: 10,
-    background: "#fff",
-    fontSize: 14,
-  };
-  const thStyle: React.CSSProperties = {
-    textAlign: "left",
-    borderBottom: "1px solid #dbe4ef",
-    padding: "10px 8px",
-    fontSize: 12,
-    fontWeight: 700,
-    color: "#41526b",
-    background: "#f6f9fc",
-    whiteSpace: "nowrap",
-  };
-  const tdStyle: React.CSSProperties = {
-    borderBottom: "1px solid #edf2f7",
-    padding: "10px 8px",
-    verticalAlign: "top",
-    fontSize: 14,
-    color: "#0f172a",
-  };
+
+  const selected = useMemo(() => types.find((t) => t.id === selectedId) ?? null, [types, selectedId]);
+  const filteredTypes = useMemo(() => {
+    const needle = typeSearch.trim().toLowerCase();
+    if (!needle) return types;
+    return types.filter((type) => type.name.toLowerCase().includes(needle));
+  }, [types, typeSearch]);
+  const visibleOnCardCount = useMemo(() => fields.filter((field) => field.show_in_card).length, [fields]);
+  const analyticsFieldCount = useMemo(() => fields.filter((field) => field.analytics_mode !== "none").length, [fields]);
 
   useEffect(() => {
     void loadTypes();
@@ -101,15 +107,6 @@ export default function EntityTypesPage() {
     else setFields([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
-
-  useEffect(() => {
-    function handleResize() {
-      setIsMobile(window.innerWidth < 768);
-    }
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
 
   async function loadTypes() {
     setMsg("");
@@ -127,9 +124,13 @@ export default function EntityTypesPage() {
       setMsg(json.error || "No se pudieron cargar tipos");
       return;
     }
+
     const list = Array.isArray(json.entity_types) ? json.entity_types : [];
     setTypes(list);
     if (!selectedId && list.length) setSelectedId(list[0].id);
+    if (selectedId && !list.some((type: EntityType) => type.id === selectedId)) {
+      setSelectedId(list[0]?.id ?? "");
+    }
   }
 
   async function createType() {
@@ -164,8 +165,10 @@ export default function EntityTypesPage() {
       return;
     }
 
+    const createdId = String(json?.entity_type?.id ?? "");
     setNewTypeName("");
     await loadTypes();
+    if (createdId) setSelectedId(createdId);
     setBusy(false);
   }
 
@@ -177,15 +180,15 @@ export default function EntityTypesPage() {
       return;
     }
 
-    const res = await fetch(
-      `/api/entity-fields?entity_type_id=${encodeURIComponent(entityTypeId)}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+    const res = await fetch(`/api/entity-fields?entity_type_id=${encodeURIComponent(entityTypeId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
       setMsg(json.error || "No se pudieron cargar campos");
       return;
     }
+
     const list = Array.isArray(json.entity_fields) ? (json.entity_fields as EntityField[]) : [];
     setFields(
       list.map((field) => ({
@@ -267,7 +270,6 @@ export default function EntityTypesPage() {
 
     setBusy(true);
     setMsg("");
-
     const token = await getTokenOrRedirect(router);
     if (!token) {
       setBusy(false);
@@ -324,425 +326,357 @@ export default function EntityTypesPage() {
   }
 
   return (
-    <main style={{ padding: 12, maxWidth: 1100, margin: "0 auto" }}>
-      <h2>Tipos de entidad</h2>
-      <p style={{ opacity: 0.75, marginTop: 6 }}>
-        Define tipos (Máquina, Persona, etc.) y sus campos personalizados.
-      </p>
-
-      {msg && (
-        <p
-          style={{
-            marginTop: 10,
-            color: msg.toLowerCase().includes("no ") ? "crimson" : "inherit",
-          }}
-        >
-          {msg}
-        </p>
-      )}
-
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-          gap: 16,
-          marginTop: 16,
-        }}
-      >
-        <div style={{ border: "1px solid #eee", padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>Tipos</h3>
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <input
-              value={newTypeName}
-              onChange={(e) => setNewTypeName(e.target.value)}
-              placeholder="Ej: Máquina"
-              style={{ flex: "1 1 220px", minWidth: 0, padding: 10 }}
-              disabled={busy}
-            />
-            <button onClick={createType} disabled={busy} style={{ padding: "10px 12px", flex: "0 0 auto" }}>
-              Crear
-            </button>
+    <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
+      <section className="rounded-[26px] border border-[rgba(17,32,28,0.08)] bg-[linear-gradient(180deg,rgba(251,253,252,0.98),rgba(245,249,248,0.96))] p-4 shadow-[0_20px_60px_-44px_rgba(15,23,42,0.3)]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="bg-slate-900 text-white hover:bg-slate-900">Configuración</Badge>
+              <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
+                Tipos de entidad
+              </Badge>
+            </div>
+            <h1 className="mt-2 text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
+              Estructura base de entidades
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Define los tipos operativos y los campos que describen cada entidad.
+            </p>
           </div>
-
-          <div style={{ marginTop: 12 }}>
-            {types.length === 0 ? (
-              <p style={{ opacity: 0.7 }}>Aún no hay tipos.</p>
-            ) : (
-              isMobile ? (
-                <select
-                  value={selectedId}
-                  onChange={(e) => setSelectedId(e.target.value)}
-                  style={{ width: "100%", padding: 10 }}
-                  disabled={busy}
-                >
-                  {types.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-              ) : (
-                <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-                  {types.map((t) => (
-                    <li key={t.id} style={{ marginBottom: 8 }}>
-                      <button
-                        onClick={() => setSelectedId(t.id)}
-                        style={{
-                          width: "100%",
-                          textAlign: "left",
-                          padding: 10,
-                          border: "1px solid #eee",
-                          background: t.id === selectedId ? "#f7f7f7" : "white",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <strong>{t.name}</strong>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )
-            )}
+          <div className="grid gap-2 sm:grid-cols-3">
+            <Card className="border-slate-200/80 bg-white shadow-none">
+              <CardContent className="px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Tipos</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{types.length}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200/80 bg-white shadow-none">
+              <CardContent className="px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Campos visibles</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{visibleOnCardCount}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200/80 bg-white shadow-none">
+              <CardContent className="px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Analíticos</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{analyticsFieldCount}</div>
+              </CardContent>
+            </Card>
           </div>
         </div>
+      </section>
 
-        <div style={{ border: "1px solid #eee", padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>Campos del tipo</h3>
+      {msg ? (
+        <div className={cn(
+          "rounded-2xl border px-4 py-3 text-sm",
+          "border-rose-200 bg-rose-50 text-rose-700"
+        )}>
+          {msg}
+        </div>
+      ) : null}
 
+      <section className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
+        <div className="space-y-4">
+          <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.84)]">
+            <CardHeader className="pb-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Nuevo tipo</div>
+              <CardTitle className="text-base sm:text-lg">Crear tipo de entidad</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Input
+                value={newTypeName}
+                onChange={(e) => setNewTypeName(e.target.value)}
+                placeholder="Ej: Máquina, Vehículo, Persona"
+                disabled={busy}
+              />
+              <Button onClick={createType} disabled={busy || !newTypeName.trim()} className="w-full">
+                Crear tipo
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.84)]">
+            <CardHeader className="pb-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Navegación</div>
+              <CardTitle className="text-base sm:text-lg">Tipos disponibles</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Input
+                value={typeSearch}
+                onChange={(e) => setTypeSearch(e.target.value)}
+                placeholder="Buscar tipo..."
+                disabled={busy}
+              />
+              {filteredTypes.length === 0 ? (
+                <p className="text-sm text-slate-500">No hay tipos para mostrar.</p>
+              ) : (
+                <div className="grid gap-2">
+                  {filteredTypes.map((type) => {
+                    const active = type.id === selectedId;
+                    return (
+                      <button
+                        key={type.id}
+                        type="button"
+                        onClick={() => setSelectedId(type.id)}
+                        disabled={busy}
+                        className={cn(
+                          "rounded-2xl border px-3 py-3 text-left transition-colors",
+                          active
+                            ? "border-slate-300 bg-slate-900 text-white"
+                            : "border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+                        )}
+                      >
+                        <div className="text-sm font-semibold">{type.name}</div>
+                        <div className={cn("mt-1 text-xs", active ? "text-white/70" : "text-slate-500")}>
+                          Abrir estructura de campos
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-4">
           {!selected ? (
-            <p style={{ opacity: 0.7 }}>Selecciona un tipo para ver/crear campos.</p>
+            <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.84)]">
+              <CardContent className="px-6 py-10 text-center text-sm text-slate-500">
+                Selecciona un tipo para configurar sus campos.
+              </CardContent>
+            </Card>
           ) : (
             <>
-              <div
-                style={{
-                  marginBottom: 12,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  border: "1px solid #dbe4ef",
-                  background: "#f8fbff",
-                  borderRadius: 999,
-                  padding: "6px 10px",
-                  fontSize: 13,
-                }}
-              >
-                <span style={{ opacity: 0.75 }}>Tipo seleccionado</span>
-                <strong>{selected.name}</strong>
-              </div>
+              <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.84)]">
+                <CardHeader className="pb-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Tipo seleccionado</div>
+                      <CardTitle className="text-lg sm:text-xl">{selected.name}</CardTitle>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="secondary" className="bg-slate-100 text-slate-700 hover:bg-slate-100">
+                        {fields.length} campos
+                      </Badge>
+                      <Badge variant="secondary" className="bg-sky-50 text-sky-700 hover:bg-sky-50">
+                        {visibleOnCardCount} visibles
+                      </Badge>
+                      <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
+                        {analyticsFieldCount} analíticos
+                      </Badge>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-sm text-slate-500">
+                    Usa este tipo como plantilla estructural para todas las entidades de esta categoría.
+                  </p>
+                </CardContent>
+              </Card>
 
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-                  gap: 10,
-                  border: "1px solid #e6edf5",
-                  background: "linear-gradient(180deg, #fbfdff 0%, #f6f9fc 100%)",
-                  borderRadius: 12,
-                  padding: 12,
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 12, marginBottom: 6, color: "#4f5d75" }}>Nombre del campo</div>
-                  <input
-                    value={newFieldName}
-                    onChange={(e) => setNewFieldName(e.target.value)}
-                    placeholder="Ej: Patente"
-                    style={controlStyle}
-                    disabled={busy}
-                  />
-                </div>
-
-                <div>
-                  <div style={{ fontSize: 12, marginBottom: 6, color: "#4f5d75" }}>Tipo de dato</div>
-                  <select
-                    value={newFieldType}
-                    onChange={(e) => setNewFieldType(e.target.value as EntityField["field_type"])}
-                    style={controlStyle}
-                    disabled={busy}
-                  >
-                    <option value="text">text</option>
-                    <option value="number">number</option>
-                    <option value="date">date</option>
-                    <option value="boolean">boolean</option>
-                    <option value="select">select</option>
-                  </select>
-                </div>
-
-                <div>
-                  <div style={{ fontSize: 12, marginBottom: 6, color: "#4f5d75" }}>Mostrar en tarjeta</div>
-                  <label
-                    style={{
-                      ...controlStyle,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      cursor: "pointer",
-                      userSelect: "none",
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={newShowInCard}
-                      onChange={(e) => setNewShowInCard(e.target.checked)}
+              <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.84)]">
+                <CardHeader className="pb-3">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Nuevo campo</div>
+                  <CardTitle className="text-base sm:text-lg">Agregar campo al tipo</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1.3fr)_180px_180px_180px_auto] xl:items-end">
+                  <div className="grid gap-2">
+                    <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Nombre</label>
+                    <Input
+                      value={newFieldName}
+                      onChange={(e) => setNewFieldName(e.target.value)}
+                      placeholder="Ej: Patente, Serie, Centro de costo"
                       disabled={busy}
                     />
-                    show_in_card
-                  </label>
-                </div>
+                  </div>
 
-                <div>
-                  <div style={{ fontSize: 12, marginBottom: 6, color: "#4f5d75" }}>Modo analítico</div>
-                  <select
-                    value={newAnalyticsMode}
-                    onChange={(e) => setNewAnalyticsMode(e.target.value as EntityField["analytics_mode"])}
-                    style={controlStyle}
-                    disabled={busy}
-                  >
-                    <option value="none">analytics: none</option>
-                    <option value="distribution">analytics: distribution</option>
-                    <option value="trend">analytics: trend</option>
-                    <option value="count">analytics: count</option>
-                  </select>
-                </div>
+                  <div className="grid gap-2">
+                    <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Tipo de dato</label>
+                    <select
+                      value={newFieldType}
+                      onChange={(e) => setNewFieldType(e.target.value as EntityField["field_type"])}
+                      className="h-10 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 text-sm"
+                      disabled={busy}
+                    >
+                      <option value="text">Texto</option>
+                      <option value="number">Número</option>
+                      <option value="date">Fecha</option>
+                      <option value="boolean">Booleano</option>
+                      <option value="select">Selección</option>
+                    </select>
+                  </div>
 
-                <div style={{ display: "flex", alignItems: "flex-end" }}>
-                  <button
-                    onClick={createField}
-                    disabled={busy}
-                    style={{
-                      width: "100%",
-                      padding: "10px 12px",
-                      borderRadius: 10,
-                      border: "1px solid #1d4ed8",
-                      background: "#2563eb",
-                      color: "white",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
+                  <div className="grid gap-2">
+                    <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Mostrar en tarjeta</label>
+                    <label className="flex h-10 items-center gap-2 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={newShowInCard}
+                        onChange={(e) => setNewShowInCard(e.target.checked)}
+                        disabled={busy}
+                      />
+                      Visible
+                    </label>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Modo analítico</label>
+                    <select
+                      value={newAnalyticsMode}
+                      onChange={(e) => setNewAnalyticsMode(e.target.value as EntityField["analytics_mode"])}
+                      className="h-10 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 text-sm"
+                      disabled={busy}
+                    >
+                      <option value="none">Sin analítica</option>
+                      <option value="distribution">Distribución</option>
+                      <option value="trend">Tendencia</option>
+                      <option value="count">Conteo</option>
+                    </select>
+                  </div>
+
+                  <Button onClick={createField} disabled={busy || !newFieldName.trim()} className="w-full xl:w-auto">
                     Agregar campo
-                  </button>
-                </div>
-              </div>
+                  </Button>
+                </CardContent>
+              </Card>
 
-              <div style={{ marginTop: 12, overflowX: "auto" }}>
-                {fields.length === 0 ? (
-                  <p style={{ opacity: 0.7 }}>Este tipo aún no tiene campos.</p>
-                ) : (
-                  <table style={{ width: "100%", minWidth: 760, borderCollapse: "separate", borderSpacing: 0 }}>
-                    <thead>
-                      <tr>
-                        <th style={thStyle}>Nombre</th>
-                        <th style={thStyle}>Key</th>
-                        <th style={thStyle}>Tipo</th>
-                        <th style={thStyle}>show_in_card</th>
-                        <th style={thStyle}>analytics_mode</th>
-                        <th style={thStyle}>Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {fields.map((f, idx) => (
-                        <tr key={f.id} style={{ background: idx % 2 === 0 ? "#ffffff" : "#fbfdff" }}>
-                          <td style={tdStyle}>
-                            {editingFieldId === f.id ? (
-                              <input
-                                value={fieldDraft?.name ?? ""}
-                                onChange={(e) =>
-                                  setFieldDraft((prev) => (prev ? { ...prev, name: e.target.value } : prev))
-                                }
-                                style={controlStyle}
-                                disabled={busy}
-                              />
-                            ) : (
-                              <strong>{f.name}</strong>
-                            )}
-                          </td>
-                          <td
-                            style={{
-                              ...tdStyle,
-                              fontFamily: "monospace",
-                            }}
+              <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.84)]">
+                <CardHeader className="pb-3">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Estructura</div>
+                  <CardTitle className="text-base sm:text-lg">Campos configurados</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {fields.length === 0 ? (
+                    <p className="text-sm text-slate-500">Este tipo aún no tiene campos configurados.</p>
+                  ) : (
+                    <div className="grid gap-3">
+                      {fields.map((field) => {
+                        const isEditing = editingFieldId === field.id;
+                        return (
+                          <div
+                            key={field.id}
+                            className="rounded-[22px] border border-slate-200 bg-[rgba(248,250,252,0.82)] p-4"
                           >
-                            {editingFieldId === f.id ? (
-                              <input
-                                value={fieldDraft?.key ?? ""}
-                                onChange={(e) =>
-                                  setFieldDraft((prev) => (prev ? { ...prev, key: e.target.value } : prev))
-                                }
-                                style={{ ...controlStyle, fontFamily: "monospace" }}
-                                disabled={busy}
-                              />
-                            ) : (
-                              f.key
-                            )}
-                          </td>
-                          <td style={tdStyle}>
-                            {editingFieldId === f.id ? (
-                              <select
-                                value={fieldDraft?.field_type ?? "text"}
-                                onChange={(e) =>
-                                  setFieldDraft((prev) =>
-                                    prev
-                                      ? { ...prev, field_type: e.target.value as EntityField["field_type"] }
-                                      : prev
-                                  )
-                                }
-                                style={controlStyle}
-                                disabled={busy}
-                              >
-                                <option value="text">text</option>
-                                <option value="number">number</option>
-                                <option value="date">date</option>
-                                <option value="boolean">boolean</option>
-                                <option value="select">select</option>
-                              </select>
-                            ) : (
-                              <span
-                                style={{
-                                  display: "inline-block",
-                                  border: "1px solid #dbe4ef",
-                                  background: "#f8fbff",
-                                  borderRadius: 999,
-                                  padding: "3px 8px",
-                                  fontSize: 12,
-                                }}
-                              >
-                                {f.field_type}
-                              </span>
-                            )}
-                          </td>
-                          <td style={tdStyle}>
-                            {editingFieldId === f.id ? (
-                              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(fieldDraft?.show_in_card)}
-                                  onChange={(e) =>
-                                    setFieldDraft((prev) =>
-                                      prev ? { ...prev, show_in_card: e.target.checked } : prev
-                                    )
-                                  }
-                                  disabled={busy}
-                                />
-                                true
-                              </label>
-                            ) : (
-                              <span
-                                style={{
-                                  display: "inline-block",
-                                  borderRadius: 999,
-                                  padding: "3px 8px",
-                                  fontSize: 12,
-                                  border: `1px solid ${f.show_in_card ? "#86efac" : "#e2e8f0"}`,
-                                  background: f.show_in_card ? "#f0fdf4" : "#f8fafc",
-                                  color: f.show_in_card ? "#166534" : "#475569",
-                                }}
-                              >
-                                {f.show_in_card ? "true" : "false"}
-                              </span>
-                            )}
-                          </td>
-                          <td style={tdStyle}>
-                            {editingFieldId === f.id ? (
-                              <select
-                                value={fieldDraft?.analytics_mode ?? "none"}
-                                onChange={(e) =>
-                                  setFieldDraft((prev) =>
-                                    prev
-                                      ? { ...prev, analytics_mode: e.target.value as EntityField["analytics_mode"] }
-                                      : prev
-                                  )
-                                }
-                                style={controlStyle}
-                                disabled={busy}
-                              >
-                                <option value="none">none</option>
-                                <option value="distribution">distribution</option>
-                                <option value="trend">trend</option>
-                                <option value="count">count</option>
-                              </select>
-                            ) : (
-                              <span
-                                style={{
-                                  display: "inline-block",
-                                  borderRadius: 999,
-                                  padding: "3px 8px",
-                                  fontSize: 12,
-                                  border: "1px solid #bfdbfe",
-                                  background: "#eff6ff",
-                                  color: "#1d4ed8",
-                                }}
-                              >
-                                {f.analytics_mode ?? "none"}
-                              </span>
-                            )}
-                          </td>
-                          <td style={tdStyle}>
-                            {editingFieldId === f.id ? (
-                              <div style={{ display: "flex", gap: 8 }}>
-                                <button
-                                  onClick={saveField}
-                                  disabled={busy}
-                                  style={{
-                                    padding: "7px 10px",
-                                    borderRadius: 8,
-                                    border: "1px solid #1d4ed8",
-                                    background: "#2563eb",
-                                    color: "white",
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  Guardar
-                                </button>
-                                <button
-                                  onClick={cancelEditField}
-                                  disabled={busy}
-                                  style={{
-                                    padding: "7px 10px",
-                                    borderRadius: 8,
-                                    border: "1px solid #cbd5e1",
-                                    background: "white",
-                                    color: "#334155",
-                                  }}
-                                >
-                                  Cancelar
-                                </button>
+                            {isEditing ? (
+                              <div className="grid gap-3 lg:grid-cols-[minmax(220px,1.2fr)_170px_170px_170px_auto] lg:items-end">
+                                <div className="grid gap-2">
+                                  <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Nombre</label>
+                                  <Input
+                                    value={fieldDraft?.name ?? ""}
+                                    onChange={(e) =>
+                                      setFieldDraft((prev) => (prev ? { ...prev, name: e.target.value } : prev))
+                                    }
+                                    disabled={busy}
+                                  />
+                                </div>
+                                <div className="grid gap-2">
+                                  <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Key</label>
+                                  <Input
+                                    value={fieldDraft?.key ?? ""}
+                                    onChange={(e) =>
+                                      setFieldDraft((prev) => (prev ? { ...prev, key: toSlugKey(e.target.value) } : prev))
+                                    }
+                                    disabled={busy}
+                                  />
+                                </div>
+                                <div className="grid gap-2">
+                                  <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Tipo</label>
+                                  <select
+                                    value={fieldDraft?.field_type ?? "text"}
+                                    onChange={(e) =>
+                                      setFieldDraft((prev) =>
+                                        prev ? { ...prev, field_type: e.target.value as EntityField["field_type"] } : prev
+                                      )
+                                    }
+                                    className="h-10 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 text-sm"
+                                    disabled={busy}
+                                  >
+                                    <option value="text">Texto</option>
+                                    <option value="number">Número</option>
+                                    <option value="date">Fecha</option>
+                                    <option value="boolean">Booleano</option>
+                                    <option value="select">Selección</option>
+                                  </select>
+                                </div>
+                                <div className="grid gap-2">
+                                  <label className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Analítica</label>
+                                  <select
+                                    value={fieldDraft?.analytics_mode ?? "none"}
+                                    onChange={(e) =>
+                                      setFieldDraft((prev) =>
+                                        prev
+                                          ? { ...prev, analytics_mode: e.target.value as EntityField["analytics_mode"] }
+                                          : prev
+                                      )
+                                    }
+                                    className="h-10 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 text-sm"
+                                    disabled={busy}
+                                  >
+                                    <option value="none">Sin analítica</option>
+                                    <option value="distribution">Distribución</option>
+                                    <option value="trend">Tendencia</option>
+                                    <option value="count">Conteo</option>
+                                  </select>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button onClick={saveField} disabled={busy} className="flex-1 lg:flex-none">
+                                    Guardar
+                                  </Button>
+                                  <Button onClick={cancelEditField} disabled={busy} variant="outline" className="flex-1 lg:flex-none">
+                                    Cancelar
+                                  </Button>
+                                </div>
+                                <label className="lg:col-span-5 flex items-center gap-2 rounded-[var(--radius-md)] border border-[color:var(--input)] bg-white px-3 py-2 text-sm text-slate-700">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(fieldDraft?.show_in_card)}
+                                    onChange={(e) =>
+                                      setFieldDraft((prev) =>
+                                        prev ? { ...prev, show_in_card: e.target.checked } : prev
+                                      )
+                                    }
+                                    disabled={busy}
+                                  />
+                                  Mostrar este campo en la tarjeta/resumen de la entidad
+                                </label>
                               </div>
                             ) : (
-                              <div style={{ display: "flex", gap: 8 }}>
-                                <button
-                                  onClick={() => startEditField(f)}
-                                  disabled={busy}
-                                  style={{
-                                    padding: "7px 10px",
-                                    borderRadius: 8,
-                                    border: "1px solid #cbd5e1",
-                                    background: "white",
-                                  }}
-                                >
-                                  Editar
-                                </button>
-                                <button
-                                  onClick={() => void deleteField(f.id, f.name)}
-                                  disabled={busy}
-                                  style={{
-                                    padding: "7px 10px",
-                                    borderRadius: 8,
-                                    border: "1px solid #fecaca",
-                                    background: "#fff1f2",
-                                    color: "#be123c",
-                                  }}
-                                >
-                                  Eliminar
-                                </button>
+                              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <h3 className="text-base font-semibold text-slate-900">{field.name}</h3>
+                                    <span className={cn("rounded-full border px-2.5 py-1 text-xs", fieldTypeTone(field.field_type))}>
+                                      {field.field_type}
+                                    </span>
+                                    <span className={cn("rounded-full border px-2.5 py-1 text-xs", analyticsTone(field.analytics_mode))}>
+                                      {field.analytics_mode === "none" ? "sin analítica" : field.analytics_mode}
+                                    </span>
+                                    {field.show_in_card ? (
+                                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">
+                                        visible en tarjeta
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <div className="mt-2 font-mono text-xs text-slate-500">{field.key}</div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button onClick={() => startEditField(field)} disabled={busy} variant="outline">
+                                    Editar
+                                  </Button>
+                                  <Button onClick={() => void deleteField(field.id, field.name)} disabled={busy} variant="outline" className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800">
+                                    Eliminar
+                                  </Button>
+                                </div>
                               </div>
                             )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </>
           )}
         </div>
