@@ -93,42 +93,58 @@ export function DonutChart({
   centerLabel: string;
 }) {
   const total = slices.reduce((acc, slice) => acc + slice.value, 0);
+  const donutCenterX = "30%";
+  const donutCenterY = "50%";
   const option: EChartsOption = {
     animationDuration: 350,
     color: slices.map((slice) => slice.color),
     graphic: [
       {
-        type: "text",
-        left: "24%",
-        top: "42%",
-        style: {
-          text: "Total",
-          textAlign: "center",
-          fill: "#64748b",
-          fontSize: 11,
-          fontFamily: "sans-serif",
-        },
-      },
-      {
-        type: "text",
-        left: "24%",
-        top: "50%",
-        style: {
-          text: formatValue(total),
-          textAlign: "center",
-          fill: "#0f172a",
-          fontSize: 20,
-          fontWeight: 700,
-          fontFamily: "sans-serif",
-        },
+        type: "group",
+        left: donutCenterX,
+        top: donutCenterY,
+        z: 10,
+        bounding: "raw",
+        children: [
+          {
+            type: "text",
+            x: 0,
+            y: -12,
+            style: {
+              text: "Total",
+              textAlign: "center",
+              textVerticalAlign: "middle",
+              fill: "#64748b",
+              fontSize: 11,
+              fontFamily: "sans-serif",
+            },
+          },
+          {
+            type: "text",
+            x: 0,
+            y: 10,
+            style: {
+              text: formatValue(total),
+              textAlign: "center",
+              textVerticalAlign: "middle",
+              fill: "#0f172a",
+              fontSize: 22,
+              fontWeight: 700,
+              fontFamily: "sans-serif",
+            },
+          },
+        ],
       },
     ],
     legend: {
+      type: "scroll",
       orient: "vertical",
       right: 0,
       top: "middle",
       itemWidth: 10,
       itemHeight: 10,
+      icon: "circle",
+      itemGap: 10,
       textStyle: {
         color: "#475569",
         fontSize: 12,
@@ -139,14 +155,14 @@ export function DonutChart({
         const slice = slices.find((item) => item.label === name);
         if (!slice) return name;
         const pct = total > 0 ? Math.round((slice.value / total) * 100) : 0;
-        return `${name}  ${formatValue(slice.value)} (${pct}%)`;
+        return `${name} ${formatValue(slice.value)} (${pct}%)`;
       },
     },
     series: [
       {
         type: "pie",
-        radius: ["56%", "76%"],
-        center: ["24%", "50%"],
+        radius: ["52%", "72%"],
+        center: [donutCenterX, donutCenterY],
         avoidLabelOverlap: true,
         label: { show: false },
         emphasis: {
