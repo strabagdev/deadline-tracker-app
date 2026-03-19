@@ -546,7 +546,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <Link href={isSuperAdmin ? "/app/super-admin" : "/app"} className="min-w-0 truncate text-base font-semibold text-slate-900 sm:text-base">
                     OpsAhead
                   </Link>
-                  {!isSuperAdmin ? <div className="hidden text-xs text-slate-500 lg:block">Navegacion simplificada por flujo de trabajo</div> : null}
+                  {!isSuperAdmin ? <div className="hidden text-xs text-slate-500 lg:block">Inteligencia operativa para equipos y activos</div> : null}
                 </div>
                 {isSuperAdmin ? <Badge variant="secondary" className="shrink-0">Global</Badge> : null}
               </div>
