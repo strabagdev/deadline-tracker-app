@@ -418,9 +418,11 @@ export default function EntityDetailPage() {
                   {entity.fields.map((f) => (
                     <div key={f.id} className="rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--muted)]/70 p-3">
                       <div className="text-sm font-semibold text-slate-900">{f.name}</div>
-                      <div className="mt-1 text-[11px] text-slate-500">
-                        <span className="font-mono">{f.key}</span> · {f.field_type}
-                      </div>
+                      {editMode ? (
+                        <div className="mt-1 text-[11px] text-slate-500">
+                          <span className="font-mono">{f.key}</span> · {f.field_type}
+                        </div>
+                      ) : null}
 
                       {!editMode ? (
                         <div className="mt-3 text-sm">
@@ -439,7 +441,7 @@ export default function EntityDetailPage() {
                         />
                       )}
 
-                      {!editMode && f.value_updated_at ? (
+                      {editMode && f.value_updated_at ? (
                         <div className="mt-2 text-[11px] text-slate-500">
                           actualizado: {new Date(f.value_updated_at).toLocaleString()}
                         </div>

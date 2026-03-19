@@ -183,15 +183,46 @@ function PrimaryNavLink({
     <Link
       href={href}
       className={cn(
-        "inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition-all",
+        "inline-flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-medium transition-all",
         active
           ? "bg-slate-900 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.8)]"
-          : "text-slate-600 hover:bg-white/75 hover:text-slate-900"
+          : "text-slate-600 hover:bg-white/85 hover:text-slate-900"
       )}
     >
       {icon}
       <span>{label}</span>
     </Link>
+  );
+}
+
+function DesktopSectionMenu({
+  href,
+  label,
+  icon,
+  active,
+  items,
+}: {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+  active: boolean;
+  items: SecondaryNavItem[];
+}) {
+  return (
+    <div className="group relative">
+      <PrimaryNavLink href={href} label={label} icon={icon} active={active} />
+      {items.length > 0 ? (
+        <div className="pointer-events-none absolute left-0 top-full z-50 pt-2 opacity-0 transition-all duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+          <div className="min-w-[220px] rounded-2xl border border-slate-200/90 bg-white/96 p-2 shadow-[0_22px_40px_-28px_rgba(15,23,42,0.45)] backdrop-blur-xl">
+            <div className="grid gap-1">
+              {items.map((item) => (
+                <SecondaryNavLink key={item.href} href={item.href} label={item.label} icon={item.icon} />
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -202,10 +233,10 @@ function SecondaryNavLink({ href, label, icon }: { href: string; label: string; 
     <Link
       href={href}
       className={cn(
-        "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-all",
+        "inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-2.5 py-2 text-[13px] transition-all",
         active
-          ? "bg-white text-slate-900 shadow-[0_8px_18px_-16px_rgba(15,23,42,0.45)] ring-1 ring-slate-200/80"
-          : "text-slate-500 hover:bg-white/70 hover:text-slate-800"
+          ? "bg-slate-100 text-slate-900 shadow-[0_8px_18px_-16px_rgba(15,23,42,0.3)] ring-1 ring-slate-200/80"
+          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
       )}
     >
       {icon}
@@ -223,7 +254,6 @@ const PRIMARY_NAV_ITEMS: PrimaryNavItem[] = [
 ];
 
 const SECONDARY_NAV_ITEMS: SecondaryNavItem[] = [
-  { href: "/app", label: "Resumen", moduleKey: "analytics_dashboard", sectionKey: "home", icon: <IconHome /> },
   { href: "/app/operations", label: "Vista operativa", moduleKey: "operations_dashboard", sectionKey: "operations", icon: <IconEntities /> },
   { href: "/app/entities", label: "Entidades", moduleKey: "entities", sectionKey: "operations", icon: <IconEntities /> },
   { href: "/app/usage-capture", label: "Captura de uso", moduleKey: "usage_capture", sectionKey: "operations", icon: <IconUsage /> },
@@ -439,9 +469,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const visiblePrimaryNavItems = React.useMemo(
     () =>
       PRIMARY_NAV_ITEMS.filter((section) =>
-        visibleSecondaryNavItems.some((item) => item.sectionKey === section.key)
+        section.key === "home"
+          ? !allowedModules || allowedModules.has("analytics_dashboard")
+          : visibleSecondaryNavItems.some((item) => item.sectionKey === section.key)
       ),
-    [visibleSecondaryNavItems]
+    [allowedModules, visibleSecondaryNavItems]
   );
   const visibleSecondaryItemsBySection = React.useMemo(() => {
     const grouped = new Map<SectionKey, SecondaryNavItem[]>();
@@ -452,9 +484,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
     return grouped;
   }, [visibleSecondaryNavItems]);
-  const activeSectionItems = activeSection ? (visibleSecondaryItemsBySection.get(activeSection) ?? []) : [];
   const sectionHrefByKey = React.useMemo(() => {
     const entries = PRIMARY_NAV_ITEMS.map((section) => {
+      if (section.key === "home") return [section.key, "/app"] as const;
       const firstVisible = visibleSecondaryNavItems.find((item) => item.sectionKey === section.key);
       return [section.key, firstVisible?.href ?? "/app"] as const;
     });
@@ -475,7 +507,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   const userInfoCapsuleDesktop = !isSuperAdmin ? (
-    <div className="hidden min-w-0 items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-slate-200/70 backdrop-blur-sm xl:flex">
+    <div className="hidden min-w-0 items-center gap-2 rounded-full bg-slate-900/5 px-2.5 py-1 ring-1 ring-slate-200/80 backdrop-blur-sm 2xl:flex">
       {activeOrgLogoUrl ? (
         <img
           src={activeOrgLogoUrl}
@@ -485,13 +517,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           className="h-5 w-5 rounded-md object-cover"
         />
       ) : null}
-      <div className="min-w-0">
-        <div className="truncate text-[11px] font-medium text-slate-700">
-          {activeOrgName || "Sin organización"}
-        </div>
-        <div className="truncate text-[11px] text-slate-500">
-          {sessionEmail || "(sin email)"}
-        </div>
+      <div className="min-w-0 truncate text-[11px] font-medium text-slate-700">
+        {activeOrgName || sessionEmail || "Sin organización"}
       </div>
     </div>
   ) : null;
@@ -520,76 +547,96 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-shell flex min-h-screen flex-col">
-      <header className="sticky top-0 z-40 px-2 py-2 backdrop-blur sm:px-3">
+      <header className="sticky top-0 z-40 px-2 py-2 backdrop-blur-xl sm:px-3">
         <div className={cn("mx-auto", isSuperAdmin ? "max-w-[1100px]" : "max-w-[1400px]")}>
           <div
-            className="flex flex-col gap-3 px-4 py-3"
+            className="flex flex-col gap-3 px-3 py-2.5 lg:px-4 lg:py-2.5"
             style={{
-              background: "linear-gradient(125deg, rgba(241, 248, 245, 0.96), rgba(246, 250, 253, 0.98), rgba(255, 255, 255, 1))",
-              border: "1px solid rgba(212, 222, 230, 0.92)",
+              background: "linear-gradient(140deg, rgba(233, 241, 249, 0.96), rgba(247, 250, 252, 0.98) 48%, rgba(255, 255, 255, 1))",
+              border: "1px solid rgba(189, 201, 214, 0.96)",
               borderRadius: "18px",
-              boxShadow: "0 20px 36px -32px rgba(15, 23, 42, 0.28)",
+              boxShadow: "0 18px 34px -26px rgba(15, 23, 42, 0.32), 0 8px 18px -18px rgba(15, 23, 42, 0.2)",
             }}
           >
-            <div className="flex min-w-0 items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2">
-                {platformLogoUrl ? (
-                  <img
-                    src={platformLogoUrl}
-                    alt="Logo plataforma"
-                    width={38}
-                    height={38}
-                    className="h-11 w-11 rounded-lg object-cover sm:h-9 sm:w-9"
-                  />
-                ) : null}
-                <div className="min-w-0">
-                  <Link href={isSuperAdmin ? "/app/super-admin" : "/app"} className="min-w-0 truncate text-base font-semibold text-slate-900 sm:text-base">
-                    OpsAhead
-                  </Link>
-                  {!isSuperAdmin ? <div className="hidden text-xs text-slate-500 lg:block">Inteligencia operativa para equipos y activos</div> : null}
-                </div>
-                {isSuperAdmin ? <Badge variant="secondary" className="shrink-0">Global</Badge> : null}
-              </div>
-
-              {isSuperAdmin ? (
-                <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:w-auto">
-                  <Link href="/app/super-admin">
-                    <Button variant="outline" size="sm" className="bg-transparent">
-                      Panel global
-                    </Button>
-                  </Link>
-                  <Button onClick={logout} variant="outline" size="sm" className="bg-transparent">
-                    Salir
-                  </Button>
-                </div>
-              ) : (
+            <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
+              <div className="flex min-w-0 items-center justify-between gap-3 lg:flex-none">
                 <div className="flex min-w-0 items-center gap-2">
-                  <div className="min-w-0 lg:hidden">{userInfoCapsuleMobile}</div>
-                  <div className="shrink-0 lg:hidden">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setMobileHeaderMenuOpen(true)}
-                      className="h-11 w-11 rounded-full border-white/70 bg-white/70 px-0 shadow-none backdrop-blur-sm"
-                      aria-label="Abrir menú"
-                      title="Menú"
-                    >
-                      <IconMenu className="h-6 w-6" />
+                  {platformLogoUrl ? (
+                    <img
+                      src={platformLogoUrl}
+                      alt="Logo plataforma"
+                      width={38}
+                      height={38}
+                      className="h-11 w-11 rounded-lg object-cover sm:h-9 sm:w-9"
+                    />
+                  ) : null}
+                  <div className="min-w-0">
+                    <Link href={isSuperAdmin ? "/app/super-admin" : "/app"} className="min-w-0 truncate text-base font-semibold text-slate-950 sm:text-base">
+                      OpsAhead
+                    </Link>
+                    {!isSuperAdmin ? <div className="hidden text-[11px] text-slate-600 xl:block">Inteligencia operativa para equipos y activos</div> : null}
+                  </div>
+                  {isSuperAdmin ? <Badge variant="secondary" className="shrink-0">Global</Badge> : null}
+                </div>
+
+                {isSuperAdmin ? (
+                  <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:w-auto">
+                    <Link href="/app/super-admin">
+                      <Button variant="outline" size="sm" className="bg-white/75">
+                        Panel global
+                      </Button>
+                    </Link>
+                    <Button onClick={logout} variant="outline" size="sm" className="bg-white/75">
+                      Salir
                     </Button>
                   </div>
-                  <div className="hidden min-w-0 items-center gap-2 lg:flex lg:flex-nowrap">
+                ) : (
+                  <div className="flex min-w-0 items-center gap-2 lg:hidden">
+                    <div className="min-w-0">{userInfoCapsuleMobile}</div>
+                    <div className="shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setMobileHeaderMenuOpen(true)}
+                        className="h-11 w-11 rounded-full border-white/70 bg-white/75 px-0 shadow-none backdrop-blur-sm"
+                        aria-label="Abrir menú"
+                        title="Menú"
+                      >
+                        <IconMenu className="h-6 w-6" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {!isSuperAdmin ? (
+                <div className="hidden min-w-0 flex-1 items-center gap-2 lg:flex">
+                  <nav className="flex shrink-0 items-center gap-1 rounded-full bg-slate-900/[0.045] p-1 ring-1 ring-slate-200/80 backdrop-blur-md">
+                    {visiblePrimaryNavItems.map((item) => (
+                      <DesktopSectionMenu
+                        key={item.key}
+                        href={sectionHrefByKey.get(item.key) ?? "/app"}
+                        label={item.label}
+                        icon={item.icon}
+                        active={activeSection === item.key}
+                        items={visibleSecondaryItemsBySection.get(item.key) ?? []}
+                      />
+                    ))}
+                  </nav>
+                  <div className="flex-1" />
+                  <div className="flex shrink-0 items-center gap-2">
                     <Button
                       onClick={refreshApp}
                       variant="outline"
                       size="icon"
-                      className="h-9 w-9 rounded-full border-white/70 bg-white/70 shadow-none backdrop-blur-sm sm:h-10 sm:w-10"
+                      className="h-8 w-8 rounded-full border-white/80 bg-white/78 shadow-none backdrop-blur-sm"
                       title="Refrescar"
                       aria-label="Refrescar"
                     >
                       <IconRefresh />
                     </Button>
                     <Link href="/app/profile" className="block">
-                      <Button variant="outline" size="icon" className="h-9 w-9 rounded-full border-white/70 bg-white/70 shadow-none backdrop-blur-sm sm:h-10 sm:w-10" title="Perfil" aria-label="Perfil">
+                      <Button variant="outline" size="icon" className="h-8 w-8 rounded-full border-white/80 bg-white/78 shadow-none backdrop-blur-sm" title="Perfil" aria-label="Perfil">
                         <IconUser />
                       </Button>
                     </Link>
@@ -597,7 +644,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       onClick={logout}
                       variant="outline"
                       size="icon"
-                      className="h-9 w-9 rounded-full border-white/70 bg-white/70 shadow-none backdrop-blur-sm sm:h-10 sm:w-10"
+                      className="h-8 w-8 rounded-full border-white/80 bg-white/78 shadow-none backdrop-blur-sm"
                       title="Salir"
                       aria-label="Salir"
                     >
@@ -606,31 +653,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     {userInfoCapsuleDesktop}
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
-
-            {!isSuperAdmin ? (
-              <div className="hidden lg:block">
-                <nav className="flex flex-wrap items-center gap-2 rounded-full bg-white/55 p-1.5 ring-1 ring-white/85 backdrop-blur-md">
-                  {visiblePrimaryNavItems.map((item) => (
-                    <PrimaryNavLink
-                      key={item.key}
-                      href={sectionHrefByKey.get(item.key) ?? "/app"}
-                      label={item.label}
-                      icon={item.icon}
-                      active={activeSection === item.key}
-                    />
-                  ))}
-                </nav>
-                {activeSectionItems.length > 1 ? (
-                  <nav className="mt-2 flex flex-wrap items-center gap-2 pl-1">
-                    {activeSectionItems.map((item) => (
-                      <SecondaryNavLink key={item.href} href={item.href} label={item.label} icon={item.icon} />
-                    ))}
-                  </nav>
-                ) : null}
-              </div>
-            ) : null}
           </div>
         </div>
       </header>
@@ -658,7 +682,32 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <div className="grid gap-4">
                 {visiblePrimaryNavItems.map((section) => {
                   const items = visibleSecondaryItemsBySection.get(section.key) ?? [];
-                  if (items.length === 0) return null;
+                  if (items.length === 0) {
+                    const href = sectionHrefByKey.get(section.key) ?? "/app";
+                    const active = section.key === "home"
+                      ? pathname === "/app" || pathname.startsWith("/app/profile")
+                      : pathname === href || (href !== "/app" && pathname.startsWith(href + "/"));
+                    return (
+                      <div key={section.key} className="grid gap-1">
+                        <div className="px-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                          {section.label}
+                        </div>
+                        <Link
+                          href={href}
+                          onClick={() => setMobileHeaderMenuOpen(false)}
+                          className={cn(
+                            "inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm transition-all",
+                            active
+                              ? "bg-slate-900 text-white"
+                              : "text-slate-700 hover:bg-slate-100"
+                          )}
+                        >
+                          {section.icon}
+                          <span className="truncate">{section.label}</span>
+                        </Link>
+                      </div>
+                    );
+                  }
                   return (
                     <div key={section.key} className="grid gap-1">
                       <div className="px-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
