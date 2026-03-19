@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
+import { BarChart, DonutChart, TrendLineChart } from "@/components/charts/echarts";
 import { Loader } from "@/components/ui/loader";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,133 +56,6 @@ const statusColor: Record<Status, string> = {
   green: "#10b981",
   none: "#94a3b8",
 };
-
-function buildDonutGradient(slices: DonutSlice[]) {
-  const total = slices.reduce((acc, s) => acc + s.value, 0);
-  if (total <= 0) return "conic-gradient(#e2e8f0 0deg 360deg)";
-  let acc = 0;
-  const parts: string[] = [];
-  for (const s of slices) {
-    if (s.value <= 0) continue;
-    const start = (acc / total) * 360;
-    acc += s.value;
-    const end = (acc / total) * 360;
-    parts.push(`${s.color} ${start}deg ${end}deg`);
-  }
-  return `conic-gradient(${parts.join(", ")})`;
-}
-
-function DonutChart({ slices, centerLabel }: { slices: DonutSlice[]; centerLabel: string }) {
-  const total = slices.reduce((acc, s) => acc + s.value, 0);
-  const gradient = buildDonutGradient(slices);
-  return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-      <div className="relative h-40 w-40 shrink-0 self-center rounded-full" style={{ background: gradient }}>
-        <div className="absolute inset-[18%] flex items-center justify-center rounded-full bg-white text-center">
-          <div>
-            <div className="text-[11px] text-slate-500">Total</div>
-            <div className="text-lg font-semibold text-slate-800">{total}</div>
-          </div>
-        </div>
-      </div>
-      <div className="grid min-w-0 gap-1 text-xs text-slate-600">
-        {slices.map((s) => {
-          const pct = total > 0 ? Math.round((s.value / total) * 100) : 0;
-          return (
-            <div key={s.label} className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
-                <span className="truncate">{s.label}</span>
-              </div>
-              <span className="shrink-0">{s.value} ({pct}%)</span>
-            </div>
-          );
-        })}
-      </div>
-      <span className="sr-only">{centerLabel}</span>
-    </div>
-  );
-}
-
-function BarChart({ points }: { points: Array<{ label: string; value: number }> }) {
-  const max = points.reduce((acc, p) => Math.max(acc, p.value), 0);
-  return (
-    <div className="grid gap-2">
-      {points.map((p) => {
-        const pct = max > 0 ? Math.max(6, Math.round((p.value / max) * 100)) : 0;
-        return (
-          <div key={p.label} className="grid grid-cols-[minmax(0,1fr)_48px] items-center gap-2 text-xs">
-            <div className="min-w-0">
-              <div className="mb-1 truncate text-slate-600">{p.label}</div>
-              <div className="h-2 rounded bg-slate-100">
-                <div className="h-2 rounded bg-sky-500" style={{ width: `${pct}%` }} />
-              </div>
-            </div>
-            <div className="text-right font-semibold text-slate-700">{p.value}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function TrendLineChart({ points }: { points: Array<{ label: string; value: number }> }) {
-  if (points.length === 0) return null;
-  const max = points.reduce((acc, p) => Math.max(acc, p.value), 1);
-  const width = 360;
-  const height = 140;
-  const padX = 18;
-  const padY = 16;
-  const chartW = width - padX * 2;
-  const chartH = height - padY * 2;
-  const stepX = points.length > 1 ? chartW / (points.length - 1) : 0;
-
-  const coords = points.map((p, idx) => {
-    const x = padX + idx * stepX;
-    const y = padY + chartH - (p.value / max) * chartH;
-    return { x, y, ...p };
-  });
-  const polyline = coords.map((c) => `${c.x},${c.y}`).join(" ");
-
-  return (
-    <div className="space-y-2">
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-36 w-full">
-        <polyline fill="none" stroke="#0ea5e9" strokeWidth="2.5" points={polyline} />
-        {coords.map((c) => (
-          <circle key={c.label} cx={c.x} cy={c.y} r="3.5" fill="#0284c7" />
-        ))}
-      </svg>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-600 sm:grid-cols-3">
-        {points.map((p) => (
-          <div key={p.label} className="truncate">{p.label}: {p.value}</div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function parseTrendLabelTime(label: string): number | null {
-  const raw = String(label ?? "").trim();
-  if (!raw) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    const t = new Date(`${raw}T00:00:00Z`).getTime();
-    return Number.isFinite(t) ? t : null;
-  }
-  if (/^\d{4}-\d{2}$/.test(raw)) {
-    const t = new Date(`${raw}-01T00:00:00Z`).getTime();
-    return Number.isFinite(t) ? t : null;
-  }
-  const t = new Date(raw).getTime();
-  return Number.isFinite(t) ? t : null;
-}
-
-function isTemporalTrend(points: Array<{ label: string; value: number }>) {
-  let temporal = 0;
-  for (const p of points) {
-    if (parseTrendLabelTime(p.label) != null) temporal += 1;
-  }
-  return temporal >= 2;
-}
 
 function MetricTile({
   label,
@@ -392,7 +266,7 @@ export default function AnalyticsDashboardPage() {
           points: slices.map((s) => ({ label: s.label, value: s.value })),
         };
       })
-      .filter((row) => row.slices.length > 0);
+      .filter((row) => (row.mode === "trend" ? row.points.length > 0 : row.slices.length > 0));
   }, [dynamicDistributionByEntityType, entityTypeFilter]);
 
   const dueTrend30 = useMemo(() => {
@@ -573,13 +447,7 @@ export default function AnalyticsDashboardPage() {
                     <DonutChart slices={chart.slices} centerLabel={chart.title} />
                   ) : null}
                   {chart.mode === "count" ? <BarChart points={chart.points} /> : null}
-                  {chart.mode === "trend" ? (
-                    isTemporalTrend(chart.points) ? (
-                      <TrendLineChart points={chart.points} />
-                    ) : (
-                      <BarChart points={chart.points} />
-                    )
-                  ) : null}
+                  {chart.mode === "trend" ? <TrendLineChart points={chart.points} /> : null}
                 </div>
               ))}
             </div>
