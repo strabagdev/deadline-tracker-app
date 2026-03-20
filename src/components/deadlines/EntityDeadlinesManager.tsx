@@ -66,6 +66,7 @@ type UsageUnit = {
   name: string;
   is_active: boolean;
   created_at: string;
+  suggested_values?: string[];
 };
 
 type DeadlineEditDraft = {
@@ -183,9 +184,11 @@ function renderUsageMainValue(l: UsageLogRow) {
 export default function EntityDeadlinesManager({
   entityId,
   tracksUsage,
+  usageUnitId,
 }: {
   entityId: string;
   tracksUsage: boolean;
+  usageUnitId?: string | null;
 }) {
   const [types, setTypes] = useState<DeadlineType[]>([]);
   const [usageUnits, setUsageUnits] = useState<UsageUnit[]>([]);
@@ -225,6 +228,14 @@ export default function EntityDeadlinesManager({
     [availableTypes, deadlineTypeId]
   );
   const usageUnitNameSet = useMemo(() => new Set(usageUnits.map((u) => u.name)), [usageUnits]);
+  const selectedUsageUnit = useMemo(
+    () => usageUnits.find((u) => u.id === String(usageUnitId ?? "")) ?? null,
+    [usageUnitId, usageUnits]
+  );
+  const usageSuggestedValues = useMemo(
+    () => (selectedUsageUnit?.suggested_values ?? []).map((v) => String(v ?? "").trim()).filter((v) => v.length > 0),
+    [selectedUsageUnit]
+  );
   const usageLogExistsForSelectedDay = useMemo(() => {
     const selected = String(usageLogLoggedAt ?? "").trim();
     if (!selected) return false;
@@ -234,10 +245,6 @@ export default function EntityDeadlinesManager({
       return isoToLocalDateInput(log.logged_at) === selected;
     });
   }, [usageLogLoggedAt, usageLogs]);
-  const latestNumericUsageValue = useMemo(() => {
-    const latest = usageLogs.find((log) => Number.isFinite(Number(log.value)));
-    return latest ? Number(latest.value) : null;
-  }, [usageLogs]);
   const usageLogValueNumber = useMemo(() => {
     const raw = String(usageLogValue ?? "").trim();
     if (!raw) return null;
@@ -795,13 +802,38 @@ export default function EntityDeadlinesManager({
               <div className="mt-3 grid gap-2 md:grid-cols-[minmax(180px,1fr)_180px_auto] md:items-end">
                 <label className="grid gap-1 text-xs text-slate-600">
                   Valor de uso
-                  <Input
-                    inputMode="decimal"
-                    value={usageLogValue}
-                    onChange={(e) => setUsageLogValue(e.target.value)}
-                    placeholder="Ej: 1530"
-                    disabled={usageLogsBusy}
-                  />
+                  {usageSuggestedValues.length > 0 ? (
+                    <div className="flex min-h-10 flex-wrap gap-1 rounded-xl border border-slate-300 bg-white px-2 py-2">
+                      {usageSuggestedValues.map((opt) => {
+                        const current = String(usageLogValue ?? "").trim();
+                        const active = current === opt;
+                        return (
+                          <button
+                            key={`usage-suggested-${opt}`}
+                            type="button"
+                            disabled={usageLogsBusy}
+                            onClick={() => setUsageLogValue(current === opt ? "" : opt)}
+                            className={[
+                              "rounded-full border px-2.5 py-1 text-[10px] transition",
+                              active
+                                ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                            ].join(" ")}
+                          >
+                            {opt}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <Input
+                      inputMode="decimal"
+                      value={usageLogValue}
+                      onChange={(e) => setUsageLogValue(e.target.value)}
+                      placeholder={selectedUsageUnit?.name ? `Valor (${selectedUsageUnit.name})` : "Ej: 1530"}
+                      disabled={usageLogsBusy}
+                    />
+                  )}
                 </label>
 
                 <label className="grid gap-1 text-xs text-slate-600">
