@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from "react";
 import * as echarts from "echarts/core";
-import type { ECharts, EChartsOption } from "echarts/core";
+import type { ECharts, EChartsCoreOption } from "echarts/core";
 import {
   BarChart as EChartsBarChart,
   LineChart as EChartsLineChart,
@@ -40,6 +40,12 @@ type ChartPoint = {
   value: number;
 };
 
+type TooltipLikeParam = {
+  name?: string;
+  value?: unknown;
+  percent?: number;
+};
+
 function formatValue(value: number) {
   return new Intl.NumberFormat("es-CL").format(value);
 }
@@ -48,7 +54,7 @@ function BaseEChart({
   option,
   height = 260,
 }: {
-  option: EChartsOption;
+  option: EChartsCoreOption;
   height?: number;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -95,7 +101,7 @@ export function DonutChart({
   const total = slices.reduce((acc, slice) => acc + slice.value, 0);
   const donutCenterX = "30%";
   const donutCenterY = "50%";
-  const option: EChartsOption = {
+  const option: EChartsCoreOption = {
     animationDuration: 350,
     color: slices.map((slice) => slice.color),
     graphic: [
@@ -151,7 +157,7 @@ export function DonutChart({
         overflow: "truncate",
         width: 132,
       },
-      formatter(name) {
+      formatter(name: string) {
         const slice = slices.find((item) => item.label === name);
         if (!slice) return name;
         const pct = total > 0 ? Math.round((slice.value / total) * 100) : 0;
@@ -178,10 +184,10 @@ export function DonutChart({
     ],
     tooltip: {
       trigger: "item",
-      formatter(params) {
+      formatter(params: TooltipLikeParam | TooltipLikeParam[]) {
         const item = Array.isArray(params) ? params[0] : params;
         const percent = typeof item.percent === "number" ? item.percent : 0;
-        return `${item.name}<br/>${formatValue(Number(item.value ?? 0))} (${percent}%)`;
+        return `${item.name ?? ""}<br/>${formatValue(Number(item.value ?? 0))} (${percent}%)`;
       },
     },
     aria: {
@@ -199,7 +205,7 @@ export function BarChart({
 }: {
   points: ChartPoint[];
 }) {
-  const option: EChartsOption = {
+  const option: EChartsCoreOption = {
     animationDuration: 350,
     grid: {
       left: 8,
@@ -211,9 +217,9 @@ export function BarChart({
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "shadow" },
-      formatter(params) {
+      formatter(params: TooltipLikeParam | TooltipLikeParam[]) {
         const item = Array.isArray(params) ? params[0] : params;
-        return `${item.name}<br/>${formatValue(Number(item.value ?? 0))}`;
+        return `${item.name ?? ""}<br/>${formatValue(Number(item.value ?? 0))}`;
       },
     },
     xAxis: {
@@ -254,7 +260,7 @@ export function TrendLineChart({
 }) {
   if (points.length === 0) return null;
 
-  const option: EChartsOption = {
+  const option: EChartsCoreOption = {
     animationDuration: 350,
     grid: {
       left: 8,
@@ -265,9 +271,9 @@ export function TrendLineChart({
     },
     tooltip: {
       trigger: "axis",
-      formatter(params) {
+      formatter(params: TooltipLikeParam | TooltipLikeParam[]) {
         const item = Array.isArray(params) ? params[0] : params;
-        return `${item.name}<br/>${formatValue(Number(item.value ?? 0))}`;
+        return `${item.name ?? ""}<br/>${formatValue(Number(item.value ?? 0))}`;
       },
     },
     xAxis: {
