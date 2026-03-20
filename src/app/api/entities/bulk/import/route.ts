@@ -10,6 +10,7 @@ type ParsedRow = {
   entityId: string | null;
   name: string;
   entityTypeName: string;
+  entityTypeId: string | null;
   tracksUsage: boolean | null;
   tracksUsageProvided: boolean;
   usageUnitId: string | null;
@@ -19,7 +20,20 @@ type ParsedRow = {
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
-  return "error";
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    const parts = [record.message, record.details, record.hint]
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      .map((value) => value.trim());
+    if (parts.length > 0) return parts.join(" | ");
+    if (typeof record.code === "string" && record.code.trim()) return `Error de base de datos (${record.code.trim()})`;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Error sin detalle";
+    }
+  }
+  return "Error sin detalle";
 }
 
 function normalizeHeader(value: string): string {
@@ -77,6 +91,10 @@ function parseBool(value: string): boolean | null {
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function normalizeEntityName(value: string): string {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 export async function POST(req: Request) {
@@ -166,7 +184,7 @@ export async function POST(req: Request) {
       await Promise.all([
         db.from("entity_types").select("id, name").eq("organization_id", orgId),
         db.from("entity_fields").select("id, entity_type_id, key").eq("organization_id", orgId),
-        db.from("entities").select("id, entity_type_id").eq("organization_id", orgId),
+        db.from("entities").select("id, entity_type_id, name").eq("organization_id", orgId),
         db.from("usage_units").select("id, name").eq("organization_id", orgId).eq("is_active", true),
       ]);
     if (typeErr) throw typeErr;
@@ -192,8 +210,10 @@ export async function POST(req: Request) {
     }
 
     const entityTypeById = new Map<string, string>();
-    for (const e of (entities ?? []) as Array<{ id: string; entity_type_id: string }>) {
+    const existingEntityByTypeAndName = new Map<string, { id: string; name: string }>();
+    for (const e of (entities ?? []) as Array<{ id: string; entity_type_id: string; name: string }>) {
       entityTypeById.set(e.id, e.entity_type_id);
+      existingEntityByTypeAndName.set(`${e.entity_type_id}::${normalizeEntityName(e.name)}`, { id: e.id, name: e.name });
     }
     const usageUnitById = new Map<string, { id: string; name: string }>();
     const usageUnitByName = new Map<string, { id: string; name: string }>();
@@ -291,12 +311,40 @@ export async function POST(req: Request) {
         entityId: entityId || null,
         name,
         entityTypeName: typeName,
+        entityTypeId: type?.id ?? null,
         tracksUsage,
         tracksUsageProvided,
         usageUnitId: resolvedUsageUnitId,
         usageUnitProvided,
         fields: fieldMap,
       });
+    }
+
+    const seenLinesByTypeAndName = new Map<string, number[]>();
+    for (const row of parsed) {
+      if (!row.entityTypeId || !row.name.trim()) continue;
+      const duplicateKey = `${row.entityTypeId}::${normalizeEntityName(row.name)}`;
+      const existing = existingEntityByTypeAndName.get(duplicateKey);
+      if (importMode === "create") {
+        if (existing) errors.push({ line: row.line, message: buildDuplicateEntityNameMessage(row.name) });
+      } else if (existing && existing.id !== row.entityId) {
+        errors.push({ line: row.line, message: buildDuplicateEntityNameMessage(row.name) });
+      }
+      const seen = seenLinesByTypeAndName.get(duplicateKey) ?? [];
+      seen.push(row.line);
+      seenLinesByTypeAndName.set(duplicateKey, seen);
+    }
+
+    for (const row of parsed) {
+      if (!row.entityTypeId || !row.name.trim()) continue;
+      const duplicateKey = `${row.entityTypeId}::${normalizeEntityName(row.name)}`;
+      const seen = seenLinesByTypeAndName.get(duplicateKey) ?? [];
+      if (seen.length > 1) {
+        errors.push({
+          line: row.line,
+          message: `El archivo repite el nombre "${row.name}" dentro del mismo tipo.`,
+        });
+      }
     }
 
     if (errors.length > 0) {
@@ -337,6 +385,8 @@ export async function POST(req: Request) {
 
       try {
         let entityId: string | null = row.entityId;
+        let rowCreated = false;
+        let rowUpdated = false;
         if (importMode === "update") {
           if (!entityId) {
             applyErrors.push({ line: row.line, message: "entity_id requerido para actualización masiva" });
@@ -360,7 +410,7 @@ export async function POST(req: Request) {
             .eq("organization_id", orgId)
             .eq("id", entityId);
           if (updErr) throw updErr;
-          updated++;
+          rowUpdated = true;
         } else {
           if (!type) {
             applyErrors.push({ line: row.line, message: `entity_type no encontrado: ${row.entityTypeName}` });
@@ -380,7 +430,7 @@ export async function POST(req: Request) {
             .single();
           if (insErr) throw insErr;
           entityId = String(ins.id);
-          created++;
+          rowCreated = true;
         }
 
         const fieldRows: Array<{ organization_id: string; entity_id: string; entity_field_id: string; value_text: string }> = [];
@@ -400,6 +450,8 @@ export async function POST(req: Request) {
             .upsert(fieldRows, { onConflict: "entity_id,entity_field_id" });
           if (upsertErr) throw upsertErr;
         }
+        if (rowCreated) created++;
+        if (rowUpdated) updated++;
       } catch (e: unknown) {
         if (isDuplicateEntityNameError(e)) {
           applyErrors.push({ line: row.line, message: buildDuplicateEntityNameMessage(row.name) });

@@ -100,6 +100,17 @@ async function getXlsxModule() {
   return (mod as unknown as { default?: typeof mod }).default ?? mod;
 }
 
+function formatImportErrors(errors: unknown): string {
+  if (!Array.isArray(errors) || errors.length === 0) return "";
+  return errors
+    .map((item) => {
+      const line = typeof item?.line === "number" ? item.line : "?";
+      const message = typeof item?.message === "string" ? item.message : "Error sin detalle";
+      return `L${line}: ${message}`;
+    })
+    .join("\n");
+}
+
 export default function EntitiesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -126,7 +137,6 @@ export default function EntitiesPage() {
   const [importStage, setImportStage] = useState<string>("");
   const [importApplying, setImportApplying] = useState<boolean>(false);
   const [importMode, setImportMode] = useState<"update" | "create">("update");
-  const [bulkPanel, setBulkPanel] = useState<"import" | "export">("import");
   const [bulkEntityTypeId, setBulkEntityTypeId] = useState<string>("all");
   const [semaphoreOpen, setSemaphoreOpen] = useState<boolean>(false);
 
@@ -383,11 +393,9 @@ export default function EntitiesPage() {
     });
     const json = await res.json().catch(() => ({}));
     setImportProgress(88);
+    const detailedErrors = formatImportErrors(json?.errors);
     if (!res.ok) {
-      const errs = Array.isArray(json?.errors)
-        ? json.errors.slice(0, 8).map((e: { line: number; message: string }) => `L${e.line}: ${e.message}`).join("\n")
-        : "";
-      setImportResult(`${json.error || "Importación inválida"}${errs ? `\n${errs}` : ""}`);
+      setImportResult(`${json.error || "Importación inválida"}${detailedErrors ? `\n${detailedErrors}` : ""}`);
       setImportCanApply(false);
       setImporting(false);
       setImportApplying(false);
@@ -406,7 +414,7 @@ export default function EntitiesPage() {
       setImportStage("Validación completada");
     } else {
       setImportResult(
-        `Carga aplicada.\nFilas: ${summary.total_rows ?? 0}\nCreadas: ${summary.created ?? 0}\nActualizadas: ${summary.updated ?? 0}\nErrores: ${summary.errors ?? 0}`
+        `Carga aplicada.\nFilas: ${summary.total_rows ?? 0}\nCreadas: ${summary.created ?? 0}\nActualizadas: ${summary.updated ?? 0}\nErrores: ${summary.errors ?? 0}${detailedErrors ? `\n\nDetalle de errores:\n${detailedErrors}` : ""}`
       );
       setImportCanApply(false);
       await load();
@@ -570,13 +578,12 @@ export default function EntitiesPage() {
                   setImportProgress(0);
                   setImportStage("");
                   setImportMode("update");
-                  setBulkPanel("import");
                   setBulkEntityTypeId("all");
                 }}
                 variant="outline"
                 size="sm"
               >
-                Carga masiva
+                Archivos
               </Button>
               <Button onClick={() => setSemaphoreOpen(true)} variant="outline" size="sm">
                 Semáforo
@@ -710,66 +717,10 @@ export default function EntitiesPage() {
               </Button>
             </div>
 
-            <div className="grid gap-2">
-              <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-slate-50 p-2">
-                <Button
-                  size="sm"
-                  variant={bulkPanel === "export" ? "secondary" : "outline"}
-                  onClick={() => setBulkPanel("export")}
-                  disabled={importing}
-                >
-                  Exportar
-                </Button>
-                <Button
-                  size="sm"
-                  variant={bulkPanel === "import" ? "secondary" : "outline"}
-                  onClick={() => setBulkPanel("import")}
-                  disabled={importing}
-                >
-                  Importar
-                </Button>
-              </div>
-
+            <div className="grid gap-3">
               <div className="rounded-xl border bg-slate-50 p-3">
-                {bulkPanel === "import" ? (
-                  <div className="grid gap-1">
-                    <label className="text-xs font-semibold text-slate-700">Importación</label>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant={importMode === "update" ? "secondary" : "outline"}
-                        onClick={() => {
-                          setImportMode("update");
-                          setImportCanApply(false);
-                          setImportProgress(0);
-                          setImportStage("");
-                        }}
-                        disabled={importing}
-                      >
-                        Actualizar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={importMode === "create" ? "secondary" : "outline"}
-                        onClick={() => {
-                          setImportMode("create");
-                          setImportCanApply(false);
-                          setImportProgress(0);
-                          setImportStage("");
-                        }}
-                        disabled={importing}
-                      >
-                        Crear
-                      </Button>
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      {importMode === "update"
-                        ? "Actualizar requiere entity_id en cada fila."
-                        : "Crear ignora entity_id y genera nuevas entidades."}
-                    </p>
-                  </div>
-                ) : null}
-                <div className="mt-3 grid gap-1">
+                <div className="grid gap-1">
+                  <label className="text-xs font-semibold text-slate-700">Contexto de archivo</label>
                   <label className="text-xs font-semibold text-slate-700">Tipo de entidad (opcional)</label>
                   <select
                     value={bulkEntityTypeId}
@@ -790,60 +741,12 @@ export default function EntitiesPage() {
                     ))}
                   </select>
                 </div>
+                <p className="text-[11px] text-slate-500">
+                  El filtro aplica tanto a plantillas como a la exportación, y restringe la importación al tipo seleccionado.
+                </p>
               </div>
 
-              {bulkPanel === "export" ? (
-                <div className="rounded-xl border p-3">
-                  <div className="mb-2 text-xs font-semibold text-slate-700">Descarga</div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const params = new URLSearchParams();
-                        if (bulkEntityTypeId !== "all") params.set("entity_type_id", bulkEntityTypeId);
-                        params.set("mode", "update");
-                        const q = `?${params.toString()}`;
-                        void downloadExcelFromCsvEndpoint(
-                          `/api/entities/bulk/template${q}`,
-                          "entities_template_update.xlsx"
-                        );
-                      }}
-                      disabled={importing}
-                    >
-                      Plantilla actualización
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const params = new URLSearchParams();
-                        if (bulkEntityTypeId !== "all") params.set("entity_type_id", bulkEntityTypeId);
-                        params.set("mode", "create");
-                        const q = `?${params.toString()}`;
-                        void downloadExcelFromCsvEndpoint(
-                          `/api/entities/bulk/template${q}`,
-                          "entities_template_create.xlsx"
-                        );
-                      }}
-                      disabled={importing}
-                    >
-                      Plantilla altas
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const q = bulkEntityTypeId !== "all" ? `?entity_type_id=${encodeURIComponent(bulkEntityTypeId)}` : "";
-                        void downloadExcelFromCsvEndpoint(`/api/entities/bulk/export${q}`, "entities_export.xlsx");
-                      }}
-                      disabled={importing}
-                    >
-                      Exportar entidades Excel
-                    </Button>
-                  </div>
-                </div>
-              ) : (
+              <div className="grid gap-3 lg:grid-cols-[1.5fr_1fr_1fr]">
                 <div className="relative rounded-xl border p-3">
                   {importApplying ? (
                     <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-white/80 backdrop-blur-[1px]">
@@ -881,7 +784,43 @@ export default function EntitiesPage() {
                       </div>
                     </div>
                   ) : null}
-                  <div className="mb-2 text-xs font-semibold text-slate-700">Carga</div>
+                  <div className="mb-2 text-xs font-semibold text-slate-700">Subir archivo</div>
+                  <div className="mb-3 grid gap-1">
+                    <label className="text-xs font-semibold text-slate-700">Modo de importación</label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant={importMode === "update" ? "secondary" : "outline"}
+                        onClick={() => {
+                          setImportMode("update");
+                          setImportCanApply(false);
+                          setImportProgress(0);
+                          setImportStage("");
+                        }}
+                        disabled={importing}
+                      >
+                        Actualizar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={importMode === "create" ? "secondary" : "outline"}
+                        onClick={() => {
+                          setImportMode("create");
+                          setImportCanApply(false);
+                          setImportProgress(0);
+                          setImportStage("");
+                        }}
+                        disabled={importing}
+                      >
+                        Crear
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      {importMode === "update"
+                        ? "Actualizar requiere entity_id en cada fila."
+                        : "Crear ignora entity_id y genera nuevas entidades."}
+                    </p>
+                  </div>
                   <label className="text-xs font-medium text-slate-600">Selecciona archivo</label>
                   <input
                     type="file"
@@ -952,7 +891,68 @@ export default function EntitiesPage() {
                     </Button>
                   ) : null}
                 </div>
-              )}
+
+                <div className="rounded-xl border p-3">
+                  <div className="mb-2 text-xs font-semibold text-slate-700">Descargar plantillas</div>
+                  <p className="mb-3 text-[11px] text-slate-500">
+                    Descarga una planilla base según el flujo que vas a usar.
+                  </p>
+                  <div className="flex flex-col items-stretch gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const params = new URLSearchParams();
+                        if (bulkEntityTypeId !== "all") params.set("entity_type_id", bulkEntityTypeId);
+                        params.set("mode", "update");
+                        const q = `?${params.toString()}`;
+                        void downloadExcelFromCsvEndpoint(
+                          `/api/entities/bulk/template${q}`,
+                          "entities_template_update.xlsx"
+                        );
+                      }}
+                      disabled={importing}
+                    >
+                      Descargar plantilla de actualización
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const params = new URLSearchParams();
+                        if (bulkEntityTypeId !== "all") params.set("entity_type_id", bulkEntityTypeId);
+                        params.set("mode", "create");
+                        const q = `?${params.toString()}`;
+                        void downloadExcelFromCsvEndpoint(
+                          `/api/entities/bulk/template${q}`,
+                          "entities_template_create.xlsx"
+                        );
+                      }}
+                      disabled={importing}
+                    >
+                      Descargar plantilla de altas
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border p-3">
+                  <div className="mb-2 text-xs font-semibold text-slate-700">Descargar entidades</div>
+                  <p className="mb-3 text-[11px] text-slate-500">
+                    Exporta las entidades actuales a Excel para revisión o edición masiva.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const q = bulkEntityTypeId !== "all" ? `?entity_type_id=${encodeURIComponent(bulkEntityTypeId)}` : "";
+                      void downloadExcelFromCsvEndpoint(`/api/entities/bulk/export${q}`, "entities_export.xlsx");
+                    }}
+                    disabled={importing}
+                  >
+                    Exportar entidades Excel
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
