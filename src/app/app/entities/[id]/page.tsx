@@ -485,8 +485,8 @@ export default function EntityDetailPage() {
                 <div className="grid gap-2 xl:grid-cols-2">
                   {entity.fields.map((f) => (
                     <div key={f.id} className="rounded-2xl border border-slate-200 bg-white px-3 py-2.5">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0 sm:max-w-[40%]">
+                      <div className="flex flex-col gap-2">
+                        <div className="min-w-0">
                           <div className="truncate text-sm text-slate-700">{f.name}</div>
                           {editMode ? (
                             <div className="mt-0.5 text-[11px] text-slate-500">
@@ -496,7 +496,7 @@ export default function EntityDetailPage() {
                           ) : null}
                         </div>
 
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0">
                           {!editMode ? (
                             <div className="text-base text-slate-900">
                               {f.value_text ? (

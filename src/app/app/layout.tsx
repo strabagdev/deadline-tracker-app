@@ -195,24 +195,63 @@ function PrimaryNavLink({
   );
 }
 
+function PrimaryNavButton({
+  label,
+  icon,
+  active,
+  expanded,
+  onClick,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  active: boolean;
+  expanded: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-medium transition-all",
+        active || expanded
+          ? "bg-slate-900 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.8)]"
+          : "text-slate-600 hover:bg-white/85 hover:text-slate-900"
+      )}
+      aria-expanded={expanded}
+    >
+      {icon}
+      <span>{label}</span>
+      <span className="text-[10px]">{expanded ? "▲" : "▼"}</span>
+    </button>
+  );
+}
+
 function DesktopSectionMenu({
-  href,
   label,
   icon,
   active,
   items,
+  expanded,
+  onToggle,
 }: {
-  href: string;
   label: string;
   icon: React.ReactNode;
   active: boolean;
   items: SecondaryNavItem[];
+  expanded: boolean;
+  onToggle: () => void;
 }) {
   return (
-    <div className="group relative">
-      <PrimaryNavLink href={href} label={label} icon={icon} active={active} />
+    <div className="relative">
+      <PrimaryNavButton label={label} icon={icon} active={active} expanded={expanded} onClick={onToggle} />
       {items.length > 0 ? (
-        <div className="pointer-events-none absolute left-0 top-full z-50 pt-2 opacity-0 transition-all duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+        <div
+          className={cn(
+            "absolute left-0 top-full z-50 pt-2 transition-all duration-150",
+            expanded ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+          )}
+        >
           <div className="min-w-[220px] rounded-2xl border border-slate-200/90 bg-white/96 p-2 shadow-[0_22px_40px_-28px_rgba(15,23,42,0.45)] backdrop-blur-xl">
             <div className="grid gap-1">
               {items.map((item) => (
@@ -322,6 +361,7 @@ function getRouteByModule(moduleKey: ModuleKey): string {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const desktopMenuRef = React.useRef<HTMLDivElement | null>(null);
   const [isSuperAdmin, setIsSuperAdmin] = React.useState(false);
   const [sessionEmail, setSessionEmail] = React.useState("");
   const [platformLogoUrl, setPlatformLogoUrl] = React.useState("");
@@ -330,6 +370,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [allowedModules, setAllowedModules] = React.useState<Set<string> | null>(null);
   const [moduleAccessLoaded, setModuleAccessLoaded] = React.useState(false);
   const [mobileHeaderMenuOpen, setMobileHeaderMenuOpen] = React.useState(false);
+  const [desktopSectionMenuOpen, setDesktopSectionMenuOpen] = React.useState<SectionKey | null>(null);
   const [frontendRev, setFrontendRev] = React.useState("...");
   const [backendRev, setBackendRev] = React.useState("...");
   const [deployEnv, setDeployEnv] = React.useState("...");
@@ -436,7 +477,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     setMobileHeaderMenuOpen(false);
+    setDesktopSectionMenuOpen(null);
   }, [pathname]);
+
+  React.useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (desktopMenuRef.current?.contains(target)) return;
+      setDesktopSectionMenuOpen(null);
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setDesktopSectionMenuOpen(null);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -611,16 +673,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               {!isSuperAdmin ? (
                 <div className="hidden min-w-0 flex-1 items-center gap-2 lg:flex">
-                  <nav className="flex shrink-0 items-center gap-1 rounded-full bg-slate-900/[0.045] p-1 ring-1 ring-slate-200/80 backdrop-blur-md">
+                  <nav ref={desktopMenuRef} className="flex shrink-0 items-center gap-1 rounded-full bg-slate-900/[0.045] p-1 ring-1 ring-slate-200/80 backdrop-blur-md">
                     {visiblePrimaryNavItems.map((item) => (
-                      <DesktopSectionMenu
-                        key={item.key}
-                        href={sectionHrefByKey.get(item.key) ?? "/app"}
-                        label={item.label}
-                        icon={item.icon}
-                        active={activeSection === item.key}
-                        items={visibleSecondaryItemsBySection.get(item.key) ?? []}
-                      />
+                      (visibleSecondaryItemsBySection.get(item.key) ?? []).length > 0 ? (
+                        <DesktopSectionMenu
+                          key={item.key}
+                          label={item.label}
+                          icon={item.icon}
+                          active={activeSection === item.key}
+                          items={visibleSecondaryItemsBySection.get(item.key) ?? []}
+                          expanded={desktopSectionMenuOpen === item.key}
+                          onToggle={() =>
+                            setDesktopSectionMenuOpen((current) => (current === item.key ? null : item.key))
+                          }
+                        />
+                      ) : (
+                        <PrimaryNavLink
+                          key={item.key}
+                          href={sectionHrefByKey.get(item.key) ?? "/app"}
+                          label={item.label}
+                          icon={item.icon}
+                          active={activeSection === item.key}
+                        />
+                      )
                     ))}
                   </nav>
                   <div className="flex-1" />
