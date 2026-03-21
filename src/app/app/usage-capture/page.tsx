@@ -7,6 +7,7 @@ import { supabaseAuth } from "@/lib/supabase/authClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader } from "@/components/ui/loader";
+import { PageHero } from "@/components/PageHero";
 import { normalizeEntityTypeName } from "@/lib/usage-capture/slug";
 import { USAGE_CAPTURE_SUBMODULE_PREFIX } from "@/lib/access/moduleKeys";
 
@@ -94,20 +95,18 @@ export default function UsageCapturePage() {
 
   return (
     <main className="mx-auto max-w-[1000px] space-y-4 px-4 py-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle>Captura Enfocada de Uso</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Selecciona un tipo de entidad para ingresar usos en flujo acotado.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Link href="/app/reports/usage"><Button variant="outline" size="sm">Reportes uso</Button></Link>
-              <Button onClick={() => void load()} variant="outline" size="sm" disabled={loading}>Refrescar</Button>
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
+      <PageHero
+        badge="Uso"
+        secondaryBadge="Captura"
+        title="Captura Enfocada de Uso"
+        subtitle="Selecciona un tipo de entidad para ingresar usos en flujo acotado."
+        actions={
+          <>
+            <Link href="/app/reports/usage"><Button variant="outline" size="sm">Reportes uso</Button></Link>
+            <Button onClick={() => void load()} variant="outline" size="sm" disabled={loading}>Refrescar</Button>
+          </>
+        }
+      />
 
       {errorMsg ? <p className="text-sm text-rose-600 whitespace-pre-wrap">{errorMsg}</p> : null}
 

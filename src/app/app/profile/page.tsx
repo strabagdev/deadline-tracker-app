@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { PageHero } from "@/components/PageHero";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -161,24 +162,24 @@ export default function ProfilePage() {
 
   return (
     <main className="mx-auto max-w-[1100px] space-y-4 px-4 py-4">
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle>Perfil de usuario</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Configuración de acceso y marca de organización.</p>
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => router.replace("/app")}>
-              Volver
-            </Button>
-          </div>
+      <PageHero
+        badge="Cuenta"
+        secondaryBadge={orgRole || "Sin rol"}
+        title="Perfil de usuario"
+        subtitle="Configuración de acceso y marca de organización."
+        actions={
+          <Button type="button" variant="outline" size="sm" onClick={() => router.replace("/app")}>
+            Volver
+          </Button>
+        }
+        footer={
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <Badge variant="outline">Email: {sessionEmail || "—"}</Badge>
             <Badge variant="outline">Organización: {orgName || "—"}</Badge>
             <Badge variant="outline">Rol: {orgRole || "—"}</Badge>
           </div>
-        </CardHeader>
-      </Card>
+        }
+      />
 
       <Card>
         <CardHeader className="pb-2">

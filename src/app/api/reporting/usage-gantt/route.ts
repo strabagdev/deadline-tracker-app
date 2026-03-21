@@ -12,6 +12,21 @@ type UsageLogRow = {
   logged_at: string;
 };
 
+type UsageLogFieldValueRow = {
+  usage_log_id: string;
+  usage_field_id: string;
+  value_text: string | null;
+  value_number: number | null;
+  value_date: string | null;
+  value_boolean: boolean | null;
+};
+
+type UsageFieldRow = {
+  id: string;
+  name: string | null;
+  key: string | null;
+};
+
 type EntityRow = {
   id: string;
   name: string | null;
@@ -44,6 +59,14 @@ function getErrorMessage(error: unknown): string {
 
 function isIsoDateOnly(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function renderFieldValue(v: UsageLogFieldValueRow) {
+  if (v.value_boolean !== null) return v.value_boolean ? "Sí" : "No";
+  if (v.value_number !== null) return String(v.value_number);
+  if (v.value_date) return v.value_date;
+  if (v.value_text) return v.value_text;
+  return "—";
 }
 
 export async function GET(req: Request) {
@@ -128,6 +151,51 @@ export async function GET(req: Request) {
       logs = (logsData ?? []) as UsageLogRow[];
     }
 
+    const logIds = logs.map((log) => String(log.id)).filter((value) => value.length > 0);
+    const usageFieldValuesByLogId = new Map<string, UsageLogFieldValueRow[]>();
+    const usageFieldMetaById = new Map<string, { name: string }>();
+
+    if (logIds.length > 0) {
+      const { data: usageFieldValuesData, error: usageFieldValuesErr } = await db
+        .from("usage_log_field_values")
+        .select("usage_log_id, usage_field_id, value_text, value_number, value_date, value_boolean")
+        .eq("organization_id", orgId)
+        .in("usage_log_id", logIds);
+      if (usageFieldValuesErr) throw usageFieldValuesErr;
+
+      const usageFieldValues = (usageFieldValuesData ?? []) as UsageLogFieldValueRow[];
+      const usageFieldIds = Array.from(
+        new Set(
+          usageFieldValues
+            .map((row) => String(row.usage_field_id ?? "").trim())
+            .filter((value) => value.length > 0)
+        )
+      );
+
+      if (usageFieldIds.length > 0) {
+        const { data: usageFieldsData, error: usageFieldsErr } = await db
+          .from("usage_fields")
+          .select("id, name, key")
+          .eq("organization_id", orgId)
+          .in("id", usageFieldIds);
+        if (usageFieldsErr) throw usageFieldsErr;
+
+        for (const field of (usageFieldsData ?? []) as UsageFieldRow[]) {
+          usageFieldMetaById.set(String(field.id), {
+            name: String(field.name ?? field.key ?? "Campo").trim() || "Campo",
+          });
+        }
+      }
+
+      for (const row of usageFieldValues) {
+        const usageLogId = String(row.usage_log_id ?? "").trim();
+        if (!usageLogId) continue;
+        const current = usageFieldValuesByLogId.get(usageLogId) ?? [];
+        current.push(row);
+        usageFieldValuesByLogId.set(usageLogId, current);
+      }
+    }
+
     const entityTypeById = new Map(((entityTypesData ?? []) as EntityTypeRow[]).map((type) => [type.id, type]));
     const usageUnitById = new Map(((usageUnitsData ?? []) as UsageUnitRow[]).map((unit) => [unit.id, unit]));
     const entityById = new Map(entities.map((entity) => [entity.id, entity]));
@@ -152,6 +220,11 @@ export async function GET(req: Request) {
         value: valueNumber,
         value_text: valueText || null,
         value_display: valueText || (valueNumber != null ? String(valueNumber) : "—"),
+        field_values: (usageFieldValuesByLogId.get(String(log.id)) ?? []).map((fieldValue) => ({
+          usage_field_id: String(fieldValue.usage_field_id),
+          name: usageFieldMetaById.get(String(fieldValue.usage_field_id))?.name ?? "Campo",
+          value: renderFieldValue(fieldValue),
+        })),
       };
     });
 
@@ -174,6 +247,19 @@ export async function GET(req: Request) {
           .map((unit) => ({ id: unit.id, name: unit.name ?? "Sin unidad" }))
           .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" })),
       },
+      entity_rows: filteredEntities
+        .map((entity) => {
+          const entityType = entity.entity_type_id ? entityTypeById.get(entity.entity_type_id) : null;
+          const usageUnit = entity.usage_unit_id ? usageUnitById.get(entity.usage_unit_id) : null;
+          return {
+            id: entity.id,
+            name: entity.name ?? "Entidad",
+            entity_type_name: entityType?.name ?? "Sin tipo",
+            usage_unit_name: usageUnit?.name ?? "",
+            usage_unit_visible: usageUnit?.show_in_usage_records !== false,
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" })),
       rows,
     });
   } catch (error: unknown) {

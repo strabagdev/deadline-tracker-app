@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { SemaphoreSettingsPanel, type SemaphoreSettings } from "@/components/semaphore/SemaphoreSettingsPanel";
+import { PageHero } from "@/components/PageHero";
 import { cn } from "@/lib/utils";
 import { parseCsv } from "@/lib/csv/simpleCsv";
 
@@ -553,51 +554,49 @@ export default function EntitiesPage() {
 
   return (
     <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-4 sm:space-y-6">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle className="app-page-title">Entidades</CardTitle>
-              <p className="app-page-subtitle">Gestión compacta para alta densidad de registros.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={() => setShowCreate(true)}
-                size="sm"
-                disabled={typesLoading}
-                className="border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
-              >
-                + Entidad
-              </Button>
-              <Button
-                onClick={() => {
-                  setImportOpen(true);
-                  setImportResult("");
-                  setImportCsvText("");
-                  setImportCanApply(false);
-                  setImportProgress(0);
-                  setImportStage("");
-                  setImportMode("update");
-                  setBulkEntityTypeId("all");
-                }}
-                variant="outline"
-                size="sm"
-              >
-                Archivos
-              </Button>
-              <Button onClick={() => setSemaphoreOpen(true)} variant="outline" size="sm">
-                Semáforo
-              </Button>
-              <Link href="/app">
-                <Button variant="outline" size="sm">Dashboard</Button>
-              </Link>
-              <Button onClick={load} variant="outline" size="sm" disabled={loading}>
-                Refrescar
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
+      <PageHero
+        badge="Maestro"
+        secondaryBadge="Entidades"
+        title="Entidades"
+        subtitle="Gestión compacta para alta densidad de registros."
+        actions={
+          <>
+            <Button
+              onClick={() => setShowCreate(true)}
+              size="sm"
+              disabled={typesLoading}
+              className="border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
+            >
+              + Entidad
+            </Button>
+            <Button
+              onClick={() => {
+                setImportOpen(true);
+                setImportResult("");
+                setImportCsvText("");
+                setImportCanApply(false);
+                setImportProgress(0);
+                setImportStage("");
+                setImportMode("update");
+                setBulkEntityTypeId("all");
+              }}
+              variant="outline"
+              size="sm"
+            >
+              Archivos
+            </Button>
+            <Button onClick={() => setSemaphoreOpen(true)} variant="outline" size="sm">
+              Semáforo
+            </Button>
+            <Link href="/app">
+              <Button variant="outline" size="sm">Dashboard</Button>
+            </Link>
+            <Button onClick={load} variant="outline" size="sm" disabled={loading}>
+              Refrescar
+            </Button>
+          </>
+        }
+      />
 
       {errorMsg ? <div className="app-alert app-alert-error whitespace-pre-wrap">{errorMsg}</div> : null}
       {flashMsg ? <div className="app-alert app-alert-success whitespace-pre-wrap">{flashMsg}</div> : null}

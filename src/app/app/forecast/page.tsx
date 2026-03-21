@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { PageHero } from "@/components/PageHero";
 import { cn } from "@/lib/utils";
 
 type ForecastSummary = {
@@ -256,33 +257,33 @@ export default function ForecastPage() {
 
   return (
     <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle>OpsAhead Forecast</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Motor precalculado principal para vencimientos, riesgo y estado operativo.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Link href="/app/forecast/gantt">
-                <Button variant="outline" size="sm">Carta Gantt</Button>
-              </Link>
-              <Link href="/app/reports/deadlines">
-                <Button variant="outline" size="sm">Reporte</Button>
-              </Link>
-              <Link href="/app">
-                <Button variant="outline" size="sm">Dashboard</Button>
-              </Link>
-              <Button onClick={() => void recompute()} disabled={busy} size="sm">
-                {busy ? "Recomputando..." : "Recomputar"}
-              </Button>
-            </div>
-          </div>
+      <PageHero
+        badge="Forecast"
+        secondaryBadge="Operación"
+        title="OpsAhead Forecast"
+        subtitle="Motor precalculado principal para vencimientos, riesgo y estado operativo."
+        actions={
+          <>
+            <Link href="/app/forecast/gantt">
+              <Button variant="outline" size="sm">Carta Gantt</Button>
+            </Link>
+            <Link href="/app/reports/deadlines">
+              <Button variant="outline" size="sm">Reporte</Button>
+            </Link>
+            <Link href="/app">
+              <Button variant="outline" size="sm">Dashboard</Button>
+            </Link>
+            <Button onClick={() => void recompute()} disabled={busy} size="sm">
+              {busy ? "Recomputando..." : "Recomputar"}
+            </Button>
+          </>
+        }
+        footer={
           <div className="text-xs text-slate-500">
             {computedAt ? `Último cálculo: ${new Date(computedAt).toLocaleString()}` : "Sin cálculo reciente"}
           </div>
-        </CardHeader>
-      </Card>
+        }
+      />
 
       {errorMsg ? <p className="whitespace-pre-wrap text-sm text-rose-600">{errorMsg}</p> : null}
 

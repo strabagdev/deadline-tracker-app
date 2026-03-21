@@ -7,6 +7,7 @@ import { Loader } from "@/components/ui/loader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PageHero } from "@/components/PageHero";
 import { cn } from "@/lib/utils";
 
 type Scale = "month" | "quarter" | "year";
@@ -216,23 +217,17 @@ export default function ForecastGanttPage() {
 
   return (
     <main className="mx-auto max-w-[1600px] space-y-4 px-4 py-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle>Carta Gantt de vencimientos</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">
-                Seguimiento temporal desde última ejecución hasta vencimiento proyectado.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Link href="/app/forecast">
-                <Button variant="outline" size="sm">Volver a Forecast</Button>
-              </Link>
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
+      <PageHero
+        badge="Forecast"
+        secondaryBadge="Gantt"
+        title="Carta Gantt de vencimientos"
+        subtitle="Seguimiento temporal desde última ejecución hasta vencimiento proyectado."
+        actions={
+          <Link href="/app/forecast">
+            <Button variant="outline" size="sm">Volver a Forecast</Button>
+          </Link>
+        }
+      />
 
       <Card>
         <CardContent className="grid gap-3 py-4 md:grid-cols-3 xl:grid-cols-6">

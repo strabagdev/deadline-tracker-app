@@ -7,6 +7,7 @@ import { Loader } from "@/components/ui/loader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PageHero } from "@/components/PageHero";
 
 type AlertRow = {
   id: string;
@@ -148,26 +149,22 @@ export default function AlertsPage() {
 
   return (
     <main className="mx-auto max-w-[1400px] space-y-4 px-4 py-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle>Eventos</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">
-                Historial operativo derivado desde <code>deadline_forecasts</code>. El estado vigente se revisa en Forecast.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Link href="/app/forecast">
-                <Button variant="outline" size="sm">Ir a Forecast</Button>
-              </Link>
-              <Button onClick={() => void recompute()} disabled={busy} size="sm">
-                {busy ? "Actualizando..." : "Actualizar eventos"}
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
+      <PageHero
+        badge="Operación"
+        secondaryBadge="Eventos"
+        title="Eventos"
+        subtitle={<>Historial operativo derivado desde <code>deadline_forecasts</code>. El estado vigente se revisa en Forecast.</>}
+        actions={
+          <>
+            <Link href="/app/forecast">
+              <Button variant="outline" size="sm">Ir a Forecast</Button>
+            </Link>
+            <Button onClick={() => void recompute()} disabled={busy} size="sm">
+              {busy ? "Actualizando..." : "Actualizar eventos"}
+            </Button>
+          </>
+        }
+      />
 
       <Card>
         <CardContent className="flex flex-col gap-2 py-4 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">

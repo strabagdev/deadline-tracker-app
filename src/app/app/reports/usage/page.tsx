@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MarkedDatePicker } from "@/components/marked-date-picker";
+import { PageHero } from "@/components/PageHero";
 import { toCsv } from "@/lib/csv/simpleCsv";
 import { csvToSpreadsheetXml } from "@/lib/csv/spreadsheetXml";
 
@@ -564,27 +565,25 @@ export default function UsageReportsPage() {
 
   return (
     <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-4 sm:space-y-6">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle className="app-page-title">Reportes de Uso</CardTitle>
-              <p className="app-page-subtitle">Consulta histórica de registros de uso con filtros y exportación.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Link href="/app/usage-capture">
-                <Button variant="outline" size="sm">Captura uso</Button>
-              </Link>
-              <Link href="/app/reports/usage/gantt">
-                <Button variant="outline" size="sm">Carta Gantt</Button>
-              </Link>
-              <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading || busy}>
-                Refrescar
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
+      <PageHero
+        badge="Reportes"
+        secondaryBadge="Uso"
+        title="Reportes de Uso"
+        subtitle="Consulta histórica de registros de uso con filtros y exportación."
+        actions={
+          <>
+            <Link href="/app/usage-capture">
+              <Button variant="outline" size="sm">Captura uso</Button>
+            </Link>
+            <Link href="/app/reports/usage/gantt">
+              <Button variant="outline" size="sm">Carta Gantt</Button>
+            </Link>
+            <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading || busy}>
+              Refrescar
+            </Button>
+          </>
+        }
+      />
 
       {errorMsg ? <div className="app-alert app-alert-error whitespace-pre-wrap">{errorMsg}</div> : null}
 

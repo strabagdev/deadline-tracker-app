@@ -6,6 +6,7 @@ import { supabaseAuth } from "@/lib/supabase/authClient";
 import { Loader } from "@/components/ui/loader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { PageHero } from "@/components/PageHero";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -210,27 +211,25 @@ export default function DeadlineReportsPage() {
 
   return (
     <main className="mx-auto max-w-[1440px] space-y-5 px-4 py-4 sm:space-y-6">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle className="app-page-title">Reportes de vencimientos</CardTitle>
-              <p className="app-page-subtitle">Vista reportable del estado vigente por entidad y vencimiento.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button onClick={() => void downloadCsv()} variant="outline" size="sm" disabled={loading || busy}>
-                Exportar CSV
-              </Button>
-              <Link href="/app/forecast">
-                <Button variant="outline" size="sm">Forecast</Button>
-              </Link>
-              <Button onClick={() => void load()} variant="outline" size="sm" disabled={loading}>
-                Refrescar
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
+      <PageHero
+        badge="Reportes"
+        secondaryBadge="Vencimientos"
+        title="Reportes de vencimientos"
+        subtitle="Vista reportable del estado vigente por entidad y vencimiento."
+        actions={
+          <>
+            <Button onClick={() => void downloadCsv()} variant="outline" size="sm" disabled={loading || busy}>
+              Exportar CSV
+            </Button>
+            <Link href="/app/forecast">
+              <Button variant="outline" size="sm">Forecast</Button>
+            </Link>
+            <Button onClick={() => void load()} variant="outline" size="sm" disabled={loading}>
+              Refrescar
+            </Button>
+          </>
+        }
+      />
 
       {errorMsg ? <div className="app-alert app-alert-error whitespace-pre-wrap">{errorMsg}</div> : null}
 

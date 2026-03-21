@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 import { Loader } from "@/components/ui/loader";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PageHero } from "@/components/PageHero";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -465,49 +466,51 @@ export default function OperationsPage() {
 
   return (
     <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-4 sm:space-y-6">
+      <PageHero
+        badge="Operación"
+        secondaryBadge="Seguimiento"
+        title="Operaciones"
+        actions={
+          <>
+            {renderSecondaryFilter("hidden md:block", "md:absolute md:right-0 md:min-w-[360px]")}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setDashboardPanelCollapsed((v) => !v)}
+              className="min-w-[116px] justify-between"
+            >
+              <span>{dashboardPanelCollapsed ? "Buscar" : "Ocultar"}</span>
+              <span className="text-xs">{dashboardPanelCollapsed ? "▼" : "▲"}</span>
+            </Button>
+          </>
+        }
+        footer={
+          <>
+            <div className="flex w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 pr-2 lg:w-max lg:pb-0">
+              {statusFilterMeta.map((s) => (
+                <Button
+                  key={s.key}
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setFilterStatus(s.key);
+                    setPage(1);
+                  }}
+                  className={statusChipClasses(s.key, filterStatus === s.key)}
+                  title={s.title}
+                >
+                  <IconStatus status={s.key} />
+                  {filterStatus === s.key ? <span>✓</span> : null}
+                  <span className="hidden sm:inline">{s.title}</span>
+                  <span className="font-semibold">{countByStatus(s.key)}</span>
+                </Button>
+              ))}
+            </div>
+            {renderSecondaryFilter("mt-2 md:hidden")}
+          </>
+        }
+      />
       <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
-            <CardTitle className="app-page-title shrink-0">Operaciones</CardTitle>
-
-            <div className="min-w-0 lg:flex-1">
-              <div className="flex w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 pr-2 lg:w-max lg:pb-0">
-                {statusFilterMeta.map((s) => (
-                  <Button
-                    key={s.key}
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setFilterStatus(s.key);
-                      setPage(1);
-                    }}
-                    className={statusChipClasses(s.key, filterStatus === s.key)}
-                    title={s.title}
-                  >
-                    <IconStatus status={s.key} />
-                    {filterStatus === s.key ? <span>✓</span> : null}
-                    <span className="hidden sm:inline">{s.title}</span>
-                    <span className="font-semibold">{countByStatus(s.key)}</span>
-                  </Button>
-                ))}
-              </div>
-              {renderSecondaryFilter("mt-2 md:hidden")}
-            </div>
-
-            <div className="flex shrink-0 items-center gap-2">
-              {renderSecondaryFilter("hidden md:block", "md:absolute md:right-0 md:min-w-[360px]")}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setDashboardPanelCollapsed((v) => !v)}
-                className="min-w-[116px] justify-between"
-              >
-                <span>{dashboardPanelCollapsed ? "Buscar" : "Ocultar"}</span>
-                <span className="text-xs">{dashboardPanelCollapsed ? "▼" : "▲"}</span>
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
         <CardContent className="py-3">
           {!dashboardPanelCollapsed ? (
             <div className="mt-3 rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--muted)]/80 px-3 py-2 sm:px-4 sm:py-3">

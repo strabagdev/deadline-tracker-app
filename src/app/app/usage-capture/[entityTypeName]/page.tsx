@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader } from "@/components/ui/loader";
+import { PageHero } from "@/components/PageHero";
 import { MarkedDatePicker } from "@/components/marked-date-picker";
 
 type Field = { id: string; name: string; key: string; field_type: "text" | "number" | "date" | "boolean" | "select"; options?: unknown };
@@ -546,19 +547,17 @@ export default function FocusedUsageCapturePage() {
 
   return (
     <main className="mx-auto w-full max-w-[1400px] space-y-5 px-4 py-4 sm:space-y-6">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <CardTitle className="app-page-title">Ingreso de Uso Enfocado</CardTitle>
-              <p className="app-page-subtitle">Tipo de entidad: <b>{typeLabel || entityTypeName || "—"}</b></p>
-            </div>
-            <Link href="/app/usage-capture">
-              <Button variant="outline" size="sm">Volver</Button>
-            </Link>
-          </div>
-        </CardHeader>
-      </Card>
+      <PageHero
+        badge="Uso"
+        secondaryBadge={typeLabel || entityTypeName || "—"}
+        title="Ingreso de Uso Enfocado"
+        subtitle={<>Tipo de entidad: <b>{typeLabel || entityTypeName || "—"}</b></>}
+        actions={
+          <Link href="/app/usage-capture">
+            <Button variant="outline" size="sm">Volver</Button>
+          </Link>
+        }
+      />
 
       {errorMsg ? <div className="app-alert app-alert-error whitespace-pre-wrap">{errorMsg}</div> : null}
       {okMsg ? <div className="app-alert app-alert-success">{okMsg}</div> : null}
