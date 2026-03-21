@@ -43,6 +43,7 @@ type UsageUnitRow = {
   id: string;
   name: string | null;
   show_in_usage_records?: boolean | null;
+  suggested_values?: string[] | null;
 };
 
 function getErrorMessage(error: unknown): string {
@@ -127,7 +128,7 @@ export async function GET(req: Request) {
         ? db.from("entity_types").select("id, name").eq("organization_id", orgId).in("id", entityTypeIds)
         : Promise.resolve({ data: [], error: null }),
       usageUnitIds.length > 0
-        ? db.from("usage_units").select("id, name, show_in_usage_records").eq("organization_id", orgId).in("id", usageUnitIds)
+        ? db.from("usage_units").select("id, name, show_in_usage_records, suggested_values").eq("organization_id", orgId).in("id", usageUnitIds)
         : Promise.resolve({ data: [], error: null }),
     ]);
     if (entityTypesErr) throw entityTypesErr;
@@ -215,6 +216,9 @@ export async function GET(req: Request) {
         usage_unit_id: entity?.usage_unit_id ?? null,
         usage_unit_name: usageUnit?.name ?? "",
         usage_unit_visible: usageUnit?.show_in_usage_records !== false,
+        usage_unit_suggested_values: Array.isArray(usageUnit?.suggested_values)
+          ? usageUnit.suggested_values.map((value) => String(value)).filter((value) => value.trim().length > 0)
+          : [],
         logged_on: log.logged_on,
         logged_at: log.logged_at,
         value: valueNumber,
@@ -257,6 +261,9 @@ export async function GET(req: Request) {
             entity_type_name: entityType?.name ?? "Sin tipo",
             usage_unit_name: usageUnit?.name ?? "",
             usage_unit_visible: usageUnit?.show_in_usage_records !== false,
+            usage_unit_suggested_values: Array.isArray(usageUnit?.suggested_values)
+              ? usageUnit.suggested_values.map((value) => String(value)).filter((value) => value.trim().length > 0)
+              : [],
           };
         })
         .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" })),

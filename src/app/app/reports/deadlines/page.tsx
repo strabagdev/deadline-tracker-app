@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toCsv } from "@/lib/csv/simpleCsv";
+import { csvToSpreadsheetXml } from "@/lib/csv/spreadsheetXml";
 
 type ReportStatus = "green" | "yellow" | "orange" | "red";
 
@@ -197,13 +198,15 @@ export default function DeadlineReportsPage() {
     );
   }, [filteredRows]);
 
-  function downloadCsv() {
+  function downloadExcel() {
     setBusy(true);
-    const blob = new Blob([buildCsv(filteredRows)], { type: "text/csv;charset=utf-8" });
+    const csv = buildCsv(filteredRows);
+    const xml = csvToSpreadsheetXml(csv, "Vencimientos");
+    const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "deadline_reports.csv";
+    link.download = "deadline_reports.xls";
     link.click();
     URL.revokeObjectURL(url);
     setBusy(false);
@@ -218,9 +221,12 @@ export default function DeadlineReportsPage() {
         subtitle="Vista reportable del estado vigente por entidad y vencimiento."
         actions={
           <>
-            <Button onClick={() => void downloadCsv()} variant="outline" size="sm" disabled={loading || busy}>
-              Exportar CSV
+            <Button onClick={() => void downloadExcel()} variant="outline" size="sm" disabled={loading || busy}>
+              Exportar Excel
             </Button>
+            <Link href="/app/reports/deadlines/gantt">
+              <Button variant="outline" size="sm">Carta Gantt</Button>
+            </Link>
             <Link href="/app/forecast">
               <Button variant="outline" size="sm">Forecast</Button>
             </Link>

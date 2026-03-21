@@ -264,9 +264,6 @@ export default function ForecastPage() {
         subtitle="Motor precalculado principal para vencimientos, riesgo y estado operativo."
         actions={
           <>
-            <Link href="/app/forecast/gantt">
-              <Button variant="outline" size="sm">Carta Gantt</Button>
-            </Link>
             <Link href="/app/reports/deadlines">
               <Button variant="outline" size="sm">Reporte</Button>
             </Link>

@@ -24,6 +24,7 @@ type EntityInfo = {
   entity_type_name: string;
   usage_unit_name: string;
   usage_unit_visible: boolean;
+  usage_unit_suggested_values: string[];
 };
 
 type UsageRow = {
@@ -40,6 +41,7 @@ type UsageRow = {
   value: number | null;
   value_text: string | null;
   value_display: string;
+  usage_unit_suggested_values: string[];
   field_values: Array<{ usage_field_id: string; name: string; value: string }>;
 };
 
@@ -49,6 +51,7 @@ type UsageCellDetail = {
   loggedAt: string;
   usageUnitName: string;
   usageUnitVisible: boolean;
+  suggestedValues: string[];
   fieldValues: Array<{ usage_field_id: string; name: string; value: string }>;
 };
 
@@ -58,6 +61,7 @@ type TimelineRow = {
   entity_type_name: string;
   usage_unit_name: string;
   usage_unit_visible: boolean;
+  suggestedValues: string[];
   detailsByDay: Record<string, UsageCellDetail>;
   totalLoggedDays: number;
   latestLoggedOn: string | null;
@@ -196,8 +200,36 @@ function isNumericLike(value: string) {
   return /^-?\d+([.,]\d+)?$/.test(String(value).trim());
 }
 
-function heatmapTone(value: string | null, inRange: boolean) {
+function normalizeSuggestedValue(value: string) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function buildSuggestedPalette(values: string[]) {
+  const base = [
+    { bg: "bg-emerald-500/85", border: "border-emerald-200", dot: "bg-emerald-500" },
+    { bg: "bg-rose-500/85", border: "border-rose-200", dot: "bg-rose-500" },
+    { bg: "bg-amber-500/85", border: "border-amber-200", dot: "bg-amber-500" },
+    { bg: "bg-sky-500/85", border: "border-sky-200", dot: "bg-sky-500" },
+    { bg: "bg-violet-500/85", border: "border-violet-200", dot: "bg-violet-500" },
+    { bg: "bg-orange-500/85", border: "border-orange-200", dot: "bg-orange-500" },
+    { bg: "bg-teal-500/85", border: "border-teal-200", dot: "bg-teal-500" },
+    { bg: "bg-indigo-500/85", border: "border-indigo-200", dot: "bg-indigo-500" },
+    { bg: "bg-fuchsia-500/85", border: "border-fuchsia-200", dot: "bg-fuchsia-500" },
+    { bg: "bg-lime-500/85", border: "border-lime-200", dot: "bg-lime-500" },
+  ];
+  const map = new Map<string, { bg: string; border: string; dot: string; label: string }>();
+  values.forEach((value, index) => {
+    const normalized = normalizeSuggestedValue(value);
+    if (!normalized || map.has(normalized)) return;
+    const color = base[index % base.length];
+    map.set(normalized, { ...color, label: value });
+  });
+  return map;
+}
+
+function heatmapTone(value: string | null, inRange: boolean, suggestedColor?: { bg: string; border: string } | null) {
   if (!inRange) return "border-transparent bg-transparent";
+  if (suggestedColor && value) return `${suggestedColor.border} ${suggestedColor.bg}`;
   if (!value) return "border-slate-200 bg-slate-100/80";
   if (isNumericLike(value)) return "border-sky-200 bg-sky-500/80";
   return "border-emerald-200 bg-emerald-500/80";
@@ -229,12 +261,12 @@ function filterSelectClass() {
 }
 
 function getGridMetrics(columnCount: number) {
-  if (columnCount >= 120) return { dayCellSize: 10, dayCellGap: 2, blockGap: 2, leftColWidth: 180 };
-  if (columnCount >= 90) return { dayCellSize: 11, dayCellGap: 2, blockGap: 2, leftColWidth: 190 };
-  if (columnCount >= 60) return { dayCellSize: 12, dayCellGap: 3, blockGap: 3, leftColWidth: 200 };
-  if (columnCount >= 40) return { dayCellSize: 13, dayCellGap: 3, blockGap: 3, leftColWidth: 210 };
-  if (columnCount >= 21) return { dayCellSize: 14, dayCellGap: 3, blockGap: 3, leftColWidth: 220 };
-  return { dayCellSize: 16, dayCellGap: 4, blockGap: 4, leftColWidth: 220 };
+  if (columnCount >= 120) return { dayCellSize: 11, minDayWidth: 10, dayCellGap: 2, blockGap: 2, leftColWidth: 180 };
+  if (columnCount >= 90) return { dayCellSize: 12, minDayWidth: 11, dayCellGap: 2, blockGap: 2, leftColWidth: 190 };
+  if (columnCount >= 60) return { dayCellSize: 13, minDayWidth: 11, dayCellGap: 3, blockGap: 3, leftColWidth: 200 };
+  if (columnCount >= 40) return { dayCellSize: 14, minDayWidth: 12, dayCellGap: 3, blockGap: 3, leftColWidth: 210 };
+  if (columnCount >= 21) return { dayCellSize: 15, minDayWidth: 12, dayCellGap: 3, blockGap: 3, leftColWidth: 220 };
+  return { dayCellSize: 17, minDayWidth: 12, dayCellGap: 4, blockGap: 4, leftColWidth: 220 };
 }
 
 export default function UsageGanttPage() {
@@ -283,10 +315,15 @@ export default function UsageGanttPage() {
     [displayRange.from, displayRange.to, presetFocusRange.from, presetFocusRange.to, rangeMode, scale]
   );
   const gridMetrics = useMemo(() => getGridMetrics(columns.length), [columns.length]);
-  const weekBlockWidth = gridMetrics.dayCellSize * 7 + gridMetrics.dayCellGap * 6;
+  const dayGridTemplate = `repeat(${columns.length}, minmax(${gridMetrics.minDayWidth}px, 1fr))`;
+  const weekBlockTemplate = `repeat(${heatmapWeeks.length}, minmax(${gridMetrics.minDayWidth * 7 + gridMetrics.dayCellGap * 6}px, 1fr))`;
   const periodLabel = useMemo(
     () => (rangeMode === "custom" ? getCustomPeriodLabel(dateFrom, dateTo) : getPresetPeriodLabel(anchor, scale)),
     [anchor, dateFrom, dateTo, rangeMode, scale]
+  );
+  const timelineMinWidth = useMemo(
+    () => gridMetrics.leftColWidth + columns.length * gridMetrics.minDayWidth + Math.max(0, columns.length - 1) * gridMetrics.dayCellGap + 24,
+    [columns.length, gridMetrics.dayCellGap, gridMetrics.leftColWidth, gridMetrics.minDayWidth]
   );
   const highlightedDates = useMemo(
     () => Array.from(new Set(rows.map((row) => row.logged_on).filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value)))).sort(),
@@ -345,6 +382,7 @@ export default function UsageGanttPage() {
         entity_type_name: entity.entity_type_name,
         usage_unit_name: entity.usage_unit_name,
         usage_unit_visible: entity.usage_unit_visible !== false,
+        suggestedValues: Array.isArray(entity.usage_unit_suggested_values) ? entity.usage_unit_suggested_values : [],
         detailsByDay: {},
         metaByDay: {},
         totalLoggedDays: 0,
@@ -375,6 +413,7 @@ export default function UsageGanttPage() {
           loggedAt: row.logged_at,
           usageUnitName: row.usage_unit_name,
           usageUnitVisible: row.usage_unit_visible !== false,
+          suggestedValues: Array.isArray(row.usage_unit_suggested_values) ? row.usage_unit_suggested_values : [],
           fieldValues: Array.isArray(row.field_values) ? row.field_values : [],
         };
         current.metaByDay[row.logged_on] = { loggedAt: row.logged_at };
@@ -394,12 +433,27 @@ export default function UsageGanttPage() {
         entity_type_name: item.entity_type_name,
         usage_unit_name: item.usage_unit_name,
         usage_unit_visible: item.usage_unit_visible,
+        suggestedValues: item.suggestedValues,
         detailsByDay: item.detailsByDay,
         totalLoggedDays: Object.keys(item.detailsByDay).length,
         latestLoggedOn: item.latestLoggedOn,
         latestValue: item.latestValue,
       }));
   }, [entityRows, rows]);
+
+  const suggestedLegend = useMemo(() => {
+    const values: string[] = [];
+    for (const row of timelineRows) {
+      for (const value of row.suggestedValues) {
+        if (!values.some((existing) => normalizeSuggestedValue(existing) === normalizeSuggestedValue(value))) {
+          values.push(value);
+        }
+      }
+    }
+    return values;
+  }, [timelineRows]);
+
+  const suggestedColorMap = useMemo(() => buildSuggestedPalette(suggestedLegend), [suggestedLegend]);
 
   return (
     <main className="mx-auto max-w-[1440px] space-y-5 px-4 py-4 sm:space-y-6">
@@ -577,13 +631,23 @@ export default function UsageGanttPage() {
                   <span className="h-3 w-3 rounded-[4px] border border-slate-200 bg-slate-100/80" />
                   Sin registro
                 </div>
+                {suggestedLegend.map((value) => {
+                  const color = suggestedColorMap.get(normalizeSuggestedValue(value));
+                  if (!color) return null;
+                  return (
+                    <div key={`legend-${value}`} className="flex items-center gap-2">
+                      <span className={cn("h-3 w-3 rounded-[4px] border", color.border, color.dot)} />
+                      {value}
+                    </div>
+                  );
+                })}
                 <div className="flex items-center gap-2">
                   <span className="h-3 w-3 rounded-[4px] border border-sky-200 bg-sky-500/80" />
-                  Valor numérico
+                  Numérico libre
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="h-3 w-3 rounded-[4px] border border-emerald-200 bg-emerald-500/80" />
-                  Valor texto
+                  Texto libre
                 </div>
               </div>
             </div>
@@ -593,12 +657,12 @@ export default function UsageGanttPage() {
               <p className="app-empty">No hay entidades para los filtros seleccionados.</p>
             ) : (
               <div className="overflow-x-auto md:overflow-visible">
-                <div className="min-w-[760px] space-y-2 md:min-w-0">
+                <div className="space-y-2" style={{ minWidth: `${timelineMinWidth}px` }}>
                   <div className="grid items-end gap-2 rounded-xl bg-slate-50 px-3 py-2" style={{ gridTemplateColumns: `${gridMetrics.leftColWidth}px minmax(0,1fr)` }}>
                     <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Entidad</div>
                     <div className="space-y-1">
                       {scale === "month" ? (
-                        <div className="grid" style={{ gap: `${gridMetrics.blockGap}px`, gridTemplateColumns: `repeat(${heatmapWeeks.length}, ${weekBlockWidth}px)` }}>
+                        <div className="grid" style={{ gap: `${gridMetrics.blockGap}px`, gridTemplateColumns: weekBlockTemplate }}>
                           {heatmapWeeks.map((week) => (
                             <div key={`header-block-${week.key}`} className="truncate text-[10px] font-medium uppercase tracking-[0.12em] text-slate-400">
                               {week.label}
@@ -607,7 +671,7 @@ export default function UsageGanttPage() {
                           ))}
                         </div>
                       ) : null}
-                      <div className="grid" style={{ gap: `${gridMetrics.dayCellGap}px`, gridTemplateColumns: `repeat(${columns.length}, ${gridMetrics.dayCellSize}px)` }}>
+                      <div className="grid" style={{ gap: `${gridMetrics.dayCellGap}px`, gridTemplateColumns: dayGridTemplate }}>
                           {columns.map((column) => (
                           <div key={`header-day-${column.key}`} className={cn("text-center text-[10px] font-medium text-slate-400", contextTone(column.inFocus))}>
                             <div>{column.label}</div>
@@ -626,23 +690,26 @@ export default function UsageGanttPage() {
 
                       <div className="space-y-1">
                         {scale === "month" ? (
-                          <div className="grid" style={{ gap: `${gridMetrics.blockGap}px`, gridTemplateColumns: `repeat(${heatmapWeeks.length}, ${weekBlockWidth}px)` }}>
+                          <div className="grid" style={{ gap: `${gridMetrics.blockGap}px`, gridTemplateColumns: weekBlockTemplate }}>
                             {heatmapWeeks.map((week) => (
                               <div key={`${row.entity_id}-block-${week.key}`} className="h-1 rounded-full bg-slate-100" />
                             ))}
                           </div>
                         ) : null}
-                        <div className="grid" style={{ gap: `${gridMetrics.dayCellGap}px`, gridTemplateColumns: `repeat(${columns.length}, ${gridMetrics.dayCellSize}px)` }}>
+                        <div className="grid" style={{ gap: `${gridMetrics.dayCellGap}px`, gridTemplateColumns: dayGridTemplate }}>
                           {columns.map((column) => {
                             const detail = row.detailsByDay[column.key] ?? null;
                             const value = detail?.value ?? null;
+                            const suggestedColor = detail?.value
+                              ? suggestedColorMap.get(normalizeSuggestedValue(detail.value)) ?? null
+                              : null;
                             return (
                               <div
                                 key={`${row.entity_id}-${column.key}`}
                                 className={cn(
                                   "group relative rounded-[4px] border",
                                   value ? "hover:scale-110 hover:shadow-sm" : "",
-                                  heatmapTone(value, true),
+                                  heatmapTone(value, true, suggestedColor),
                                   contextTone(column.inFocus)
                                 )}
                                 style={{ height: `${gridMetrics.dayCellSize}px`, width: `${gridMetrics.dayCellSize}px` }}
