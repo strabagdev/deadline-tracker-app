@@ -206,18 +206,18 @@ function normalizeSuggestedValue(value: string) {
 
 function buildSuggestedPalette(values: string[]) {
   const base = [
-    { bg: "bg-emerald-500/85", border: "border-emerald-200", dot: "bg-emerald-500" },
-    { bg: "bg-rose-500/85", border: "border-rose-200", dot: "bg-rose-500" },
-    { bg: "bg-amber-500/85", border: "border-amber-200", dot: "bg-amber-500" },
-    { bg: "bg-sky-500/85", border: "border-sky-200", dot: "bg-sky-500" },
-    { bg: "bg-violet-500/85", border: "border-violet-200", dot: "bg-violet-500" },
-    { bg: "bg-orange-500/85", border: "border-orange-200", dot: "bg-orange-500" },
-    { bg: "bg-teal-500/85", border: "border-teal-200", dot: "bg-teal-500" },
-    { bg: "bg-indigo-500/85", border: "border-indigo-200", dot: "bg-indigo-500" },
-    { bg: "bg-fuchsia-500/85", border: "border-fuchsia-200", dot: "bg-fuchsia-500" },
-    { bg: "bg-lime-500/85", border: "border-lime-200", dot: "bg-lime-500" },
+    { bg: "bg-emerald-500/85", border: "border-emerald-200", dot: "bg-emerald-500", printBg: "#10b981", printBorder: "#bbf7d0" },
+    { bg: "bg-rose-500/85", border: "border-rose-200", dot: "bg-rose-500", printBg: "#f43f5e", printBorder: "#fecdd3" },
+    { bg: "bg-amber-500/85", border: "border-amber-200", dot: "bg-amber-500", printBg: "#f59e0b", printBorder: "#fde68a" },
+    { bg: "bg-sky-500/85", border: "border-sky-200", dot: "bg-sky-500", printBg: "#0ea5e9", printBorder: "#bae6fd" },
+    { bg: "bg-violet-500/85", border: "border-violet-200", dot: "bg-violet-500", printBg: "#8b5cf6", printBorder: "#ddd6fe" },
+    { bg: "bg-orange-500/85", border: "border-orange-200", dot: "bg-orange-500", printBg: "#f97316", printBorder: "#fed7aa" },
+    { bg: "bg-teal-500/85", border: "border-teal-200", dot: "bg-teal-500", printBg: "#14b8a6", printBorder: "#99f6e4" },
+    { bg: "bg-indigo-500/85", border: "border-indigo-200", dot: "bg-indigo-500", printBg: "#6366f1", printBorder: "#c7d2fe" },
+    { bg: "bg-fuchsia-500/85", border: "border-fuchsia-200", dot: "bg-fuchsia-500", printBg: "#d946ef", printBorder: "#f5d0fe" },
+    { bg: "bg-lime-500/85", border: "border-lime-200", dot: "bg-lime-500", printBg: "#84cc16", printBorder: "#d9f99d" },
   ];
-  const map = new Map<string, { bg: string; border: string; dot: string; label: string }>();
+  const map = new Map<string, { bg: string; border: string; dot: string; label: string; printBg: string; printBorder: string }>();
   values.forEach((value, index) => {
     const normalized = normalizeSuggestedValue(value);
     if (!normalized || map.has(normalized)) return;
@@ -260,6 +260,141 @@ function filterSelectClass() {
   return "h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] text-slate-700 sm:text-sm";
 }
 
+function escapeHtml(value: string) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function slugifyLabel(value: string) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function getOptionLabel(options: Option[], selectedId: string, allLabel: string) {
+  if (selectedId === "all") return allLabel;
+  return options.find((option) => option.id === selectedId)?.name ?? allLabel;
+}
+
+function buildGanttPrintHtml(params: {
+  title: string;
+  subtitle: string;
+  metadata: string[];
+  columns: Array<{ key: string; label: string; secondary: string; inFocus: boolean }>;
+  rows: TimelineRow[];
+  suggestedColorMap: Map<string, { bg: string; border: string; dot: string; label: string; printBg: string; printBorder: string }>;
+  suggestedLegend: string[];
+}) {
+  const { title, subtitle, metadata, columns, rows, suggestedColorMap, suggestedLegend } = params;
+
+  const legendItems = [
+    ...suggestedLegend.map((value) => {
+      const color = suggestedColorMap.get(normalizeSuggestedValue(value));
+      if (!color) return "";
+      return `<span class="legend-item"><span class="legend-dot" style="background:${color.printBg}; border-color:${color.printBorder};"></span>${escapeHtml(value)}</span>`;
+    }),
+    `<span class="legend-item"><span class="legend-dot" style="background:#0ea5e9; border-color:#bae6fd;"></span>Numérico libre</span>`,
+    `<span class="legend-item"><span class="legend-dot" style="background:#10b981; border-color:#bbf7d0;"></span>Texto libre</span>`,
+    `<span class="legend-item"><span class="legend-dot" style="background:#e2e8f0; border-color:#cbd5e1;"></span>Sin registro</span>`,
+  ]
+    .filter(Boolean)
+    .join("");
+
+  const headerDays = columns
+    .map(
+      (column) =>
+        `<th class="${column.inFocus ? "" : "muted"}"><div>${escapeHtml(column.label)}</div><div class="day-sub">${escapeHtml(column.secondary)}</div></th>`
+    )
+    .join("");
+
+  const bodyRows = rows
+    .map((row) => {
+      const cells = columns
+        .map((column) => {
+          const detail = row.detailsByDay[column.key] ?? null;
+          const value = detail?.value ?? null;
+          const suggestedColor = value ? suggestedColorMap.get(normalizeSuggestedValue(value)) ?? null : null;
+          const printBg = !value
+            ? "#e2e8f0"
+            : suggestedColor
+              ? suggestedColor.printBg
+              : isNumericLike(value)
+                ? "#0ea5e9"
+                : "#10b981";
+          const printBorder = !value
+            ? "#cbd5e1"
+            : suggestedColor
+              ? suggestedColor.printBorder
+              : isNumericLike(value)
+                ? "#bae6fd"
+                : "#bbf7d0";
+          const cellTitle = detail
+            ? `${detail.loggedOn} · ${detail.value}${detail.usageUnitVisible && detail.usageUnitName ? ` · ${detail.usageUnitName}` : ""}`
+            : "Sin registro";
+          return `<td class="${column.inFocus ? "" : "muted"}"><span class="cell" title="${escapeHtml(cellTitle)}" style="background:${printBg}; border-color:${printBorder};"></span></td>`;
+        })
+        .join("");
+
+      return `<tr>
+        <th class="entity-cell">${escapeHtml(row.entity_name)}</th>
+        ${cells}
+      </tr>`;
+    })
+    .join("");
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${escapeHtml(title)}</title>
+    <style>
+      @page { size: A4 landscape; margin: 10mm; }
+      body { font-family: Arial, sans-serif; margin: 0; color: #0f172a; background: #f8fafc; }
+      .sheet { border: 1px solid #cbd5e1; border-radius: 18px; background: #ffffff; padding: 18px 20px 16px; }
+      h1 { margin: 0; font-size: 20px; }
+      .subtitle { margin: 6px 0 10px; font-size: 12px; color: #475569; }
+      .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+      .meta-chip { border: 1px solid #dbeafe; background: #eff6ff; color: #1d4ed8; border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 700; }
+      .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 12px; font-size: 11px; color: #334155; }
+      .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+      .legend-dot { width: 10px; height: 10px; border-radius: 3px; border: 1px solid transparent; display: inline-block; }
+      table { width: 100%; border-collapse: separate; border-spacing: 2px 4px; table-layout: fixed; }
+      thead th { font-size: 10px; font-weight: 700; color: #475569; text-align: center; white-space: nowrap; }
+      .day-sub { font-size: 9px; color: #94a3b8; font-weight: 500; }
+      .entity-cell { width: 180px; min-width: 180px; max-width: 180px; text-align: left; font-size: 11px; font-weight: 700; padding-right: 8px; }
+      td { text-align: center; vertical-align: middle; }
+      .cell { display: inline-block; width: 10px; height: 10px; border-radius: 3px; border: 1px solid transparent; }
+      .muted { opacity: 0.4; }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <h1>${escapeHtml(title)}</h1>
+      <p class="subtitle">${escapeHtml(subtitle)}</p>
+      <div class="meta">${metadata.map((item) => `<span class="meta-chip">${escapeHtml(item)}</span>`).join("")}</div>
+      <div class="legend">${legendItems}</div>
+      <table>
+        <thead>
+          <tr>
+            <th class="entity-cell">Entidad</th>
+            ${headerDays}
+          </tr>
+        </thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
+    </div>
+  </body>
+</html>`;
+}
+
 function getGridMetrics(columnCount: number) {
   if (columnCount >= 120) return { dayCellSize: 11, minDayWidth: 10, dayCellGap: 2, blockGap: 2, leftColWidth: 180 };
   if (columnCount >= 90) return { dayCellSize: 12, minDayWidth: 11, dayCellGap: 2, blockGap: 2, leftColWidth: 190 };
@@ -271,6 +406,7 @@ function getGridMetrics(columnCount: number) {
 
 export default function UsageGanttPage() {
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [rows, setRows] = useState<UsageRow[]>([]);
   const [entityRows, setEntityRows] = useState<EntityInfo[]>([]);
@@ -352,7 +488,7 @@ export default function UsageGanttPage() {
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setErrorMsg(json.error || "No se pudo cargar la carta Gantt de uso.");
+      setErrorMsg(json.error || "No se pudo cargar el reporte cronológico de actividad.");
       setRows([]);
       setEntityRows([]);
       setLoading(false);
@@ -455,17 +591,72 @@ export default function UsageGanttPage() {
 
   const suggestedColorMap = useMemo(() => buildSuggestedPalette(suggestedLegend), [suggestedLegend]);
 
+  async function exportPdf() {
+    setBusy(true);
+    try {
+      const entityLabel = getOptionLabel(entityOptions, entityId, "Todas las entidades");
+      const entityTypeLabel = getOptionLabel(entityTypeOptions, entityTypeId, "Todos los tipos");
+      const usageUnitLabel = getOptionLabel(usageUnitOptions, usageUnitId, "Todas las unidades");
+      const scaleLabel = rangeMode === "preset" ? (scale === "week" ? "Semanal" : "Mensual") : "Rango personalizado";
+      const title = [
+        "Reporte cronológico de actividad",
+        entityTypeLabel !== "Todos los tipos" ? entityTypeLabel : "",
+        usageUnitLabel !== "Todas las unidades" ? usageUnitLabel : "",
+        periodLabel,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      const subtitle = `Periodo: ${periodLabel} · Entidades visibles: ${timelineRows.length} · Escala: ${scaleLabel}`;
+      const metadata = [
+        `Entidad: ${entityLabel}`,
+        `Tipo: ${entityTypeLabel}`,
+        `Unidad: ${usageUnitLabel}`,
+        `Periodo: ${periodLabel}`,
+      ];
+      const html = buildGanttPrintHtml({
+        title,
+        subtitle,
+        metadata,
+        columns,
+        rows: timelineRows,
+        suggestedColorMap,
+        suggestedLegend,
+      });
+      const win = window.open("", "_blank");
+      if (!win) {
+        setErrorMsg("No se pudo abrir la ventana de impresión. Revisa el bloqueo de popups.");
+        return;
+      }
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+      win.document.title = slugifyLabel(title) || "reporte-cronologico-de-actividad";
+      win.focus();
+      win.print();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <main className="mx-auto max-w-[1440px] space-y-5 px-4 py-4 sm:space-y-6">
       <PageHero
         badge="Reportes"
         secondaryBadge="Uso"
-        title="Carta Gantt de registro de uso"
-        subtitle="Vista compacta por entidad para seguir el registro de uso en el tiempo, sin depender de una tabla ancha."
+        title="Reporte cronológico de actividad"
+        subtitle="Vista compacta por entidad para seguir registros en el tiempo, desde utilización y asistencia hasta cualquier otra captura cronológica."
         actions={
-          <Link href="/app/reports/usage">
-            <Button variant="outline" size="sm">Volver a Reportes</Button>
-          </Link>
+          <>
+            <Button variant="outline" size="sm" onClick={() => void exportPdf()} disabled={loading || busy}>
+              Exportar PDF
+            </Button>
+            <Link href="/app/reports/usage/detail">
+              <Button variant="outline" size="sm">Abrir vista tabular</Button>
+            </Link>
+            <Link href="/app/usage-capture">
+              <Button variant="outline" size="sm">Captura uso</Button>
+            </Link>
+          </>
         }
       />
 
@@ -608,7 +799,7 @@ export default function UsageGanttPage() {
 
       {loading ? (
         <div className="flex min-h-[50vh] items-center justify-center">
-          <Loader label="Construyendo Gantt de uso..." />
+          <Loader label="Construyendo reporte cronológico..." />
         </div>
       ) : errorMsg ? (
         <Card>

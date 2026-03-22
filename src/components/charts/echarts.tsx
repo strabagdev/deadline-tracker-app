@@ -197,7 +197,7 @@ export function DonutChart({
     },
   };
 
-  return <BaseEChart option={option} height={240} />;
+  return <BaseEChart option={option} height={210} />;
 }
 
 export function BarChart({
@@ -250,7 +250,7 @@ export function BarChart({
     ],
   };
 
-  return <BaseEChart option={option} height={Math.max(180, points.length * 38)} />;
+  return <BaseEChart option={option} height={Math.max(160, points.length * 32)} />;
 }
 
 export function TrendLineChart({
@@ -315,5 +315,5 @@ export function TrendLineChart({
     ],
   };
 
-  return <BaseEChart option={option} height={260} />;
+  return <BaseEChart option={option} height={220} />;
 }
