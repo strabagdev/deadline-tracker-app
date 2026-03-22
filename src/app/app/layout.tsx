@@ -615,10 +615,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-shell flex min-h-screen flex-col">
-      <header className="sticky top-0 z-40 px-2 py-2 backdrop-blur-xl sm:px-3">
+      <header className="sticky top-0 z-40 px-2 pt-2.5 pb-2 backdrop-blur-xl sm:px-3 sm:py-2">
         <div className={cn("mx-auto", isSuperAdmin ? "max-w-[1100px]" : "max-w-[1400px]")}>
           <div
-            className="flex flex-col gap-3 px-3 py-2.5 lg:px-4 lg:py-2.5"
+            className="flex flex-col gap-3 px-3 py-3 lg:px-4 lg:py-2.5"
             style={{
               background: "linear-gradient(140deg, rgba(233, 241, 249, 0.96), rgba(247, 250, 252, 0.98) 48%, rgba(255, 255, 255, 1))",
               border: "1px solid rgba(189, 201, 214, 0.96)",

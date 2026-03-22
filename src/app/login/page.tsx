@@ -117,7 +117,7 @@ export default function LoginPage() {
       <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-[380px] items-center justify-center sm:min-h-[calc(100vh-3rem)]">
         <Card className="w-full rounded-[26px] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(250,252,255,0.88))] shadow-[0_24px_56px_-40px_rgba(15,23,42,0.32)] backdrop-blur-2xl sm:rounded-[30px] sm:shadow-[0_28px_70px_-42px_rgba(15,23,42,0.34)]">
           <CardContent className="px-5 py-7 sm:px-8 sm:py-10">
-            <div className="flex flex-col items-center text-center">
+            <div className="flex flex-col items-center pt-6 text-center sm:pt-0">
               {platformLogoUrl ? (
                 <div className="rounded-[20px] border border-slate-200/90 bg-white p-2 shadow-[0_20px_48px_-34px_rgba(15,23,42,0.24)] sm:rounded-[24px] sm:shadow-[0_24px_60px_-36px_rgba(15,23,42,0.28)]">
                   <Image
@@ -175,7 +175,7 @@ export default function LoginPage() {
                 disabled={busy}
                 className="mt-2 h-11 w-full rounded-[16px] bg-[radial-gradient(circle_at_30%_18%,rgba(96,165,250,0.18),transparent_38%),linear-gradient(180deg,#182235,#0b1220)] text-white shadow-[0_14px_26px_-16px_rgba(15,23,42,0.44),0_6px_14px_-12px_rgba(15,23,42,0.24)] hover:brightness-105 sm:mt-3 sm:h-12 sm:rounded-[18px]"
               >
-                {busyAction === "password" ? "Entrando..." : "Entrar"}
+                {busyAction === "password" ? "ENTRANDO..." : "ENTRAR"}
               </Button>
             </form>
 
