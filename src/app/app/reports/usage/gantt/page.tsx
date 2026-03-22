@@ -509,7 +509,8 @@ export default function UsageGanttPage() {
   }, [entityId, entityTypeId, usageUnitId, scale, anchor, dateFrom, dateTo, displayRange.from, displayRange.to]);
 
   const timelineRows = useMemo<TimelineRow[]>(() => {
-    const byEntity = new Map<string, TimelineRow & { metaByDay: Record<string, { loggedAt: string }> }>();
+    type TimelineAccumulator = TimelineRow & { metaByDay: Record<string, { loggedAt: string }> };
+    const byEntity = new Map<string, TimelineAccumulator>();
 
     for (const entity of entityRows) {
       byEntity.set(entity.id, {
@@ -528,12 +529,13 @@ export default function UsageGanttPage() {
     }
 
     for (const row of rows) {
-      const current = byEntity.get(row.entity_id) ?? {
+      const current: TimelineAccumulator = byEntity.get(row.entity_id) ?? {
         entity_id: row.entity_id,
         entity_name: row.entity_name,
         entity_type_name: row.entity_type_name,
         usage_unit_name: row.usage_unit_name,
         usage_unit_visible: row.usage_unit_visible !== false,
+        suggestedValues: Array.isArray(row.usage_unit_suggested_values) ? row.usage_unit_suggested_values : [],
         detailsByDay: {},
         metaByDay: {},
         totalLoggedDays: 0,
