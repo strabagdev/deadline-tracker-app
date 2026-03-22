@@ -657,12 +657,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       OpsAhead
                     </Link>
                   </div>
-                  {openAiPowered ? (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                      <IconSparkles className="h-3.5 w-3.5" />
-                      IA
-                    </span>
-                  ) : null}
                   {isSuperAdmin ? <Badge variant="secondary" className="shrink-0">Global</Badge> : null}
                 </div>
 
@@ -893,7 +887,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <footer className="border-t bg-white px-4 py-3">
         <div className={cn("mx-auto flex flex-wrap items-center gap-2 text-xs text-slate-500", isSuperAdmin ? "max-w-[1100px]" : "max-w-[1400px]")}>
           <span>{`${appName} · Build ${buildRev || "n/a"} · Push ${pushRev || "n/a"} · ${deployEnv || "n/a"}`}</span>
-          <span>{openAiPowered ? "OpenAI powered" : "OpenAI disabled"}</span>
+          <span className={cn(
+            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+            openAiPowered
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-slate-200 bg-slate-100 text-slate-500",
+          )}>
+            <IconSparkles className="h-3.5 w-3.5" />
+            {openAiPowered ? "IA · OpenAI powered" : "IA · OpenAI disabled"}
+          </span>
         </div>
       </footer>
     </div>

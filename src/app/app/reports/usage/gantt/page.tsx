@@ -388,6 +388,32 @@ function buildGanttPrintHtml(params: {
       .cell { display: inline-block; width: 10px; height: 10px; border-radius: 3px; border: 1px solid transparent; }
       .muted { opacity: 0.4; }
     </style>
+    <script>
+      (() => {
+        let printHandled = false;
+        let closeQueued = false;
+
+        const closeWindow = () => {
+          if (closeQueued) return;
+          closeQueued = true;
+          window.setTimeout(() => window.close(), 120);
+        };
+
+        window.addEventListener("afterprint", closeWindow);
+
+        window.addEventListener("focus", () => {
+          if (printHandled) closeWindow();
+        });
+
+        window.addEventListener("load", () => {
+          window.setTimeout(() => {
+            printHandled = true;
+            window.focus();
+            window.print();
+          }, 120);
+        });
+      })();
+    </script>
   </head>
   <body>
     <div class="sheet">
@@ -752,8 +778,6 @@ export default function UsageGanttPage() {
       win.document.write(html);
       win.document.close();
       win.document.title = slugifyLabel(title) || "reporte-cronologico-de-actividad";
-      win.focus();
-      win.print();
     } finally {
       setBusy(false);
     }
