@@ -183,10 +183,10 @@ function PrimaryNavLink({
     <Link
       href={href}
       className={cn(
-        "inline-flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-medium transition-all",
+        "inline-flex min-h-10 items-center gap-2.5 whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-medium transition-all",
         active
-          ? "bg-slate-900 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.8)]"
-          : "text-slate-600 hover:bg-white/85 hover:text-slate-900"
+          ? "bg-slate-900 text-white shadow-[0_12px_24px_-18px_rgba(15,23,42,0.72)] ring-1 ring-slate-900/10"
+          : "text-slate-600 hover:bg-white/90 hover:text-slate-900"
       )}
     >
       {icon}
@@ -213,16 +213,16 @@ function PrimaryNavButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-medium transition-all",
+        "inline-flex min-h-10 items-center gap-2.5 whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-medium transition-all",
         active || expanded
-          ? "bg-slate-900 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.8)]"
-          : "text-slate-600 hover:bg-white/85 hover:text-slate-900"
+          ? "bg-slate-900 text-white shadow-[0_12px_24px_-18px_rgba(15,23,42,0.72)] ring-1 ring-slate-900/10"
+          : "text-slate-600 hover:bg-white/90 hover:text-slate-900"
       )}
       aria-expanded={expanded}
     >
       {icon}
       <span>{label}</span>
-      <span className="text-[10px]">{expanded ? "▲" : "▼"}</span>
+      <span className="text-[10px] text-current/70">{expanded ? "▲" : "▼"}</span>
     </button>
   );
 }
@@ -272,7 +272,7 @@ function SecondaryNavLink({ href, label, icon }: { href: string; label: string; 
     <Link
       href={href}
       className={cn(
-        "inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-2.5 py-2 text-[13px] transition-all",
+        "inline-flex min-h-10 items-center gap-2.5 whitespace-nowrap rounded-xl px-3 py-2 text-[13px] transition-all",
         active
           ? "bg-slate-100 text-slate-900 shadow-[0_8px_18px_-16px_rgba(15,23,42,0.3)] ring-1 ring-slate-200/80"
           : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
@@ -642,7 +642,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     <Link href={isSuperAdmin ? "/app/super-admin" : "/app"} className="min-w-0 truncate text-base font-semibold text-slate-950 sm:text-base">
                       OpsAhead
                     </Link>
-                    {!isSuperAdmin ? <div className="hidden text-[11px] text-slate-600 xl:block">Inteligencia operativa para equipos y activos</div> : null}
                   </div>
                   {isSuperAdmin ? <Badge variant="secondary" className="shrink-0">Global</Badge> : null}
                 </div>
@@ -679,7 +678,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               {!isSuperAdmin ? (
                 <div className="hidden min-w-0 flex-1 items-center gap-2 lg:flex">
-                  <nav ref={desktopMenuRef} className="flex shrink-0 items-center gap-1 rounded-full bg-slate-900/[0.045] p-1 ring-1 ring-slate-200/80 backdrop-blur-md">
+                  <nav ref={desktopMenuRef} className="flex shrink-0 items-center gap-1.5 rounded-full bg-slate-900/[0.045] p-1 ring-1 ring-slate-200/80 backdrop-blur-md">
                     {visiblePrimaryNavItems.map((item) => (
                       (visibleSecondaryItemsBySection.get(item.key) ?? []).length > 0 ? (
                         <DesktopSectionMenu
@@ -710,14 +709,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       onClick={refreshApp}
                       variant="outline"
                       size="icon"
-                      className="h-8 w-8 rounded-full border-white/80 bg-white/78 shadow-none backdrop-blur-sm"
+                      className="h-10 w-10 rounded-full border-white/80 bg-white/82 shadow-none backdrop-blur-sm"
                       title="Refrescar"
                       aria-label="Refrescar"
                     >
                       <IconRefresh />
                     </Button>
                     <Link href="/app/profile" className="block">
-                      <Button variant="outline" size="icon" className="h-8 w-8 rounded-full border-white/80 bg-white/78 shadow-none backdrop-blur-sm" title="Perfil" aria-label="Perfil">
+                      <Button variant="outline" size="icon" className="h-10 w-10 rounded-full border-white/80 bg-white/82 shadow-none backdrop-blur-sm" title="Perfil" aria-label="Perfil">
                         <IconUser />
                       </Button>
                     </Link>
@@ -725,7 +724,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       onClick={logout}
                       variant="outline"
                       size="icon"
-                      className="h-8 w-8 rounded-full border-white/80 bg-white/78 shadow-none backdrop-blur-sm"
+                      className="h-10 w-10 rounded-full border-white/80 bg-white/82 shadow-none backdrop-blur-sm"
                       title="Salir"
                       aria-label="Salir"
                     >

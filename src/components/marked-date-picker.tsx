@@ -40,6 +40,7 @@ type Props = {
   highlightedDates?: string[];
   disabledDates?: string[];
   label?: string;
+  placeholder?: string;
   disabled?: boolean;
   showLegend?: boolean;
 };
@@ -50,6 +51,7 @@ export function MarkedDatePicker({
   highlightedDates = [],
   disabledDates = [],
   label,
+  placeholder,
   disabled = false,
   showLegend = true,
 }: Props) {
@@ -97,7 +99,7 @@ export function MarkedDatePicker({
         className="h-10 w-full justify-between bg-white"
         disabled={disabled}
       >
-        <span>{value || "Selecciona fecha"}</span>
+        <span>{value || placeholder || "Selecciona fecha"}</span>
         <span className="text-xs text-slate-500">▼</span>
       </Button>
 

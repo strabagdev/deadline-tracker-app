@@ -129,10 +129,8 @@ export default function LoginPage() {
                   />
                 </div>
               ) : (
-                <div className="flex h-28 w-28 items-center justify-center rounded-[28px] bg-[radial-gradient(circle_at_top,rgba(45,79,135,0.16),transparent_62%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(243,247,252,0.98))] ring-1 ring-slate-200/80 shadow-[0_24px_60px_-36px_rgba(15,23,42,0.42)]">
-                  <div className="flex h-20 w-20 items-center justify-center rounded-[22px] bg-slate-900 text-xl font-semibold text-white">
-                    OA
-                  </div>
+                <div className="flex h-28 w-28 items-center justify-center rounded-[28px] bg-[radial-gradient(circle_at_30%_18%,rgba(96,165,250,0.24),transparent_34%),radial-gradient(circle_at_70%_82%,rgba(14,165,233,0.12),transparent_42%),linear-gradient(180deg,#182235,#0b1220)] text-[2.5rem] font-semibold text-white ring-1 ring-slate-800/85 shadow-[0_16px_34px_-18px_rgba(15,23,42,0.52),0_8px_18px_-14px_rgba(15,23,42,0.32)]">
+                  OA
                 </div>
               )}
               <div className="mt-6 text-[10px] uppercase tracking-[0.28em] text-slate-500">Ops Ahead</div>
@@ -175,7 +173,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 disabled={busy}
-                className="mt-3 h-12 w-full rounded-[18px] bg-[linear-gradient(180deg,#1f3d6e,#183359)] text-white shadow-[0_18px_36px_-24px_rgba(24,51,89,0.7)] hover:brightness-105"
+                className="mt-3 h-12 w-full rounded-[18px] bg-[radial-gradient(circle_at_30%_18%,rgba(96,165,250,0.18),transparent_38%),linear-gradient(180deg,#182235,#0b1220)] text-white shadow-[0_14px_26px_-16px_rgba(15,23,42,0.44),0_6px_14px_-12px_rgba(15,23,42,0.24)] hover:brightness-105"
               >
                 {busyAction === "password" ? "Entrando..." : "Entrar"}
               </Button>

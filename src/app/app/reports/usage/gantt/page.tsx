@@ -257,7 +257,7 @@ function getCustomPeriodLabel(fromText: string, toText: string) {
 }
 
 function filterSelectClass() {
-  return "h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] text-slate-700 sm:text-sm";
+  return "h-[var(--control-h)] w-full rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] text-slate-700 sm:text-sm";
 }
 
 function DirectionIcon({
@@ -421,6 +421,7 @@ function getGridMetrics(columnCount: number) {
 export default function UsageGanttPage() {
   const PAGE_SIZE = 10;
   const timelineListRef = useRef<HTMLDivElement | null>(null);
+  const entityFilterRef = useRef<HTMLDivElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -430,6 +431,8 @@ export default function UsageGanttPage() {
   const [entityTypeOptions, setEntityTypeOptions] = useState<Option[]>([]);
   const [usageUnitOptions, setUsageUnitOptions] = useState<Option[]>([]);
   const [entityId, setEntityId] = useState("all");
+  const [entitySearch, setEntitySearch] = useState("");
+  const [entitySuggestionsOpen, setEntitySuggestionsOpen] = useState(false);
   const [entityTypeId, setEntityTypeId] = useState("all");
   const [usageUnitId, setUsageUnitId] = useState("all");
   const [rangeMode, setRangeMode] = useState<RangeMode>("preset");
@@ -449,6 +452,23 @@ export default function UsageGanttPage() {
     setDateFrom(toIsoDate(presetRange.from));
     setDateTo(toIsoDate(presetRange.to));
   }, [presetRange.from, presetRange.to, rangeMode]);
+
+  useEffect(() => {
+    const selectedEntity = entityOptions.find((option) => option.id === entityId);
+    setEntitySearch(entityId === "all" ? "" : selectedEntity?.name ?? "");
+  }, [entityId, entityOptions]);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (entityFilterRef.current?.contains(target)) return;
+      setEntitySuggestionsOpen(false);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
 
   const effectiveRange = useMemo(() => {
     const from = parseIsoDate(dateFrom);
@@ -484,6 +504,11 @@ export default function UsageGanttPage() {
     () => Array.from(new Set(rows.map((row) => row.logged_on).filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value)))).sort(),
     [rows]
   );
+  const filteredEntityOptions = useMemo(() => {
+    const needle = entitySearch.trim().toLowerCase();
+    if (!needle) return entityOptions.slice(0, 12);
+    return entityOptions.filter((option) => option.name.toLowerCase().includes(needle)).slice(0, 12);
+  }, [entityOptions, entitySearch]);
 
   async function load() {
     setLoading(true);
@@ -770,15 +795,60 @@ export default function UsageGanttPage() {
         <CardContent className="grid gap-2.5 pt-0 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,0.9fr)]">
           <section className="rounded-[14px] border border-slate-200 bg-slate-50/70 p-2">
             <div className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">Alcance</div>
-            <div className="grid gap-1.5 md:grid-cols-3">
+            <div className="grid gap-1.5 md:grid-cols-[minmax(0,1.8fr)_minmax(0,0.85fr)_minmax(0,0.85fr)]">
               <label className="grid gap-0.5">
                 <span className="text-[11px] text-slate-500">Entidad</span>
-                <select value={entityId} onChange={(e) => setEntityId(e.target.value)} className={filterSelectClass()}>
-                  <option value="all">Todas las entidades</option>
-                  {entityOptions.map((option) => (
-                    <option key={option.id} value={option.id}>{option.name}</option>
-                  ))}
-                </select>
+                <div ref={entityFilterRef} className="relative">
+                  <input
+                    value={entitySearch}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setEntitySearch(nextValue);
+                      const matched = entityOptions.find(
+                        (option) => option.name.toLowerCase() === nextValue.trim().toLowerCase()
+                      );
+                      setEntityId(matched?.id ?? (nextValue.trim() ? entityId : "all"));
+                      if (!entitySuggestionsOpen) setEntitySuggestionsOpen(true);
+                    }}
+                    onFocus={() => setEntitySuggestionsOpen(true)}
+                    placeholder="Buscar entidad..."
+                    className={filterSelectClass()}
+                  />
+                  {entitySuggestionsOpen ? (
+                    <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 rounded-[14px] border border-slate-200 bg-white p-1 shadow-[0_18px_32px_-24px_rgba(15,23,42,0.28)]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEntityId("all");
+                          setEntitySearch("");
+                          setEntitySuggestionsOpen(false);
+                        }}
+                        className="flex w-full items-center rounded-[10px] px-2.5 py-2 text-left text-[13px] text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      >
+                        Todas las entidades
+                      </button>
+                      <div className="max-h-56 overflow-y-auto">
+                        {filteredEntityOptions.map((option) => (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => {
+                              setEntityId(option.id);
+                              setEntitySearch(option.name);
+                              setEntitySuggestionsOpen(false);
+                            }}
+                            className="flex w-full items-center rounded-[10px] px-2.5 py-2 text-left text-[13px] text-slate-700 hover:bg-slate-50 hover:text-slate-950"
+                          >
+                            {option.name}
+                          </button>
+                        ))}
+                        {filteredEntityOptions.length === 0 ? (
+                          <div className="px-2.5 py-2 text-[12px] text-slate-400">Sin coincidencias</div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               </label>
               <label className="grid gap-0.5">
                 <span className="text-[11px] text-slate-500">Tipo</span>
@@ -855,37 +925,21 @@ export default function UsageGanttPage() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-2">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <MarkedDatePicker
-                    value={dateFrom}
-                    onChange={setDateFrom}
-                    highlightedDates={highlightedDates}
-                    label="Desde"
-                    showLegend={false}
-                  />
-                  <MarkedDatePicker
-                    value={dateTo}
-                    onChange={setDateTo}
-                    highlightedDates={highlightedDates}
-                    label="Hasta"
-                    showLegend={false}
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-2 rounded-[12px] border border-slate-200 bg-slate-50 px-2.5 py-1.5">
-                  <div className="min-w-0 text-xs font-semibold text-slate-700">{periodLabel}</div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setRangeMode("preset");
-                      setDateFrom(toIsoDate(presetRange.from));
-                      setDateTo(toIsoDate(presetRange.to));
-                    }}
-                  >
-                    Volver a guiado
-                  </Button>
-                </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <MarkedDatePicker
+                  value={dateFrom}
+                  onChange={setDateFrom}
+                  highlightedDates={highlightedDates}
+                  placeholder="Desde"
+                  showLegend={false}
+                />
+                <MarkedDatePicker
+                  value={dateTo}
+                  onChange={setDateTo}
+                  highlightedDates={highlightedDates}
+                  placeholder="Hasta"
+                  showLegend={false}
+                />
               </div>
             )}
           </section>
@@ -913,59 +967,28 @@ export default function UsageGanttPage() {
                   {totalEntities > 0 ? ` Mostrando ${pageStart}-${pageEnd} de ${totalEntities} entidades filtradas.` : ""}
                 </p>
               </div>
-              <div className="flex flex-col items-start gap-2 lg:items-end">
-                {totalEntities > PAGE_SIZE ? (
-                  <div className="flex items-center gap-1.5 self-end">
-                    <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
-                      {pageStart}-{pageEnd} / {totalEntities}
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                <div className="flex items-center gap-2">
+                  <span className="h-3 w-3 rounded-[4px] border border-slate-200 bg-slate-100/80" />
+                  Sin registro
+                </div>
+                {suggestedLegend.map((value) => {
+                  const color = suggestedColorMap.get(normalizeSuggestedValue(value));
+                  if (!color) return null;
+                  return (
+                    <div key={`legend-${value}`} className="flex items-center gap-2">
+                      <span className={cn("h-3 w-3 rounded-[4px] border", color.border, color.dot)} />
+                      {value}
                     </div>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}
-                      disabled={!hasPreviousPage || loading}
-                      aria-label="Página anterior"
-                      title="Página anterior"
-                    >
-                      <DirectionIcon direction="left" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setPageOffset((current) => current + PAGE_SIZE)}
-                      disabled={!hasNextPage || loading}
-                      aria-label="Página siguiente"
-                      title="Página siguiente"
-                    >
-                      <DirectionIcon direction="right" />
-                    </Button>
-                  </div>
-                ) : null}
-                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                  <div className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-[4px] border border-slate-200 bg-slate-100/80" />
-                    Sin registro
-                  </div>
-                  {suggestedLegend.map((value) => {
-                    const color = suggestedColorMap.get(normalizeSuggestedValue(value));
-                    if (!color) return null;
-                    return (
-                      <div key={`legend-${value}`} className="flex items-center gap-2">
-                        <span className={cn("h-3 w-3 rounded-[4px] border", color.border, color.dot)} />
-                        {value}
-                      </div>
-                    );
-                  })}
-                  <div className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-[4px] border border-sky-200 bg-sky-500/80" />
-                    Numérico libre
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-[4px] border border-emerald-200 bg-emerald-500/80" />
-                    Texto libre
-                  </div>
+                  );
+                })}
+                <div className="flex items-center gap-2">
+                  <span className="h-3 w-3 rounded-[4px] border border-sky-200 bg-sky-500/80" />
+                  Numérico libre
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-3 w-3 rounded-[4px] border border-emerald-200 bg-emerald-500/80" />
+                  Texto libre
                 </div>
               </div>
             </div>
@@ -1076,6 +1099,35 @@ export default function UsageGanttPage() {
                     })}
                   </div>
                 </div>
+                {totalEntities > PAGE_SIZE ? (
+                  <div className="flex items-center justify-center gap-2 border-t border-slate-100 pt-3">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 rounded-full"
+                      onClick={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}
+                      disabled={!hasPreviousPage || loading}
+                      aria-label="Página anterior"
+                      title="Página anterior"
+                    >
+                      <DirectionIcon direction="left" />
+                    </Button>
+                    <div className="rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-medium text-slate-600">
+                      {pageStart}-{pageEnd} / {totalEntities}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 rounded-full"
+                      onClick={() => setPageOffset((current) => current + PAGE_SIZE)}
+                      disabled={!hasNextPage || loading}
+                      aria-label="Página siguiente"
+                      title="Página siguiente"
+                    >
+                      <DirectionIcon direction="right" />
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             )}
           </CardContent>
