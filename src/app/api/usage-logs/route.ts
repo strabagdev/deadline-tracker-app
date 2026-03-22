@@ -9,6 +9,7 @@ import {
   type UsageLogsRepo,
 } from "@/lib/api/usageLogsService";
 import { syncForecastAndAlertsForEntity } from "@/lib/api/forecastAlertsSync";
+import { refreshDashboardSummary } from "@/lib/api/dashboardSummaryService";
 
 type DataClient = ReturnType<typeof createDataServerClient>;
 
@@ -339,17 +340,26 @@ export async function POST(req: Request) {
     const response = await handleUsageLogsPost(access.organizationId, body, makeRepo(db));
     const entityId = typeof response.body?.entity_id === "string" ? response.body.entity_id : "";
     if (response.status < 400 && entityId) {
+      let syncWarning = "";
+      let summaryWarning = "";
       try {
         await syncForecastAndAlertsForEntity(db, access.organizationId, entityId);
       } catch (syncErr: unknown) {
-        return NextResponse.json(
-          {
-            ...response.body,
-            sync_warning: getErrorMessage(syncErr),
-          },
-          { status: response.status }
-        );
+        syncWarning = getErrorMessage(syncErr);
       }
+      try {
+        await refreshDashboardSummary(db, access.organizationId);
+      } catch (summaryErr: unknown) {
+        summaryWarning = getErrorMessage(summaryErr);
+      }
+      return NextResponse.json(
+        {
+          ...response.body,
+          ...(syncWarning ? { sync_warning: syncWarning } : {}),
+          ...(summaryWarning ? { summary_warning: summaryWarning } : {}),
+        },
+        { status: response.status }
+      );
     }
     return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
@@ -396,17 +406,26 @@ export async function DELETE(req: Request) {
     const response = await handleUsageLogsDelete(access.organizationId, req.url, makeRepo(db));
     const entityId = typeof response.body?.entity_id === "string" ? response.body.entity_id : "";
     if (response.status < 400 && entityId) {
+      let syncWarning = "";
+      let summaryWarning = "";
       try {
         await syncForecastAndAlertsForEntity(db, access.organizationId, entityId);
       } catch (syncErr: unknown) {
-        return NextResponse.json(
-          {
-            ...response.body,
-            sync_warning: getErrorMessage(syncErr),
-          },
-          { status: response.status }
-        );
+        syncWarning = getErrorMessage(syncErr);
       }
+      try {
+        await refreshDashboardSummary(db, access.organizationId);
+      } catch (summaryErr: unknown) {
+        summaryWarning = getErrorMessage(summaryErr);
+      }
+      return NextResponse.json(
+        {
+          ...response.body,
+          ...(syncWarning ? { sync_warning: syncWarning } : {}),
+          ...(summaryWarning ? { summary_warning: summaryWarning } : {}),
+        },
+        { status: response.status }
+      );
     }
     return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {

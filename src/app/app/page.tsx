@@ -35,6 +35,16 @@ type DynamicFieldDistribution = {
   values: Array<{ label: string; count: number }>;
 };
 
+type DashboardExecutiveSummary = {
+  lines: string[];
+  updated_at: string | null;
+  executive_comment: {
+    text: string | null;
+    model: string | null;
+    updated_at: string | null;
+  };
+};
+
 type DonutSlice = {
   label: string;
   value: number;
@@ -89,6 +99,7 @@ export default function AnalyticsDashboardPage() {
   const [meta, setMeta] = useState<DashboardMeta | null>(null);
   const [dynamicDistributionByEntityType, setDynamicDistributionByEntityType] = useState<Record<string, DynamicFieldDistribution[]>>({});
   const [entityTypeFilter, setEntityTypeFilter] = useState<string>("all");
+  const [executiveSummary, setExecutiveSummary] = useState<DashboardExecutiveSummary | null>(null);
 
   async function load() {
     setLoading(true);
@@ -102,13 +113,18 @@ export default function AnalyticsDashboardPage() {
       return;
     }
 
-    const res = await fetch("/api/dashboard?mode=analytics", { headers: { Authorization: `Bearer ${token}` } });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
+    const [dashboardRes, summaryRes] = await Promise.all([
+      fetch("/api/dashboard?mode=analytics", { headers: { Authorization: `Bearer ${token}` } }),
+      fetch("/api/dashboard/summary-text", { headers: { Authorization: `Bearer ${token}` } }),
+    ]);
+    const json = await dashboardRes.json().catch(() => ({}));
+    const summaryJson = await summaryRes.json().catch(() => ({}));
+    if (!dashboardRes.ok) {
       setErrorMsg(json.error || "No se pudo cargar información analítica.");
       setEntities([]);
       setMeta(null);
       setDynamicDistributionByEntityType({});
+      setExecutiveSummary(null);
       setLoading(false);
       return;
     }
@@ -117,6 +133,28 @@ export default function AnalyticsDashboardPage() {
     setMeta((json.meta ?? null) as DashboardMeta | null);
     setDynamicDistributionByEntityType(
       (json.dynamic_distribution_by_entity_type ?? {}) as Record<string, DynamicFieldDistribution[]>
+    );
+    setExecutiveSummary(
+      summaryRes.ok
+        ? {
+            lines: Array.isArray(summaryJson.lines) ? summaryJson.lines.map((line: unknown) => String(line ?? "")).filter(Boolean).slice(0, 3) : [],
+            updated_at: summaryJson.updated_at ? String(summaryJson.updated_at) : null,
+            executive_comment: {
+              text:
+                summaryJson.executive_comment && typeof summaryJson.executive_comment.text === "string"
+                  ? String(summaryJson.executive_comment.text)
+                  : null,
+              model:
+                summaryJson.executive_comment && typeof summaryJson.executive_comment.model === "string"
+                  ? String(summaryJson.executive_comment.model)
+                  : null,
+              updated_at:
+                summaryJson.executive_comment && typeof summaryJson.executive_comment.updated_at === "string"
+                  ? String(summaryJson.executive_comment.updated_at)
+                  : null,
+            },
+          }
+        : null
     );
     setLoading(false);
   }
@@ -377,6 +415,60 @@ export default function AnalyticsDashboardPage() {
             </div>
           </div>
         </div>
+      </section>
+
+      <section className="grid gap-4">
+        <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.82)]">
+          <CardHeader className="pb-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Resumen ejecutivo</div>
+              <Badge variant="secondary" className="bg-slate-100 text-slate-700 hover:bg-slate-100">
+                Sistema
+              </Badge>
+            </div>
+            <CardTitle className="text-left text-base sm:text-lg">Estado general del sistema</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {executiveSummary?.lines?.length ? (
+              <div className="space-y-2 text-sm leading-6 text-slate-700">
+                {executiveSummary.lines.map((line, index) => (
+                  <p key={`${index}-${line}`}>{line}</p>
+                ))}
+              </div>
+            ) : (
+              <p className="app-empty">El resumen ejecutivo todavía no está disponible.</p>
+            )}
+            {executiveSummary?.updated_at ? (
+              <p className="text-xs text-slate-500">
+                Actualizado {new Date(executiveSummary.updated_at).toLocaleString(undefined, { timeZone: "UTC" })}
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.82)]">
+          <CardHeader className="pb-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Comentario ejecutivo</div>
+              <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
+                IA
+              </Badge>
+            </div>
+            <CardTitle className="text-left text-base sm:text-lg">Lectura gerencial</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {executiveSummary?.executive_comment?.text ? (
+              <p className="text-sm leading-7 text-slate-700">{executiveSummary.executive_comment.text}</p>
+            ) : (
+              <p className="app-empty">El comentario ejecutivo narrado todavía no está disponible.</p>
+            )}
+            {executiveSummary?.executive_comment?.updated_at ? (
+              <p className="text-xs text-slate-500">
+                Actualizado {new Date(executiveSummary.executive_comment.updated_at).toLocaleString(undefined, { timeZone: "UTC" })}
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">

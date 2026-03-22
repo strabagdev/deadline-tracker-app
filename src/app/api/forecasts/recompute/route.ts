@@ -3,6 +3,7 @@ import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { canViewModule, getOrgAccess } from "@/lib/server/orgAccess";
 import { getSemaphoreSettings } from "@/lib/server/semaphoreSettings";
+import { refreshDashboardSummary } from "@/lib/api/dashboardSummaryService";
 
 type DeadlineRow = {
   id: string;
@@ -295,6 +296,13 @@ export async function POST(req: Request) {
     const dueIn7 = forecastRows.filter((f) => f.days_remaining != null && f.days_remaining <= 7).length;
     const dueIn30 = forecastRows.filter((f) => f.days_remaining != null && f.days_remaining <= 30).length;
 
+    let summaryWarning: string | null = null;
+    try {
+      await refreshDashboardSummary(db, orgId);
+    } catch (summaryErr: unknown) {
+      summaryWarning = getErrorMessage(summaryErr);
+    }
+
     return NextResponse.json({
       summary: {
         upcoming_7_days: dueIn7,
@@ -304,6 +312,7 @@ export async function POST(req: Request) {
       },
       entities: entitiesView,
       computed_at: now.toISOString(),
+      summary_warning: summaryWarning,
     });
   } catch (error: unknown) {
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
