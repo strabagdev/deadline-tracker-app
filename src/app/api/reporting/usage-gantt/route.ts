@@ -94,6 +94,8 @@ export async function GET(req: Request) {
     const usageUnitId = String(url.searchParams.get("usage_unit_id") ?? "all").trim();
     const dateFrom = String(url.searchParams.get("date_from") ?? "").trim();
     const dateTo = String(url.searchParams.get("date_to") ?? "").trim();
+    const offset = Math.max(0, Number(url.searchParams.get("offset") ?? "0") || 0);
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? "10") || 10));
 
     if (dateFrom && !isIsoDateOnly(dateFrom)) {
       return NextResponse.json({ error: "date_from must be YYYY-MM-DD", code: "BAD_REQUEST" }, { status: 400 });
@@ -118,8 +120,11 @@ export async function GET(req: Request) {
       if (usageUnitId !== "all" && String(entity.usage_unit_id ?? "") !== usageUnitId) return false;
       return true;
     });
-
-    const entityIds = filteredEntities.map((entity) => entity.id);
+    const sortedFilteredEntities = filteredEntities
+      .slice()
+      .sort((a, b) => String(a.name ?? "Entidad").localeCompare(String(b.name ?? "Entidad"), "es", { sensitivity: "base" }));
+    const pagedEntities = sortedFilteredEntities.slice(offset, offset + limit);
+    const entityIds = pagedEntities.map((entity) => entity.id);
     const entityTypeIds = Array.from(new Set(entities.map((entity) => entity.entity_type_id).filter(Boolean))) as string[];
     const usageUnitIds = Array.from(new Set(entities.map((entity) => entity.usage_unit_id).filter(Boolean))) as string[];
 
@@ -239,6 +244,15 @@ export async function GET(req: Request) {
         usage_unit_id: usageUnitId,
         date_from: dateFrom || null,
         date_to: dateTo || null,
+        offset,
+        limit,
+      },
+      paging: {
+        offset,
+        limit,
+        total_entities: sortedFilteredEntities.length,
+        loaded_entities: pagedEntities.length,
+        has_more: offset + pagedEntities.length < sortedFilteredEntities.length,
       },
       options: {
         entities: entities
@@ -251,7 +265,7 @@ export async function GET(req: Request) {
           .map((unit) => ({ id: unit.id, name: unit.name ?? "Sin unidad" }))
           .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" })),
       },
-      entity_rows: filteredEntities
+      entity_rows: pagedEntities
         .map((entity) => {
           const entityType = entity.entity_type_id ? entityTypeById.get(entity.entity_type_id) : null;
           const usageUnit = entity.usage_unit_id ? usageUnitById.get(entity.usage_unit_id) : null;
@@ -265,8 +279,7 @@ export async function GET(req: Request) {
               ? usageUnit.suggested_values.map((value) => String(value)).filter((value) => value.trim().length > 0)
               : [],
           };
-        })
-        .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" })),
+        }),
       rows,
     });
   } catch (error: unknown) {

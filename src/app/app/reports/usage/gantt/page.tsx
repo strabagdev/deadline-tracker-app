@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 import { Loader } from "@/components/ui/loader";
@@ -260,6 +260,20 @@ function filterSelectClass() {
   return "h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] text-slate-700 sm:text-sm";
 }
 
+function DirectionIcon({
+  direction,
+  className = "h-4 w-4",
+}: {
+  direction: "left" | "right";
+  className?: string;
+}) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      {direction === "left" ? <path d="m15 18-6-6 6-6" /> : <path d="m9 18 6-6-6-6" />}
+    </svg>
+  );
+}
+
 function escapeHtml(value: string) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -405,6 +419,8 @@ function getGridMetrics(columnCount: number) {
 }
 
 export default function UsageGanttPage() {
+  const PAGE_SIZE = 10;
+  const timelineListRef = useRef<HTMLDivElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -421,6 +437,9 @@ export default function UsageGanttPage() {
   const [anchor, setAnchor] = useState(today);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [pageOffset, setPageOffset] = useState(0);
+  const [viewportMetrics, setViewportMetrics] = useState({ scrollY: 0, height: 0, listTop: 0 });
+  const [totalEntities, setTotalEntities] = useState(0);
 
   const presetRange = useMemo(() => getRange(anchor, scale), [anchor, scale]);
   const presetFocusRange = useMemo(() => getRange(anchor, scale), [anchor, scale]);
@@ -479,6 +498,8 @@ export default function UsageGanttPage() {
     const qs = new URLSearchParams();
     qs.set("date_from", toIsoDate(displayRange.from));
     qs.set("date_to", toIsoDate(displayRange.to));
+    qs.set("offset", String(pageOffset));
+    qs.set("limit", String(PAGE_SIZE));
     if (entityId !== "all") qs.set("entity_id", entityId);
     if (entityTypeId !== "all") qs.set("entity_type_id", entityTypeId);
     if (usageUnitId !== "all") qs.set("usage_unit_id", usageUnitId);
@@ -491,22 +512,30 @@ export default function UsageGanttPage() {
       setErrorMsg(json.error || "No se pudo cargar el reporte cronológico de actividad.");
       setRows([]);
       setEntityRows([]);
+      setTotalEntities(0);
       setLoading(false);
       return;
     }
 
-    setRows(Array.isArray(json.rows) ? json.rows : []);
-    setEntityRows(Array.isArray(json.entity_rows) ? json.entity_rows : []);
+    const nextRows = Array.isArray(json.rows) ? json.rows : [];
+    const nextEntityRows = Array.isArray(json.entity_rows) ? json.entity_rows : [];
+    setRows(nextRows);
+    setEntityRows(nextEntityRows);
     setEntityOptions(Array.isArray(json.options?.entities) ? json.options.entities : []);
     setEntityTypeOptions(Array.isArray(json.options?.entity_types) ? json.options.entity_types : []);
     setUsageUnitOptions(Array.isArray(json.options?.usage_units) ? json.options.usage_units : []);
+    setTotalEntities(Number(json.paging?.total_entities ?? 0) || 0);
     setLoading(false);
   }
 
   useEffect(() => {
+    setPageOffset(0);
+  }, [entityId, entityTypeId, usageUnitId, scale, anchor, dateFrom, dateTo, displayRange.from, displayRange.to]);
+
+  useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entityId, entityTypeId, usageUnitId, scale, anchor, dateFrom, dateTo, displayRange.from, displayRange.to]);
+  }, [entityId, entityTypeId, usageUnitId, scale, anchor, dateFrom, dateTo, displayRange.from, displayRange.to, pageOffset]);
 
   const timelineRows = useMemo<TimelineRow[]>(() => {
     type TimelineAccumulator = TimelineRow & { metaByDay: Record<string, { loggedAt: string }> };
@@ -592,6 +621,71 @@ export default function UsageGanttPage() {
   }, [timelineRows]);
 
   const suggestedColorMap = useMemo(() => buildSuggestedPalette(suggestedLegend), [suggestedLegend]);
+  const pageStart = totalEntities === 0 ? 0 : pageOffset + 1;
+  const pageEnd = Math.min(pageOffset + timelineRows.length, totalEntities);
+  const hasPreviousPage = pageOffset > 0;
+  const hasNextPage = pageOffset + PAGE_SIZE < totalEntities;
+  const virtualRowHeight = 42;
+  const virtualRowGap = 8;
+  const virtualRowPitch = virtualRowHeight + virtualRowGap;
+  const virtualOverscan = 8;
+  const shouldVirtualizeRows = timelineRows.length > 40;
+  const virtualWindow = useMemo(() => {
+    if (!shouldVirtualizeRows) {
+      return { start: 0, end: timelineRows.length };
+    }
+    const visibleTop = Math.max(0, viewportMetrics.scrollY - viewportMetrics.listTop);
+    const visibleBottom = Math.max(0, viewportMetrics.scrollY + viewportMetrics.height - viewportMetrics.listTop);
+    const start = Math.max(0, Math.floor(visibleTop / virtualRowPitch) - virtualOverscan);
+    const end = Math.min(timelineRows.length, Math.ceil(visibleBottom / virtualRowPitch) + virtualOverscan);
+    return { start, end };
+  }, [shouldVirtualizeRows, timelineRows.length, viewportMetrics.height, viewportMetrics.listTop, viewportMetrics.scrollY, virtualRowPitch]);
+  const virtualRows = useMemo(
+    () => timelineRows.slice(virtualWindow.start, virtualWindow.end),
+    [timelineRows, virtualWindow.end, virtualWindow.start]
+  );
+  const virtualListHeight = Math.max(0, timelineRows.length * virtualRowPitch - virtualRowGap);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let frame = 0;
+
+    const updateViewportMetrics = () => {
+      cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const listTop = timelineListRef.current
+          ? timelineListRef.current.getBoundingClientRect().top + window.scrollY
+          : 0;
+        setViewportMetrics({
+          scrollY: window.scrollY,
+          height: window.innerHeight,
+          listTop,
+        });
+      });
+    };
+
+    updateViewportMetrics();
+    window.addEventListener("scroll", updateViewportMetrics, { passive: true });
+    window.addEventListener("resize", updateViewportMetrics);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", updateViewportMetrics);
+      window.removeEventListener("resize", updateViewportMetrics);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const listTop = timelineListRef.current
+      ? timelineListRef.current.getBoundingClientRect().top + window.scrollY
+      : 0;
+    setViewportMetrics((current) => ({
+      scrollY: window.scrollY,
+      height: window.innerHeight,
+      listTop: listTop || current.listTop,
+    }));
+  }, [timelineRows.length, columns.length, scale, rangeMode]);
 
   async function exportPdf() {
     setBusy(true);
@@ -641,12 +735,11 @@ export default function UsageGanttPage() {
   }
 
   return (
-    <main className="mx-auto max-w-[1440px] space-y-5 px-4 py-4 sm:space-y-6">
+    <main className="mx-auto max-w-[1440px] space-y-4 px-4 py-3 sm:space-y-5">
       <PageHero
         badge="Reportes"
         secondaryBadge="Uso"
         title="Reporte cronológico de actividad"
-        subtitle="Vista compacta por entidad para seguir registros en el tiempo, desde utilización y asistencia hasta cualquier otra captura cronológica."
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => void exportPdf()} disabled={loading || busy}>
@@ -663,21 +756,21 @@ export default function UsageGanttPage() {
       />
 
       <Card>
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-1.5">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <CardTitle className="text-base">Filtros</CardTitle>
-              <p className="mt-0.5 text-xs text-slate-500">Alcance y periodo del trazado.</p>
+              <p className="text-xs text-slate-500">Alcance y periodo del trazado.</p>
             </div>
             <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium text-slate-500">
               {periodLabel}
             </div>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-3 pt-0 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,0.9fr)]">
-          <section className="rounded-[16px] border border-slate-200 bg-slate-50/70 p-2.5">
-            <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">Alcance</div>
-            <div className="grid gap-2 md:grid-cols-3">
+        <CardContent className="grid gap-2.5 pt-0 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,0.9fr)]">
+          <section className="rounded-[14px] border border-slate-200 bg-slate-50/70 p-2">
+            <div className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">Alcance</div>
+            <div className="grid gap-1.5 md:grid-cols-3">
               <label className="grid gap-0.5">
                 <span className="text-[11px] text-slate-500">Entidad</span>
                 <select value={entityId} onChange={(e) => setEntityId(e.target.value)} className={filterSelectClass()}>
@@ -708,8 +801,8 @@ export default function UsageGanttPage() {
             </div>
           </section>
 
-          <section className="rounded-[16px] border border-slate-200 bg-white p-2.5 shadow-[0_12px_30px_-28px_rgba(15,23,42,0.4)]">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <section className="rounded-[14px] border border-slate-200 bg-white p-2 shadow-[0_12px_30px_-28px_rgba(15,23,42,0.4)]">
+            <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
               <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">Periodo</div>
               <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1">
                 <button
@@ -817,30 +910,62 @@ export default function UsageGanttPage() {
                 <CardTitle className="text-base">Mapa de actividad</CardTitle>
                 <p className="mt-1 text-sm text-slate-500">
                   Cada entidad ocupa una sola fila y distribuye sus registros diarios sobre todo el ancho disponible.
+                  {totalEntities > 0 ? ` Mostrando ${pageStart}-${pageEnd} de ${totalEntities} entidades filtradas.` : ""}
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-[4px] border border-slate-200 bg-slate-100/80" />
-                  Sin registro
-                </div>
-                {suggestedLegend.map((value) => {
-                  const color = suggestedColorMap.get(normalizeSuggestedValue(value));
-                  if (!color) return null;
-                  return (
-                    <div key={`legend-${value}`} className="flex items-center gap-2">
-                      <span className={cn("h-3 w-3 rounded-[4px] border", color.border, color.dot)} />
-                      {value}
+              <div className="flex flex-col items-start gap-2 lg:items-end">
+                {totalEntities > PAGE_SIZE ? (
+                  <div className="flex items-center gap-1.5 self-end">
+                    <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                      {pageStart}-{pageEnd} / {totalEntities}
                     </div>
-                  );
-                })}
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-[4px] border border-sky-200 bg-sky-500/80" />
-                  Numérico libre
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-[4px] border border-emerald-200 bg-emerald-500/80" />
-                  Texto libre
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}
+                      disabled={!hasPreviousPage || loading}
+                      aria-label="Página anterior"
+                      title="Página anterior"
+                    >
+                      <DirectionIcon direction="left" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setPageOffset((current) => current + PAGE_SIZE)}
+                      disabled={!hasNextPage || loading}
+                      aria-label="Página siguiente"
+                      title="Página siguiente"
+                    >
+                      <DirectionIcon direction="right" />
+                    </Button>
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-[4px] border border-slate-200 bg-slate-100/80" />
+                    Sin registro
+                  </div>
+                  {suggestedLegend.map((value) => {
+                    const color = suggestedColorMap.get(normalizeSuggestedValue(value));
+                    if (!color) return null;
+                    return (
+                      <div key={`legend-${value}`} className="flex items-center gap-2">
+                        <span className={cn("h-3 w-3 rounded-[4px] border", color.border, color.dot)} />
+                        {value}
+                      </div>
+                    );
+                  })}
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-[4px] border border-sky-200 bg-sky-500/80" />
+                    Numérico libre
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-[4px] border border-emerald-200 bg-emerald-500/80" />
+                    Texto libre
+                  </div>
                 </div>
               </div>
             </div>
@@ -875,68 +1000,81 @@ export default function UsageGanttPage() {
                     </div>
                   </div>
 
-                  {timelineRows.map((row) => (
-                    <section key={row.entity_id} className="grid items-center gap-2 rounded-xl border border-slate-200 bg-white/85 px-3 py-1.5 shadow-sm" style={{ gridTemplateColumns: `${gridMetrics.leftColWidth}px minmax(0,1fr)` }}>
-                      <div className="min-w-0">
-                        <div className="truncate text-[13px] font-semibold leading-tight text-slate-900">{row.entity_name}</div>
-                      </div>
-
-                      <div className="space-y-1">
-                        {scale === "month" ? (
-                          <div className="grid" style={{ gap: `${gridMetrics.blockGap}px`, gridTemplateColumns: weekBlockTemplate }}>
-                            {heatmapWeeks.map((week) => (
-                              <div key={`${row.entity_id}-block-${week.key}`} className="h-1 rounded-full bg-slate-100" />
-                            ))}
+                  <div ref={timelineListRef} className="relative" style={{ height: `${virtualListHeight}px` }}>
+                    {virtualRows.map((row, visibleIndex) => {
+                      const rowIndex = virtualWindow.start + visibleIndex;
+                      return (
+                        <section
+                          key={row.entity_id}
+                          className="absolute left-0 right-0 grid items-center gap-2 rounded-xl border border-slate-200 bg-white/85 px-3 py-1.5 shadow-sm"
+                          style={{
+                            top: `${rowIndex * virtualRowPitch}px`,
+                            height: `${virtualRowHeight}px`,
+                            gridTemplateColumns: `${gridMetrics.leftColWidth}px minmax(0,1fr)`,
+                          }}
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-[13px] font-semibold leading-tight text-slate-900">{row.entity_name}</div>
                           </div>
-                        ) : null}
-                        <div className="grid" style={{ gap: `${gridMetrics.dayCellGap}px`, gridTemplateColumns: dayGridTemplate }}>
-                          {columns.map((column) => {
-                            const detail = row.detailsByDay[column.key] ?? null;
-                            const value = detail?.value ?? null;
-                            const suggestedColor = detail?.value
-                              ? suggestedColorMap.get(normalizeSuggestedValue(detail.value)) ?? null
-                              : null;
-                            return (
-                              <div
-                                key={`${row.entity_id}-${column.key}`}
-                                className={cn(
-                                  "group relative rounded-[4px] border",
-                                  value ? "hover:scale-110 hover:shadow-sm" : "",
-                                  heatmapTone(value, true, suggestedColor),
-                                  contextTone(column.inFocus)
-                                )}
-                                style={{ height: `${gridMetrics.dayCellSize}px`, width: `${gridMetrics.dayCellSize}px` }}
-                              >
-                                {detail ? (
-                                  <div className="pointer-events-none absolute bottom-full left-1/2 z-30 hidden w-64 -translate-x-1/2 -translate-y-2 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl group-hover:block">
-                                    <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                      {formatDateLabel(detail.loggedOn)}
-                                    </div>
-                                    <div className="mt-1 text-sm font-semibold text-slate-900">{detail.value}</div>
-                                    {detail.usageUnitVisible && detail.usageUnitName ? (
-                                      <div className="mt-2 text-[11px] text-slate-600">Unidad: {detail.usageUnitName}</div>
-                                    ) : null}
-                                    {detail.fieldValues.length > 0 ? (
-                                      <div className="mt-2 space-y-1 border-t border-slate-100 pt-2">
-                                        {detail.fieldValues.map((field) => (
-                                          <div key={`${row.entity_id}-${column.key}-${field.usage_field_id}`} className="flex items-start justify-between gap-2 text-[11px]">
-                                            <span className="text-slate-500">{field.name}</span>
-                                            <span className="max-w-[132px] text-right font-medium text-slate-800">{field.value}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      <div className="mt-2 border-t border-slate-100 pt-2 text-[11px] text-slate-400">Sin campos adicionales</div>
-                                    )}
-                                  </div>
-                                ) : null}
+
+                          <div className="space-y-1">
+                            {scale === "month" ? (
+                              <div className="grid" style={{ gap: `${gridMetrics.blockGap}px`, gridTemplateColumns: weekBlockTemplate }}>
+                                {heatmapWeeks.map((week) => (
+                                  <div key={`${row.entity_id}-block-${week.key}`} className="h-1 rounded-full bg-slate-100" />
+                                ))}
                               </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </section>
-                  ))}
+                            ) : null}
+                            <div className="grid" style={{ gap: `${gridMetrics.dayCellGap}px`, gridTemplateColumns: dayGridTemplate }}>
+                              {columns.map((column) => {
+                                const detail = row.detailsByDay[column.key] ?? null;
+                                const value = detail?.value ?? null;
+                                const suggestedColor = detail?.value
+                                  ? suggestedColorMap.get(normalizeSuggestedValue(detail.value)) ?? null
+                                  : null;
+                                return (
+                                  <div
+                                    key={`${row.entity_id}-${column.key}`}
+                                    className={cn(
+                                      "group relative rounded-[4px] border",
+                                      value ? "hover:scale-110 hover:shadow-sm" : "",
+                                      heatmapTone(value, true, suggestedColor),
+                                      contextTone(column.inFocus)
+                                    )}
+                                    style={{ height: `${gridMetrics.dayCellSize}px`, width: `${gridMetrics.dayCellSize}px` }}
+                                  >
+                                    {detail ? (
+                                      <div className="pointer-events-none absolute bottom-full left-1/2 z-30 hidden w-64 -translate-x-1/2 -translate-y-2 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl group-hover:block">
+                                        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                          {formatDateLabel(detail.loggedOn)}
+                                        </div>
+                                        <div className="mt-1 text-sm font-semibold text-slate-900">{detail.value}</div>
+                                        {detail.usageUnitVisible && detail.usageUnitName ? (
+                                          <div className="mt-2 text-[11px] text-slate-600">Unidad: {detail.usageUnitName}</div>
+                                        ) : null}
+                                        {detail.fieldValues.length > 0 ? (
+                                          <div className="mt-2 space-y-1 border-t border-slate-100 pt-2">
+                                            {detail.fieldValues.map((field) => (
+                                              <div key={`${row.entity_id}-${column.key}-${field.usage_field_id}`} className="flex items-start justify-between gap-2 text-[11px]">
+                                                <span className="text-slate-500">{field.name}</span>
+                                                <span className="max-w-[132px] text-right font-medium text-slate-800">{field.value}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <div className="mt-2 border-t border-slate-100 pt-2 text-[11px] text-slate-400">Sin campos adicionales</div>
+                                        )}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </section>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}

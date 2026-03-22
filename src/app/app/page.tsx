@@ -80,9 +80,9 @@ function MetricTile({
         : "text-slate-900";
 
   return (
-    <div className="rounded-[18px] border border-slate-200/80 bg-white px-3.5 py-3 shadow-[0_10px_30px_-24px_rgba(15,23,42,0.35)]">
-      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{label}</div>
-      <div className={`mt-1.5 text-xl font-semibold tracking-tight sm:text-2xl ${valueClass}`}>{value}</div>
+    <div className="rounded-[16px] border border-slate-200/80 bg-white px-3 py-2.5 text-center shadow-[0_10px_30px_-24px_rgba(15,23,42,0.28)]">
+      <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{label}</div>
+      <div className={`mt-1 text-lg font-semibold tracking-tight sm:text-[1.35rem] ${valueClass}`}>{value}</div>
     </div>
   );
 }
@@ -380,21 +380,21 @@ export default function AnalyticsDashboardPage() {
 
   return (
     <main className="mx-auto max-w-[1400px] space-y-3 px-4 py-3">
-      <section className="rounded-[26px] border border-[rgba(17,32,28,0.08)] bg-[linear-gradient(180deg,rgba(251,253,252,0.98),rgba(245,249,248,0.96))] p-3.5 shadow-[0_20px_60px_-44px_rgba(15,23,42,0.3)]">
-        <div className="grid gap-2.5 xl:grid-cols-[minmax(220px,0.9fr)_minmax(0,2fr)_minmax(260px,1.1fr)] xl:items-center">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
+      <section className="rounded-[24px] border border-[rgba(17,32,28,0.08)] bg-[linear-gradient(180deg,rgba(251,253,252,0.98),rgba(245,249,248,0.96))] p-3 shadow-[0_18px_54px_-46px_rgba(15,23,42,0.28)]">
+        <div className="grid gap-2 xl:grid-cols-[minmax(210px,0.85fr)_minmax(0,2.1fr)_minmax(230px,0.95fr)] xl:items-center">
+          <div className="min-w-0 self-center">
+            <div className="flex flex-wrap items-center gap-1.5">
               <Badge className="bg-slate-900 text-white hover:bg-slate-900">Dashboard</Badge>
               <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
                 {isAllTypesView ? "Vista global" : selectedEntityTypeName}
               </Badge>
             </div>
-            <h1 className="mt-2 text-[1.05rem] font-semibold tracking-tight text-slate-900 sm:text-[1.35rem]">
+            <h1 className="mt-1.5 text-[1rem] font-semibold tracking-tight text-slate-900 sm:text-[1.2rem]">
               Centro analítico
             </h1>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-5">
             <MetricTile label="Total entidades" value={totals.total} />
             <MetricTile label="Con forecast" value={totals.withForecast} />
             <MetricTile label="Vencidas" value={totals.overdue} tone="danger" />
@@ -402,15 +402,15 @@ export default function AnalyticsDashboardPage() {
             <MetricTile label="Cobertura" value={`${totals.coverage}%`} />
           </div>
 
-          <div className="min-w-0 rounded-[20px] border border-slate-200/80 bg-white px-3.5 py-2.5">
-            <label className="grid gap-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">
+          <div className="min-w-0 rounded-[18px] border border-slate-200/80 bg-white px-3 py-2 shadow-[0_10px_24px_-26px_rgba(15,23,42,0.25)]">
+            <label className="grid gap-1 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">
               Tipo de entidad
               <select
                 value={entityTypeFilter}
                 onChange={(e) => {
                   setEntityTypeFilter(e.target.value);
                 }}
-                className="h-10 w-full rounded-2xl border border-[var(--input)] bg-white px-3 text-sm text-slate-800"
+                className="h-9 w-full rounded-xl border border-[var(--input)] bg-white px-3 text-sm text-slate-800"
               >
                 <option value="all">Todos los tipos</option>
                 {entityTypes.map((t) => (
