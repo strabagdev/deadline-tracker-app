@@ -371,8 +371,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [moduleAccessLoaded, setModuleAccessLoaded] = React.useState(false);
   const [mobileHeaderMenuOpen, setMobileHeaderMenuOpen] = React.useState(false);
   const [desktopSectionMenuOpen, setDesktopSectionMenuOpen] = React.useState<SectionKey | null>(null);
-  const [frontendRev, setFrontendRev] = React.useState("...");
-  const [backendRev, setBackendRev] = React.useState("...");
+  const [appName, setAppName] = React.useState("OpsAhead");
+  const [buildRev, setBuildRev] = React.useState("...");
+  const [pushRev, setPushRev] = React.useState("...");
+  const [openAiPowered, setOpenAiPowered] = React.useState(false);
   const [deployEnv, setDeployEnv] = React.useState("...");
   const isSuperAdminArea = pathname.startsWith("/app/super-admin");
   const isSuperAdminLockedOutRoute = isSuperAdmin && !isSuperAdminArea;
@@ -507,13 +509,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       const json = await res.json().catch(() => ({}));
       if (cancelled) return;
       if (!res.ok) {
-        setFrontendRev("n/a");
-        setBackendRev("n/a");
+        setAppName("OpsAhead");
+        setBuildRev("n/a");
+        setPushRev("n/a");
+        setOpenAiPowered(false);
         setDeployEnv("n/a");
         return;
       }
-      setFrontendRev(String(json?.frontend_rev ?? "n/a"));
-      setBackendRev(String(json?.backend_rev ?? "n/a"));
+      setAppName(String(json?.app_name ?? "OpsAhead"));
+      setBuildRev(String(json?.build_rev ?? "n/a"));
+      setPushRev(String(json?.push_rev ?? "n/a"));
+      setOpenAiPowered(Boolean(json?.openai_powered));
       setDeployEnv(String(json?.environment ?? "n/a"));
     })();
     return () => {
@@ -867,9 +873,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       <footer className="border-t bg-white px-4 py-3">
         <div className={cn("mx-auto text-xs text-slate-500", isSuperAdmin ? "max-w-[1100px]" : "max-w-[1400px]")}>
-          {deployEnv === "production"
-            ? `v2 · Dashboard analítico y Operaciones separadas, con control de acceso por módulo y captura de uso dinámica. · UI ${frontendRev || "n/a"} · API ${backendRev || "n/a"} · production`
-            : "v2 · Dashboard analítico y Operaciones separadas, con control de acceso por módulo y captura de uso dinámica."}
+          {`${appName} · Build ${buildRev || "n/a"} · Push ${pushRev || "n/a"} · ${
+            openAiPowered ? "OpenAI powered" : "OpenAI disabled"
+          } · ${deployEnv || "n/a"}`}
         </div>
       </footer>
     </div>

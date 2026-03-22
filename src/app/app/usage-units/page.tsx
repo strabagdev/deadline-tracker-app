@@ -66,6 +66,34 @@ function fieldTypeTone(fieldType: UsageField["field_type"]) {
   return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
+function normalizeSuggestedValuesDraft(raw: string) {
+  return raw
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+    .filter((value, index, arr) => arr.findIndex((item) => item.toLowerCase() === value.toLowerCase()) === index);
+}
+
+function buildSuggestedPreviewPalette(values: string[]) {
+  const base = [
+    { badge: "border-emerald-200 bg-emerald-50 text-emerald-700", dot: "bg-emerald-500" },
+    { badge: "border-rose-200 bg-rose-50 text-rose-700", dot: "bg-rose-500" },
+    { badge: "border-amber-200 bg-amber-50 text-amber-700", dot: "bg-amber-500" },
+    { badge: "border-sky-200 bg-sky-50 text-sky-700", dot: "bg-sky-500" },
+    { badge: "border-violet-200 bg-violet-50 text-violet-700", dot: "bg-violet-500" },
+    { badge: "border-orange-200 bg-orange-50 text-orange-700", dot: "bg-orange-500" },
+    { badge: "border-teal-200 bg-teal-50 text-teal-700", dot: "bg-teal-500" },
+    { badge: "border-indigo-200 bg-indigo-50 text-indigo-700", dot: "bg-indigo-500" },
+    { badge: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700", dot: "bg-fuchsia-500" },
+    { badge: "border-lime-200 bg-lime-50 text-lime-700", dot: "bg-lime-500" },
+  ];
+
+  return values.map((value, index) => ({
+    value,
+    ...base[index % base.length],
+  }));
+}
+
 async function getTokenOrRedirect(router: { replace: (href: string) => void }) {
   const { data } = await supabaseAuth.auth.getSession();
   const token = data.session?.access_token;
@@ -110,6 +138,10 @@ export default function UsageUnitsPage() {
   const suggestedValueCount = useMemo(
     () => units.reduce((total, unit) => total + (unit.suggested_values?.length ?? 0), 0),
     [units]
+  );
+  const suggestedValuesPreview = useMemo(
+    () => buildSuggestedPreviewPalette(normalizeSuggestedValuesDraft(selectedSuggestedValuesDraft)),
+    [selectedSuggestedValuesDraft]
   );
 
   useEffect(() => {
@@ -716,8 +748,24 @@ export default function UsageUnitsPage() {
                       placeholder="Ej: P, D, N/A"
                       disabled={busy}
                     />
+                    {suggestedValuesPreview.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {suggestedValuesPreview.map((item, index) => (
+                          <div
+                            key={`${item.value}-${index}`}
+                            className={cn(
+                              "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-medium",
+                              item.badge
+                            )}
+                          >
+                            <span className={cn("h-2.5 w-2.5 rounded-full", item.dot)} />
+                            <span>{item.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     <p className="text-xs text-slate-500">
-                      Se reutilizan como ayudas rápidas cuando el registro depende de esta unidad.
+                      Se reutilizan como ayudas rápidas cuando el registro depende de esta unidad. La vista previa respeta el mismo orden de colores usado en el reporte cronológico.
                     </p>
                   </div>
                   <Button onClick={() => void saveSelectedSuggestedValues()} disabled={busy}>

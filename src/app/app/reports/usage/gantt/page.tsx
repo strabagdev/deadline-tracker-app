@@ -734,7 +734,7 @@ export default function UsageGanttPage() {
             </div>
 
             {rangeMode === "preset" ? (
-              <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1">
                   {([
                     { value: "week", label: "Semanal" },
@@ -753,7 +753,7 @@ export default function UsageGanttPage() {
                     </button>
                   ))}
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <Button variant="outline" size="sm" onClick={() => setAnchor((prev) => shiftAnchor(prev, scale, -1))}>Anterior</Button>
                   <Button variant="outline" size="sm" onClick={() => setAnchor((prev) => shiftAnchor(prev, scale, 1))}>Siguiente</Button>
                   <Button variant="outline" size="sm" onClick={() => setAnchor(today())}>Hoy</Button>
