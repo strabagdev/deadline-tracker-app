@@ -168,6 +168,16 @@ function IconMenu({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+function IconSparkles({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M12 3l1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8L12 3z" />
+      <path d="M19 14l.9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9L19 14z" />
+      <path d="M5 14l.9 2.1L8 17l-2.1.9L5 20l-.9-2.1L2 17l2.1-.9L5 14z" />
+    </svg>
+  );
+}
+
 function PrimaryNavLink({
   href,
   label,
@@ -637,12 +647,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       height={38}
                       className="h-11 w-11 rounded-lg object-cover sm:h-9 sm:w-9"
                     />
-                  ) : null}
+                  ) : (
+                    <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-[radial-gradient(circle_at_30%_18%,rgba(96,165,250,0.24),transparent_34%),radial-gradient(circle_at_70%_82%,rgba(14,165,233,0.12),transparent_42%),linear-gradient(180deg,#182235,#0b1220)] text-sm font-semibold text-white ring-1 ring-slate-800/85 shadow-[0_14px_28px_-16px_rgba(15,23,42,0.48),0_8px_18px_-14px_rgba(15,23,42,0.28)] sm:h-9 sm:w-9">
+                      OA
+                    </div>
+                  )}
                   <div className="min-w-0">
                     <Link href={isSuperAdmin ? "/app/super-admin" : "/app"} className="min-w-0 truncate text-base font-semibold text-slate-950 sm:text-base">
                       OpsAhead
                     </Link>
                   </div>
+                  {openAiPowered ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                      <IconSparkles className="h-3.5 w-3.5" />
+                      IA
+                    </span>
+                  ) : null}
                   {isSuperAdmin ? <Badge variant="secondary" className="shrink-0">Global</Badge> : null}
                 </div>
 
@@ -871,10 +891,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       <footer className="border-t bg-white px-4 py-3">
-        <div className={cn("mx-auto text-xs text-slate-500", isSuperAdmin ? "max-w-[1100px]" : "max-w-[1400px]")}>
-          {`${appName} · Build ${buildRev || "n/a"} · Push ${pushRev || "n/a"} · ${
-            openAiPowered ? "OpenAI powered" : "OpenAI disabled"
-          } · ${deployEnv || "n/a"}`}
+        <div className={cn("mx-auto flex flex-wrap items-center gap-2 text-xs text-slate-500", isSuperAdmin ? "max-w-[1100px]" : "max-w-[1400px]")}>
+          <span>{`${appName} · Build ${buildRev || "n/a"} · Push ${pushRev || "n/a"} · ${deployEnv || "n/a"}`}</span>
+          <span>{openAiPowered ? "OpenAI powered" : "OpenAI disabled"}</span>
         </div>
       </footer>
     </div>
