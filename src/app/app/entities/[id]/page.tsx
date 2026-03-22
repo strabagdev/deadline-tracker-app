@@ -271,13 +271,12 @@ export default function EntityDetailPage() {
 
   return (
     <main className="mx-auto max-w-[1380px] space-y-5 px-4 py-4 sm:space-y-6">
-      <section className="rounded-[28px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.12),_transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-4 py-4 shadow-[0_20px_50px_-30px_rgba(15,23,42,0.45)] sm:px-5">
-        <div className="flex flex-col gap-4">
+      <section className="rounded-[24px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.11),_transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-4 py-3 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.35)] sm:px-5">
+        <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-1">
-              <div className="text-[11px] uppercase tracking-[0.24em] text-slate-500">OpsFlow Entity Record</div>
-              <h1 className="text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">Ficha de entidad</h1>
-              <p className="text-sm text-slate-500">Vista operacional, configuración y trazabilidad en un mismo lugar.</p>
+            <div className="min-w-0 space-y-1">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Entidad</div>
+              <h1 className="truncate text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">Ficha de entidad</h1>
             </div>
             <div className="grid w-full gap-2 sm:w-auto sm:grid-flow-col">
               <Button onClick={() => router.push("/app/entities")} variant="outline" size="sm" className="bg-white/90">
@@ -290,71 +289,33 @@ export default function EntityDetailPage() {
           </div>
 
           {!loading && entity ? (
-            <div className="grid gap-3 xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,0.95fr)]">
-              <div className="rounded-[24px] border border-white/70 bg-white/85 p-4 shadow-sm backdrop-blur">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Entidad activa</div>
-                      <div className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
-                        {entity.name}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">Tipo: {entity.entity_type?.name ?? "(sin tipo)"}</Badge>
-                      <Badge variant="outline">{entity.tracks_usage ? "Registra uso" : "Sin uso"}</Badge>
-                      {entity.tracks_usage ? (
-                        <Badge variant="outline">Unidad: {entity.usage_unit?.name ?? "Sin unidad"}</Badge>
-                      ) : null}
-                      {!canDelete ? <Badge variant="outline">Eliminar: solo owner/admin</Badge> : null}
-                    </div>
+            <div className="rounded-[20px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(248,250,252,0.9))] px-4 py-3 shadow-sm backdrop-blur">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <div className="truncate text-2xl font-semibold tracking-tight text-slate-950 sm:text-[28px]">
+                    {entity.name}
                   </div>
-
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[320px] lg:grid-cols-2">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-3">
-                      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Campos</div>
-                      <div className="mt-1 text-xl font-semibold text-slate-950">{entity.fields.length}</div>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-3">
-                      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Con valor</div>
-                      <div className="mt-1 text-xl font-semibold text-slate-950">{filledFieldCount}</div>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-3">
-                      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Uso</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-950">
-                        {entity.tracks_usage ? "Habilitado" : "Desactivado"}
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-3">
-                      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Creación</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-950">
-                        {new Date(entity.created_at).toLocaleDateString()}
-                      </div>
-                    </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="bg-white/75">
+                      Tipo: {entity.entity_type?.name ?? "(sin tipo)"}
+                    </Badge>
+                    {entity.tracks_usage ? (
+                      <Badge variant="outline" className="bg-white/75">
+                        Unidad: {entity.usage_unit?.name ?? "Sin unidad"}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="bg-white/75">Sin uso</Badge>
+                    )}
+                    <Badge variant="outline" className="bg-white/75">
+                      Campos: {entity.fields.length === 0 ? "Sin campos" : `${filledFieldCount} / ${entity.fields.length}`}
+                    </Badge>
                   </div>
                 </div>
-              </div>
-
-              <div className="rounded-[24px] border border-slate-200 bg-white/78 p-4 shadow-sm backdrop-blur">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Resumen</div>
-                <div className="mt-3 space-y-2">
-                  <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2 text-sm">
-                    <span className="text-slate-500">Tipo</span>
-                    <span className="text-right font-medium text-slate-900">{entity.entity_type?.name ?? "Sin tipo"}</span>
+                {!canDelete ? (
+                  <div className="rounded-full bg-white/70 px-3 py-1 text-xs text-slate-500 ring-1 ring-slate-200/70">
+                    Eliminar disponible solo para owner/admin.
                   </div>
-                  <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2 text-sm">
-                    <span className="text-slate-500">Unidad</span>
-                    <span className="text-right font-medium text-slate-900">
-                      {entity.tracks_usage ? (entity.usage_unit?.name ?? "Sin unidad") : "No aplica"}
-                    </span>
-                  </div>
-                  <div className="flex items-start justify-between gap-4 text-sm">
-                    <span className="text-slate-500">Campos con valor</span>
-                    <span className="text-right font-medium text-slate-900">
-                      {entity.fields.length === 0 ? "Sin campos" : `${filledFieldCount} / ${entity.fields.length}`}
-                    </span>
-                  </div>
-                </div>
+                ) : null}
               </div>
             </div>
           ) : null}
