@@ -188,6 +188,11 @@ function statusLegendSwatch(s: Status) {
   return "border-slate-300 bg-slate-100";
 }
 
+function statusControlPalette(s: Status | "all") {
+  if (s === "all") return "border-slate-300 bg-white text-slate-700 hover:bg-slate-50";
+  return statusFilterPalette(s);
+}
+
 export default function OperationsPage() {
   const router = useRouter();
 
@@ -428,23 +433,10 @@ export default function OperationsPage() {
   }
 
   function statusCircleClasses(s: Status | "all", active: boolean) {
-    const tone =
-      s === "red"
-        ? "border-rose-300 bg-rose-500 text-white hover:bg-rose-600"
-        : s === "orange"
-          ? "border-orange-300 bg-orange-500 text-white hover:bg-orange-600"
-          : s === "yellow"
-            ? "border-amber-300 bg-amber-400 text-white hover:bg-amber-500"
-            : s === "green"
-              ? "border-emerald-300 bg-emerald-500 text-white hover:bg-emerald-600"
-              : s === "none"
-                ? "border-slate-300 bg-slate-500 text-white hover:bg-slate-600"
-                : "border-blue-300 bg-blue-500 text-white hover:bg-blue-600";
-
     return cn(
       "relative h-11 w-11 shrink-0 rounded-full border shadow-sm transition focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-2",
-      tone,
-      active ? "ring-2 ring-slate-900/70 ring-offset-2" : "opacity-85"
+      statusControlPalette(s),
+      active ? "border-slate-500 ring-2 ring-slate-900/70 ring-offset-2" : "opacity-90"
     );
   }
 
@@ -496,7 +488,7 @@ export default function OperationsPage() {
           />
             </div>
 
-            <div className="flex items-center gap-2 rounded-[14px] border border-slate-200 bg-slate-50 px-2 py-1.5">
+            <div className="flex items-center gap-2">
             {statusFilterMeta.map((s) => (
               <Button
                 key={s.key}
@@ -510,9 +502,6 @@ export default function OperationsPage() {
                 aria-label={`${s.title}: ${countByStatus(s.key)}`}
               >
                 <IconStatusGlyph status={s.key} />
-                <span className="absolute -right-1.5 -top-1.5 min-w-[16px] rounded-full border border-white bg-slate-950 px-1 text-center text-[9px] font-semibold leading-[16px] text-white shadow-sm">
-                  {countByStatus(s.key)}
-                </span>
               </Button>
             ))}
             </div>
