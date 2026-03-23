@@ -563,33 +563,74 @@ export default function FocusedUsageCapturePage() {
       {okMsg ? <div className="app-alert app-alert-success">{okMsg}</div> : null}
 
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Registro de uso · {loggedOn}</CardTitle>
-          <div className="mt-2 inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
-            <button
-              type="button"
-              onClick={() => setActiveTab("pending")}
-              className={[
-                "rounded-md px-3 py-1.5 text-xs font-medium transition",
-                activeTab === "pending"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-600 hover:text-slate-800",
-              ].join(" ")}
-            >
-              Pendientes ({pendingEntities.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("registered")}
-              className={[
-                "rounded-md px-3 py-1.5 text-xs font-medium transition",
-                activeTab === "registered"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-600 hover:text-slate-800",
-              ].join(" ")}
-            >
-              Registrados ({registeredEntities.length})
-            </button>
+        <CardHeader className="pb-4">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+              <div className="space-y-1">
+                <CardTitle className="text-base">Mesa de captura · {loggedOn}</CardTitle>
+                <p className="text-sm text-slate-500">
+                  Trabaja primero los pendientes y deja los registros guardados como área de revisión.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                  Tipo: {typeLabel || entityTypeName || "—"}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                  Fecha: {loggedOn}
+                </span>
+                {activeTab === "pending" ? (
+                  <Button onClick={() => void saveBulkPending()} disabled={busy || filteredPendingEntities.length === 0} size="sm">
+                    {busy ? "Guardando..." : "Guardar lote"}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="grid gap-2 md:grid-cols-3">
+              <div className="rounded-[18px] border border-amber-200 bg-amber-50/70 px-4 py-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">Pendientes</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-950">{pendingEntities.length}</div>
+                <div className="text-xs text-slate-600">Entidades sin registro para la fecha activa.</div>
+              </div>
+              <div className="rounded-[18px] border border-emerald-200 bg-emerald-50/70 px-4 py-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Registrados</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-950">{registeredEntities.length}</div>
+                <div className="text-xs text-slate-600">Registros ya guardados disponibles para revisión.</div>
+              </div>
+              <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Total visible</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-950">{entities.length}</div>
+                <div className="text-xs text-slate-600">Base completa del tipo seleccionada para esta jornada.</div>
+              </div>
+            </div>
+
+            <div className="inline-flex w-fit rounded-xl border border-slate-200 bg-slate-50 p-1">
+              <button
+                type="button"
+                onClick={() => setActiveTab("pending")}
+                className={[
+                  "rounded-lg px-3 py-2 text-xs font-medium transition",
+                  activeTab === "pending"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-600 hover:text-slate-800",
+                ].join(" ")}
+              >
+                Pendientes ({pendingEntities.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("registered")}
+                className={[
+                  "rounded-lg px-3 py-2 text-xs font-medium transition",
+                  activeTab === "registered"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-600 hover:text-slate-800",
+                ].join(" ")}
+              >
+                Registrados ({registeredEntities.length})
+              </button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="pt-0">
@@ -598,224 +639,262 @@ export default function FocusedUsageCapturePage() {
           ) : entities.length === 0 ? (
             <p className="app-empty">No hay entidades disponibles para este tipo.</p>
           ) : activeTab === "pending" ? (
-            <div className="grid gap-3">
-              <div className="grid items-end gap-2 md:grid-cols-[220px_minmax(220px,1fr)]">
-                <MarkedDatePicker
-                  value={loggedOn}
-                  onChange={setLoggedOn}
-                  highlightedDates={highlightedCalendarDates}
-                  disabledDates={[]}
-                  label="Fecha de registro"
-                  disabled={busy}
-                />
+            <div className="grid gap-4">
+              <section className="rounded-[20px] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.88))] p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Contexto de trabajo</div>
+                    <div className="text-xs text-slate-500">Ajusta fecha, búsqueda y filtros antes de cargar el lote.</div>
+                  </div>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 shadow-sm">
+                    {filteredPendingEntities.length} pendiente{filteredPendingEntities.length === 1 ? "" : "s"} visible{filteredPendingEntities.length === 1 ? "" : "s"}
+                  </span>
+                </div>
 
-                <div className="grid gap-1">
-                  <label className="text-xs text-[var(--muted-foreground)]">Buscar entidad</label>
-                  <Input
-                    value={entitySearch}
-                    onChange={(e) => setEntitySearch(e.target.value)}
-                    placeholder="Buscar entidad..."
+                <div className="grid items-end gap-3 md:grid-cols-[220px_minmax(220px,1fr)]">
+                  <MarkedDatePicker
+                    value={loggedOn}
+                    onChange={setLoggedOn}
+                    highlightedDates={highlightedCalendarDates}
+                    disabledDates={[]}
+                    label="Fecha de registro"
                     disabled={busy}
                   />
-                  {entitySearch.trim().length > 0 ? (
-                    <div className="max-h-44 overflow-auto rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--muted)]/80 p-2 text-xs">
-                      <div className="mb-1 font-semibold text-[var(--foreground)]">Posibles coincidencias en campos de entidad</div>
-                      <div className="mb-2 text-[11px] text-[var(--muted-foreground)]">
-                        Coincidencias: {searchDebugMatches.length} · Pendientes visibles: {filteredPendingEntities.length} · Con registro ese día: {searchDebugMatches.filter((r) => !r.pendingForDay).length}
-                      </div>
-                      {searchDebugMatches.length === 0 ? (
-                        <div className="text-[var(--muted-foreground)]">Sin coincidencias en campos.</div>
-                      ) : (
-                        <div className="grid gap-1">
-                          {searchDebugMatches.map((row) => (
-                            <div key={`${row.entityName}-${row.values.join("|")}`} className="rounded-[8px] border border-[color:var(--border)] bg-[var(--card)] px-2 py-1">
-                              <div className="truncate font-medium text-[var(--foreground)]">
-                                {row.entityName}
-                                {!row.pendingForDay ? <span className="ml-2 text-[10px] font-normal text-amber-700">(ya registrado en la fecha)</span> : null}
-                                {row.pendingForDay && !row.passesSecondaryFilters ? <span className="ml-2 text-[10px] font-normal text-indigo-700">(filtrado por chips secundarios)</span> : null}
-                              </div>
-                              <div className="truncate text-[var(--muted-foreground)]">{row.values.join(" · ")}</div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
 
-              <>
-                  <div className="text-xs text-[var(--muted-foreground)]">
-                    Entidades sin registro en {loggedOn}: <b>{pendingEntities.length}</b>
+                  <div className="grid gap-1">
+                    <label className="text-xs text-[var(--muted-foreground)]">Buscar entidad</label>
+                    <Input
+                      value={entitySearch}
+                      onChange={(e) => setEntitySearch(e.target.value)}
+                      placeholder="Buscar entidad..."
+                      disabled={busy}
+                    />
+                    {entitySearch.trim().length > 0 ? (
+                      <div className="max-h-44 overflow-auto rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--card)] p-2 text-xs">
+                        <div className="mb-1 font-semibold text-[var(--foreground)]">Posibles coincidencias en campos de entidad</div>
+                        <div className="mb-2 text-[11px] text-[var(--muted-foreground)]">
+                          Coincidencias: {searchDebugMatches.length} · Pendientes visibles: {filteredPendingEntities.length} · Con registro ese día: {searchDebugMatches.filter((r) => !r.pendingForDay).length}
+                        </div>
+                        {searchDebugMatches.length === 0 ? (
+                          <div className="text-[var(--muted-foreground)]">Sin coincidencias en campos.</div>
+                        ) : (
+                          <div className="grid gap-1">
+                            {searchDebugMatches.map((row) => (
+                              <div key={`${row.entityName}-${row.values.join("|")}`} className="rounded-[8px] border border-[color:var(--border)] bg-[var(--muted)]/60 px-2 py-1">
+                                <div className="truncate font-medium text-[var(--foreground)]">
+                                  {row.entityName}
+                                  {!row.pendingForDay ? <span className="ml-2 text-[10px] font-normal text-amber-700">(ya registrado en la fecha)</span> : null}
+                                  {row.pendingForDay && !row.passesSecondaryFilters ? <span className="ml-2 text-[10px] font-normal text-indigo-700">(filtrado por chips secundarios)</span> : null}
+                                </div>
+                                <div className="truncate text-[var(--muted-foreground)]">{row.values.join(" · ")}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
-                  {pendingSecondaryOptions.length > 0 ? (
-                    <div className="grid gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
+                </div>
+
+                {pendingSecondaryOptions.length > 0 ? (
+                  <div className="mt-4 grid gap-2">
+                    <div className="text-xs text-[var(--muted-foreground)]">
+                      Filtros secundarios para refinar la cola pendiente.
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPendingSecondaryFilters([])}
+                        className={[
+                          "rounded-full border px-2.5 py-1 text-xs transition",
+                          pendingSecondaryFilters.length === 0
+                            ? "border-indigo-300 bg-indigo-100 text-indigo-800"
+                            : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                        ].join(" ")}
+                      >
+                        Todos {pendingEntities.length}
+                      </button>
+                      {pendingSecondaryTopOptions.map((opt) => (
                         <button
+                          key={opt.value}
                           type="button"
-                          onClick={() => setPendingSecondaryFilters([])}
+                          onClick={() =>
+                            setPendingSecondaryFilters((prev) =>
+                              prev.includes(opt.value)
+                                ? prev.filter((v) => v !== opt.value)
+                                : [...prev, opt.value]
+                            )
+                          }
                           className={[
                             "rounded-full border px-2.5 py-1 text-xs transition",
-                            pendingSecondaryFilters.length === 0
+                            pendingSecondaryFilters.includes(opt.value)
                               ? "border-indigo-300 bg-indigo-100 text-indigo-800"
                               : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
                           ].join(" ")}
+                          title={opt.label}
                         >
-                          Todos {pendingEntities.length}
+                          <span className="max-w-[140px] truncate align-middle inline-block">{opt.label}</span>{" "}
+                          <span className="font-semibold">{opt.count}</span>
                         </button>
-                        {pendingSecondaryTopOptions.map((opt) => (
+                      ))}
+                      {pendingSecondaryOptions.length > pendingSecondaryTopOptions.length ? (
+                        <button
+                          type="button"
+                          onClick={() => setPendingSecondaryMenuOpen((v) => !v)}
+                          className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 transition hover:bg-slate-50"
+                        >
+                          {pendingSecondaryMenuOpen ? "Ocultar" : `+${pendingSecondaryOptions.length - pendingSecondaryTopOptions.length} más`}
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {pendingSecondaryFilters.length > 0 ? (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {pendingSecondaryFilters.map((value) => (
                           <button
-                            key={opt.value}
+                            key={`active-${value}`}
                             type="button"
                             onClick={() =>
-                              setPendingSecondaryFilters((prev) =>
-                                prev.includes(opt.value)
-                                  ? prev.filter((v) => v !== opt.value)
-                                  : [...prev, opt.value]
-                              )
+                              setPendingSecondaryFilters((prev) => prev.filter((v) => v !== value))
                             }
-                            className={[
-                              "rounded-full border px-2.5 py-1 text-xs transition",
-                              pendingSecondaryFilters.includes(opt.value)
-                                ? "border-indigo-300 bg-indigo-100 text-indigo-800"
-                                : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
-                            ].join(" ")}
-                            title={opt.label}
+                            className="rounded-full border border-indigo-300 bg-indigo-100 px-2 py-0.5 text-[11px] text-indigo-800"
+                            title={`Quitar filtro ${value}`}
                           >
-                            <span className="max-w-[140px] truncate align-middle inline-block">{opt.label}</span>{" "}
-                            <span className="font-semibold">{opt.count}</span>
+                            {value} ×
                           </button>
                         ))}
-                        {pendingSecondaryOptions.length > pendingSecondaryTopOptions.length ? (
-                          <button
-                            type="button"
-                            onClick={() => setPendingSecondaryMenuOpen((v) => !v)}
-                            className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 transition hover:bg-slate-50"
-                          >
-                            {pendingSecondaryMenuOpen ? "Ocultar" : `+${pendingSecondaryOptions.length - pendingSecondaryTopOptions.length} más`}
-                          </button>
-                        ) : null}
                       </div>
+                    ) : null}
 
-                      {pendingSecondaryFilters.length > 0 ? (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {pendingSecondaryFilters.map((value) => (
-                            <button
-                              key={`active-${value}`}
-                              type="button"
-                              onClick={() =>
-                                setPendingSecondaryFilters((prev) => prev.filter((v) => v !== value))
-                              }
-                              className="rounded-full border border-indigo-300 bg-indigo-100 px-2 py-0.5 text-[11px] text-indigo-800"
-                              title={`Quitar filtro ${value}`}
-                            >
-                              {value} ×
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-
-                      {pendingSecondaryMenuOpen ? (
-                        <div className="rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--card)] p-2">
-                          <div className="grid gap-2">
-                            <Input
-                              value={pendingSecondarySearch}
-                              onChange={(e) => setPendingSecondarySearch(e.target.value)}
-                              placeholder="Buscar filtro secundario..."
-                              disabled={busy}
-                            />
-                            <div className="max-h-44 overflow-auto">
-                              <div className="flex flex-wrap gap-2">
-                                {pendingSecondaryFilteredOptions.map((opt) => (
-                                  <button
-                                    key={`more-${opt.value}`}
-                                    type="button"
-                                    onClick={() =>
-                                      setPendingSecondaryFilters((prev) =>
-                                        prev.includes(opt.value)
-                                          ? prev.filter((v) => v !== opt.value)
-                                          : [...prev, opt.value]
-                                      )
-                                    }
-                                    className={[
-                                      "rounded-full border px-2.5 py-1 text-xs transition",
-                                      pendingSecondaryFilters.includes(opt.value)
-                                        ? "border-indigo-300 bg-indigo-100 text-indigo-800"
-                                        : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
-                                    ].join(" ")}
-                                    title={opt.label}
-                                  >
-                                    <span className="max-w-[200px] truncate align-middle inline-block">{opt.label}</span>{" "}
-                                    <span className="font-semibold">{opt.count}</span>
-                                  </button>
-                                ))}
-                                {pendingSecondaryFilteredOptions.length === 0 ? (
-                                  <span className="text-xs text-[var(--muted-foreground)]">Sin coincidencias.</span>
-                                ) : null}
-                              </div>
+                    {pendingSecondaryMenuOpen ? (
+                      <div className="rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--card)] p-2">
+                        <div className="grid gap-2">
+                          <Input
+                            value={pendingSecondarySearch}
+                            onChange={(e) => setPendingSecondarySearch(e.target.value)}
+                            placeholder="Buscar filtro secundario..."
+                            disabled={busy}
+                          />
+                          <div className="max-h-44 overflow-auto">
+                            <div className="flex flex-wrap gap-2">
+                              {pendingSecondaryFilteredOptions.map((opt) => (
+                                <button
+                                  key={`more-${opt.value}`}
+                                  type="button"
+                                  onClick={() =>
+                                    setPendingSecondaryFilters((prev) =>
+                                      prev.includes(opt.value)
+                                        ? prev.filter((v) => v !== opt.value)
+                                        : [...prev, opt.value]
+                                    )
+                                  }
+                                  className={[
+                                    "rounded-full border px-2.5 py-1 text-xs transition",
+                                    pendingSecondaryFilters.includes(opt.value)
+                                      ? "border-indigo-300 bg-indigo-100 text-indigo-800"
+                                      : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                                  ].join(" ")}
+                                  title={opt.label}
+                                >
+                                  <span className="max-w-[200px] truncate align-middle inline-block">{opt.label}</span>{" "}
+                                  <span className="font-semibold">{opt.count}</span>
+                                </button>
+                              ))}
+                              {pendingSecondaryFilteredOptions.length === 0 ? (
+                                <span className="text-xs text-[var(--muted-foreground)]">Sin coincidencias.</span>
+                              ) : null}
                             </div>
                           </div>
                         </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  {filteredPendingEntities.length === 0 ? (
-                    <p className="app-empty">No hay pendientes para la fecha seleccionada.</p>
-                  ) : (
-                    <div className="grid gap-2">
-                      <div className="hidden grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] items-center gap-2 px-1 py-0 text-sm font-semibold text-slate-700 lg:grid">
-                        <div className="flex h-8 items-center">Entidad</div>
-                        <div className="flex h-8 items-center">Valor</div>
-                        <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-4">
-                          {pendingFieldColumns.length > 0 ? (
-                            pendingFieldColumns.map((f) => (
-                              <div key={`head-${f.id}`} className="flex h-8 items-center text-sm font-semibold text-slate-700">
-                                {f.name}
-                              </div>
-                            ))
-                          ) : (
-                            <div className="flex h-8 items-center text-sm font-semibold text-slate-400">—</div>
-                          )}
-                        </div>
                       </div>
-                      {pendingPagedEntities.map((e) => (
-                        <div
-                          key={e.id}
-                          className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 p-2 sm:grid-cols-2 lg:grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] lg:items-center lg:gap-2 lg:border-0 lg:p-0"
-                        >
-                          <div className="min-w-0 truncate text-sm text-slate-800" title={e.name}>
-                            {e.name}
-                          </div>
-                          <div className="min-w-0">
-                            {(e.usage_unit_suggested_values ?? []).length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
-                                {(e.usage_unit_suggested_values ?? []).map((opt) => {
-                                  const current = String(bulkDraftByEntity[e.id] ?? "").trim();
-                                  const active = current === opt;
-                                  return (
-                                    <button
-                                      key={`${e.id}-main-${opt}`}
-                                      type="button"
-                                      disabled={busy}
-                                      onClick={() =>
-                                        setBulkDraftByEntity((prev) => ({
-                                          ...prev,
-                                          [e.id]: current === opt ? "" : opt,
-                                        }))
-                                      }
-                                      className={[
-                                        "rounded-full border px-2 py-1 text-[10px] transition",
-                                        active
-                                          ? "border-emerald-600 bg-emerald-50 text-emerald-700"
-                                          : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
-                                      ].join(" ")}
-                                    >
-                                      {opt}
-                                    </button>
-                                  );
-                                })}
+                    ) : null}
+                  </div>
+                ) : null}
+              </section>
+
+              <section className="grid gap-3 rounded-[20px] border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Lista operativa de pendientes</div>
+                    <div className="text-xs text-slate-500">
+                      Enfócate en completar valor principal y campos dinámicos solo para quienes faltan en {loggedOn}.
+                    </div>
+                  </div>
+                  <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                    {pendingPageStart + 1}-{Math.min(pendingPageStart + pendingPageSize, Math.max(filteredPendingEntities.length, 1))} / {filteredPendingEntities.length}
+                  </div>
+                </div>
+
+                {filteredPendingEntities.length === 0 ? (
+                  <p className="app-empty">No hay pendientes para la fecha seleccionada.</p>
+                ) : (
+                  <div className="grid gap-2">
+                    <div className="hidden grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 lg:grid">
+                      <div className="flex h-8 items-center">Entidad</div>
+                      <div className="flex h-8 items-center">Valor</div>
+                      <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-4">
+                        {pendingFieldColumns.length > 0 ? (
+                          pendingFieldColumns.map((f) => (
+                            <div key={`head-${f.id}`} className="flex h-8 items-center text-sm font-semibold text-slate-700">
+                              {f.name}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="flex h-8 items-center text-sm font-semibold text-slate-400">Sin campos adicionales</div>
+                        )}
+                      </div>
+                    </div>
+                    {pendingPagedEntities.map((e) => (
+                      <div
+                        key={e.id}
+                        className="grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] lg:items-center"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-slate-900" title={e.name}>{e.name}</div>
+                          {e.card_fields?.length ? (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {e.card_fields.slice(0, 3).map((field) => (
+                                <span key={`${e.id}-${field.name}`} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-500">
+                                  {field.name}: {field.value_text}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="min-w-0">
+                          {(e.usage_unit_suggested_values ?? []).length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {(e.usage_unit_suggested_values ?? []).map((opt) => {
+                                const current = String(bulkDraftByEntity[e.id] ?? "").trim();
+                                const active = current === opt;
+                                return (
+                                  <button
+                                    key={`${e.id}-main-${opt}`}
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() =>
+                                      setBulkDraftByEntity((prev) => ({
+                                        ...prev,
+                                        [e.id]: current === opt ? "" : opt,
+                                      }))
+                                    }
+                                    className={[
+                                      "rounded-full border px-2 py-1 text-[10px] transition",
+                                      active
+                                        ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                        : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                                    ].join(" ")}
+                                  >
+                                    {opt}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="rounded-[16px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fafc)] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
+                              <div className="mb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400">
+                                Valor libre
                               </div>
-                            ) : (
                               <Input
                                 value={bulkDraftByEntity[e.id] ?? ""}
                                 onChange={(ev) =>
@@ -826,83 +905,66 @@ export default function FocusedUsageCapturePage() {
                                 }
                                 placeholder={e.usage_unit_visible && e.usage_unit_name ? `Valor (${e.usage_unit_name})` : "Valor"}
                                 disabled={busy}
+                                className="border-slate-200 bg-white"
                               />
-                            )}
+                            </div>
+                          )}
+                        </div>
+                        {(e.fields ?? []).length === 0 ? (
+                          <div className="rounded-[16px] border border-dashed border-slate-200 bg-slate-50/70 px-3 py-2 text-xs text-slate-500 sm:col-span-2 lg:col-auto">
+                            Sin campos adicionales para completar.
                           </div>
-                          {(e.fields ?? []).length === 0 ? (
-                            <span className="text-xs text-slate-400 sm:col-span-2 lg:col-auto">—</span>
-                          ) : (
-                            <div className="grid grid-cols-1 gap-2 sm:col-span-2 sm:grid-cols-2 lg:col-auto lg:gap-1 xl:grid-cols-4">
-                              {pendingFieldColumns.map((columnField) => {
-                                const f = (e.fields ?? []).find((x) => x.id === columnField.id) ?? null;
-                                if (!f) {
-                                  return (
-                                    <div key={`${e.id}-missing-${columnField.id}`} className="text-xs text-slate-400">
-                                      —
-                                    </div>
-                                  );
-                                }
-                                if (fieldOptions(f).length > 0) {
-                                  return (
-                                    <div key={f.id} className="min-w-0">
-                                      <div className="flex flex-wrap gap-1 pb-1">
-                                        {fieldOptions(f).map((opt) => {
-                                          const current = String(bulkFieldDraftByEntity[e.id]?.[f.id] ?? "");
-                                          const active = current === opt;
-                                          return (
-                                            <button
-                                              key={`${e.id}-${f.id}-${opt}`}
-                                              type="button"
-                                              disabled={busy}
-                                              onClick={() =>
-                                                setBulkFieldDraftByEntity((prev) => ({
-                                                  ...prev,
-                                                  [e.id]: {
-                                                    ...(prev[e.id] ?? {}),
-                                                    [f.id]: current === opt ? "" : opt,
-                                                  },
-                                                }))
-                                              }
-                                              className={[
-                                                "rounded-full border px-2 py-1 text-[10px] transition",
-                                                active
-                                                  ? "border-emerald-600 bg-emerald-50 text-emerald-700"
-                                                  : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
-                                              ].join(" ")}
-                                            >
-                                              {opt}
-                                            </button>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  );
-                                }
-                                if (f.field_type === "boolean") {
-                                  return (
-                                    <div key={f.id} className="min-w-0">
-                                      <select
-                                        value={bulkFieldDraftByEntity[e.id]?.[f.id] ?? ""}
-                                        onChange={(ev) =>
-                                          setBulkFieldDraftByEntity((prev) => ({
-                                            ...prev,
-                                            [e.id]: { ...(prev[e.id] ?? {}), [f.id]: ev.target.value },
-                                          }))
-                                        }
-                                        className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
-                                        disabled={busy}
-                                      >
-                                        <option value="">(vacío)</option>
-                                        <option value="true">Sí</option>
-                                        <option value="false">No</option>
-                                      </select>
-                                    </div>
-                                  );
-                                }
+                        ) : (
+                          <div className="grid grid-cols-1 gap-2 sm:col-span-2 sm:grid-cols-2 lg:col-auto lg:gap-1 xl:grid-cols-4">
+                            {pendingFieldColumns.map((columnField) => {
+                              const f = (e.fields ?? []).find((x) => x.id === columnField.id) ?? null;
+                              if (!f) {
+                                return (
+                                  <div key={`${e.id}-missing-${columnField.id}`} className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50/60 px-3 py-2 text-xs text-slate-400">
+                                    No aplica
+                                  </div>
+                                );
+                              }
+                              if (fieldOptions(f).length > 0) {
                                 return (
                                   <div key={f.id} className="min-w-0">
-                                    <Input
-                                      type={f.field_type === "number" ? "number" : f.field_type === "date" ? "date" : "text"}
+                                    <div className="flex flex-wrap gap-1 pb-1">
+                                      {fieldOptions(f).map((opt) => {
+                                        const current = String(bulkFieldDraftByEntity[e.id]?.[f.id] ?? "");
+                                        const active = current === opt;
+                                        return (
+                                          <button
+                                            key={`${e.id}-${f.id}-${opt}`}
+                                            type="button"
+                                            disabled={busy}
+                                            onClick={() =>
+                                              setBulkFieldDraftByEntity((prev) => ({
+                                                ...prev,
+                                                [e.id]: {
+                                                  ...(prev[e.id] ?? {}),
+                                                  [f.id]: current === opt ? "" : opt,
+                                                },
+                                              }))
+                                            }
+                                            className={[
+                                              "rounded-full border px-2 py-1 text-[10px] transition",
+                                              active
+                                                ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                                : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                                            ].join(" ")}
+                                          >
+                                            {opt}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              if (f.field_type === "boolean") {
+                                return (
+                                  <div key={f.id} className="min-w-0">
+                                    <select
                                       value={bulkFieldDraftByEntity[e.id]?.[f.id] ?? ""}
                                       onChange={(ev) =>
                                         setBulkFieldDraftByEntity((prev) => ({
@@ -910,74 +972,99 @@ export default function FocusedUsageCapturePage() {
                                           [e.id]: { ...(prev[e.id] ?? {}), [f.id]: ev.target.value },
                                         }))
                                       }
+                                      className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
                                       disabled={busy}
-                                      className="h-[var(--control-h)] text-[13px] sm:text-sm"
-                                    />
+                                    >
+                                      <option value="">(vacío)</option>
+                                      <option value="true">Sí</option>
+                                      <option value="false">No</option>
+                                    </select>
                                   </div>
                                 );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {filteredPendingEntities.length > 0 ? (
-                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                      <div>
-                        Mostrando {pendingPageStart + 1}-{Math.min(pendingPageStart + pendingPageSize, filteredPendingEntities.length)} de{" "}
-                        {filteredPendingEntities.length}
+                              }
+                              return (
+                                <div key={f.id} className="min-w-0">
+                                  <Input
+                                    type={f.field_type === "number" ? "number" : f.field_type === "date" ? "date" : "text"}
+                                    value={bulkFieldDraftByEntity[e.id]?.[f.id] ?? ""}
+                                    onChange={(ev) =>
+                                      setBulkFieldDraftByEntity((prev) => ({
+                                        ...prev,
+                                        [e.id]: { ...(prev[e.id] ?? {}), [f.id]: ev.target.value },
+                                      }))
+                                    }
+                                    disabled={busy}
+                                    className="h-[var(--control-h)] text-[13px] sm:text-sm"
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setPendingPage(1)}
-                          disabled={safePendingPage <= 1}
-                          className="rounded border border-slate-300 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          «
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPendingPage((p) => Math.max(1, p - 1))}
-                          disabled={safePendingPage <= 1}
-                          className="rounded border border-slate-300 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          ‹
-                        </button>
-                        <span className="px-2">
-                          Página {safePendingPage} de {pendingTotalPages}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setPendingPage((p) => Math.min(pendingTotalPages, p + 1))}
-                          disabled={safePendingPage >= pendingTotalPages}
-                          className="rounded border border-slate-300 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          ›
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPendingPage(pendingTotalPages)}
-                          disabled={safePendingPage >= pendingTotalPages}
-                          className="rounded border border-slate-300 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          »
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <div className="text-[11px] text-slate-500">
-                    En modo lote puedes cargar valor principal y campos dinámicos en formato compacto.
+                    ))}
                   </div>
-                  <Button onClick={() => void saveBulkPending()} disabled={busy || filteredPendingEntities.length === 0} className="w-auto justify-self-start">
-                    {busy ? "Guardando..." : "Guardar lote"}
-                  </Button>
-              </>
+                )}
+
+                {filteredPendingEntities.length > 0 ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    <div>
+                      Mostrando {pendingPageStart + 1}-{Math.min(pendingPageStart + pendingPageSize, filteredPendingEntities.length)} de{" "}
+                      {filteredPendingEntities.length}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setPendingPage(1)}
+                        disabled={safePendingPage <= 1}
+                        className="rounded border border-slate-300 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        «
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingPage((p) => Math.max(1, p - 1))}
+                        disabled={safePendingPage <= 1}
+                        className="rounded border border-slate-300 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        ‹
+                      </button>
+                      <span className="px-2">
+                        Página {safePendingPage} de {pendingTotalPages}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPendingPage((p) => Math.min(pendingTotalPages, p + 1))}
+                        disabled={safePendingPage >= pendingTotalPages}
+                        className="rounded border border-slate-300 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        ›
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingPage(pendingTotalPages)}
+                        disabled={safePendingPage >= pendingTotalPages}
+                        className="rounded border border-slate-300 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        »
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="text-[11px] text-slate-500">
+                  En modo lote puedes cargar valor principal y campos dinámicos en formato compacto.
+                </div>
+              </section>
             </div>
           ) : (
-            <div className="grid gap-2">
+            <div className="grid gap-3">
+              <div className="rounded-[20px] border border-slate-200 bg-[linear-gradient(180deg,rgba(240,253,244,0.72),rgba(236,253,245,0.88))] p-4">
+                <div className="text-sm font-semibold text-slate-900">Revisión de registros guardados</div>
+                <div className="text-xs text-slate-500">
+                  Usa esta vista como área secundaria para confirmar o corregir lo ya registrado en la fecha.
+                </div>
+              </div>
               {registeredEntities.length === 0 ? (
                 <p className="app-empty">No hay registros guardados para {loggedOn}.</p>
               ) : (
