@@ -257,7 +257,7 @@ function getCustomPeriodLabel(fromText: string, toText: string) {
 }
 
 function filterSelectClass() {
-  return "h-[var(--control-h)] w-full rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] text-slate-700 sm:text-sm";
+  return "h-9 w-full rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] text-slate-700 sm:text-sm";
 }
 
 function DirectionIcon({
@@ -672,6 +672,42 @@ export default function UsageGanttPage() {
   }, [timelineRows]);
 
   const suggestedColorMap = useMemo(() => buildSuggestedPalette(suggestedLegend), [suggestedLegend]);
+  const timelineLegendItems = useMemo(() => {
+    const suggestedItems = suggestedLegend
+      .map((value) => {
+        const color = suggestedColorMap.get(normalizeSuggestedValue(value));
+        if (!color) return null;
+        return {
+          key: `legend-${value}`,
+          label: value,
+          tone: cn("border", color.border, "bg-white text-slate-700"),
+          swatchClassName: cn("border", color.border, color.dot),
+        };
+      })
+      .filter((item): item is { key: string; label: string; tone: string; swatchClassName: string } => Boolean(item));
+
+    return [
+      ...suggestedItems,
+      {
+        key: "legend-free-numeric",
+        label: "Numérico libre",
+        tone: "border-sky-200 bg-sky-50/70 text-sky-900",
+        swatchClassName: "border border-sky-200 bg-sky-500/80",
+      },
+      {
+        key: "legend-free-text",
+        label: "Texto libre",
+        tone: "border-emerald-200 bg-emerald-50/70 text-emerald-900",
+        swatchClassName: "border border-emerald-200 bg-emerald-500/80",
+      },
+      {
+        key: "legend-empty",
+        label: "Sin registro",
+        tone: "border-slate-200 bg-slate-50 text-slate-600",
+        swatchClassName: "border border-slate-200 bg-slate-100/80",
+      },
+    ];
+  }, [suggestedColorMap, suggestedLegend]);
   const pageStart = totalEntities === 0 ? 0 : pageOffset + 1;
   const pageEnd = Math.min(pageOffset + timelineRows.length, totalEntities);
   const hasPreviousPage = pageOffset > 0;
@@ -805,21 +841,13 @@ export default function UsageGanttPage() {
       />
 
       <Card>
-        <CardHeader className="pb-1.5">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <CardTitle className="text-base">Filtros</CardTitle>
-              <p className="text-xs text-slate-500">Alcance y periodo del trazado.</p>
-            </div>
-            <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium text-slate-500">
-              {periodLabel}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-2.5 pt-0 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,0.9fr)]">
-          <section className="rounded-[14px] border border-slate-200 bg-slate-50/70 p-2">
-            <div className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">Alcance</div>
-            <div className="grid gap-1.5 md:grid-cols-[minmax(0,1.8fr)_minmax(0,0.85fr)_minmax(0,0.85fr)]">
+        <CardContent className="p-3 sm:p-4">
+          <div className="grid gap-2 rounded-[18px] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(241,245,249,0.88))] p-2.5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] xl:items-start">
+            <section className="h-full rounded-[14px] border border-slate-200 bg-white p-2">
+              <div className="mb-1 flex min-h-9 items-center">
+                <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">Alcance</div>
+              </div>
+              <div className="grid gap-1.5 md:grid-cols-[minmax(0,1.8fr)_minmax(0,0.85fr)_minmax(0,0.85fr)]">
               <label className="grid gap-0.5">
                 <span className="text-[11px] text-slate-500">Entidad</span>
                 <div ref={entityFilterRef} className="relative">
@@ -892,18 +920,23 @@ export default function UsageGanttPage() {
                   ))}
                 </select>
               </label>
-            </div>
-          </section>
+              </div>
+            </section>
 
-          <section className="rounded-[14px] border border-slate-200 bg-white p-2 shadow-[0_12px_30px_-28px_rgba(15,23,42,0.4)]">
-            <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-              <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">Periodo</div>
-              <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1">
+            <section className="h-full rounded-[14px] border border-slate-200 bg-white p-2">
+            <div className="mb-1 flex min-h-9 flex-wrap items-center justify-between gap-1.5 sm:flex-nowrap">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">Periodo</div>
+                <div className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                  {periodLabel}
+                </div>
+              </div>
+              <div className="inline-flex h-9 rounded-full border border-slate-200 bg-slate-50 p-1">
                 <button
                   type="button"
                   onClick={() => setRangeMode("preset")}
                   className={cn(
-                    "rounded-full px-2.5 py-1 text-[11px] font-medium transition",
+                    "inline-flex h-7 items-center rounded-full px-2 py-0.5 text-[11px] font-medium transition",
                     rangeMode === "preset" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
                   )}
                 >
@@ -913,7 +946,7 @@ export default function UsageGanttPage() {
                   type="button"
                   onClick={() => setRangeMode("custom")}
                   className={cn(
-                    "rounded-full px-2.5 py-1 text-[11px] font-medium transition",
+                    "inline-flex h-7 items-center rounded-full px-2 py-0.5 text-[11px] font-medium transition",
                     rangeMode === "custom" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
                   )}
                 >
@@ -923,33 +956,35 @@ export default function UsageGanttPage() {
             </div>
 
             {rangeMode === "preset" ? (
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1">
-                  {([
-                    { value: "week", label: "Semanal" },
-                    { value: "month", label: "Mensual" },
-                  ] as Array<{ value: Scale; label: string }>).map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setScale(option.value)}
-                      className={cn(
-                        "rounded-full px-2.5 py-1 text-[11px] font-medium transition",
-                        scale === option.value ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-700"
-                      )}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
+              <div className="flex flex-wrap items-center justify-between gap-1.5 lg:flex-nowrap">
                 <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="inline-flex h-9 rounded-full border border-slate-200 bg-slate-50 p-1">
+                    {([
+                      { value: "week", label: "Semanal" },
+                      { value: "month", label: "Mensual" },
+                    ] as Array<{ value: Scale; label: string }>).map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setScale(option.value)}
+                        className={cn(
+                          "inline-flex h-7 items-center rounded-full px-2 py-0.5 text-[11px] font-medium transition",
+                          scale === option.value ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-700"
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-1 justify-end">
                   <Button variant="outline" size="sm" onClick={() => setAnchor((prev) => shiftAnchor(prev, scale, -1))}>Anterior</Button>
                   <Button variant="outline" size="sm" onClick={() => setAnchor((prev) => shiftAnchor(prev, scale, 1))}>Siguiente</Button>
                   <Button variant="outline" size="sm" onClick={() => setAnchor(today())}>Hoy</Button>
                 </div>
               </div>
             ) : (
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-1.5 sm:grid-cols-2">
                 <MarkedDatePicker
                   value={dateFrom}
                   onChange={setDateFrom}
@@ -966,7 +1001,8 @@ export default function UsageGanttPage() {
                 />
               </div>
             )}
-          </section>
+            </section>
+          </div>
         </CardContent>
       </Card>
 
@@ -983,37 +1019,25 @@ export default function UsageGanttPage() {
       ) : (
         <Card>
           <CardHeader className="pb-2">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <CardTitle className="text-base">Mapa de actividad</CardTitle>
-                <p className="mt-1 text-sm text-slate-500">
-                  Cada entidad ocupa una sola fila y distribuye sus registros diarios sobre todo el ancho disponible.
-                  {totalEntities > 0 ? ` Mostrando ${pageStart}-${pageEnd} de ${totalEntities} entidades filtradas.` : ""}
-                </p>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardTitle className="text-base">Mapa de actividad</CardTitle>
+                  {totalEntities > 0 ? (
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                      {`Mostrando ${pageStart}-${pageEnd} de ${totalEntities}`}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400">Leyenda</div>
               </div>
-              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-[4px] border border-slate-200 bg-slate-100/80" />
-                  Sin registro
-                </div>
-                {suggestedLegend.map((value) => {
-                  const color = suggestedColorMap.get(normalizeSuggestedValue(value));
-                  if (!color) return null;
-                  return (
-                    <div key={`legend-${value}`} className="flex items-center gap-2">
-                      <span className={cn("h-3 w-3 rounded-[4px] border", color.border, color.dot)} />
-                      {value}
-                    </div>
-                  );
-                })}
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-[4px] border border-sky-200 bg-sky-500/80" />
-                  Numérico libre
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-[4px] border border-emerald-200 bg-emerald-500/80" />
-                  Texto libre
-                </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {timelineLegendItems.map((item) => (
+                  <div key={item.key} className={cn("inline-flex items-center gap-2 rounded-full border px-2.5 py-1", item.tone)}>
+                    <span className={cn("h-3 w-3 rounded-[4px]", item.swatchClassName)} />
+                    {item.label}
+                  </div>
+                ))}
               </div>
             </div>
           </CardHeader>

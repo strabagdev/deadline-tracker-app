@@ -55,10 +55,17 @@ export default function LoginPage() {
     let cancelled = false;
 
     (async () => {
-      const brandingRes = await fetch("/api/platform/branding");
-      const brandingJson = await brandingRes.json().catch(() => ({}));
-      if (!cancelled && brandingRes.ok) {
-        setPlatformLogoUrl(brandingJson?.platform?.logo_url ?? "");
+      try {
+        const brandingRes = await fetch("/api/platform/branding");
+        const brandingJson = await brandingRes.json().catch(() => ({}));
+        if (!cancelled && brandingRes.ok) {
+          setPlatformLogoUrl(brandingJson?.platform?.logo_url ?? "");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setPlatformLogoUrl("");
+        }
+        console.warn("No se pudo cargar el branding de plataforma en login.", error);
       }
 
       const { data } = await supabaseAuth.auth.getSession();
