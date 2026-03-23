@@ -135,7 +135,7 @@ async function getLatestUsageByEntity(db: DataClient, orgId: string, entityIds: 
   return out;
 }
 
-async function getCardFieldsByEntity(db: DataClient, orgId: string, entityIds: string[]) {
+async function getCardFieldsByEntity(db: DataClient, orgId: string, entityIds: string[], maxFieldsPerEntity = Number.POSITIVE_INFINITY) {
   const out: Record<string, Array<{ name: string; value_text: string }>> = {};
   if (entityIds.length === 0) return out;
 
@@ -202,6 +202,7 @@ async function getCardFieldsByEntity(db: DataClient, orgId: string, entityIds: s
     if (!valueText) continue;
 
     if (!out[row.entity_id]) out[row.entity_id] = [];
+    if (out[row.entity_id].length >= maxFieldsPerEntity) continue;
     out[row.entity_id].push({ name: field.name, value_text: valueText });
   }
 
@@ -371,9 +372,11 @@ export async function GET(req: Request) {
     const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
     const pageSizeRaw = url.searchParams.get("page_size");
     const pageSizeParsed = pageSizeRaw == null ? 0 : Number(pageSizeRaw);
+    const viewMode = String(url.searchParams.get("view_mode") ?? "").trim().toLowerCase();
+    const maxPageSize = mode === "operations" && viewMode === "cards" ? 500 : 200;
     const pageSize =
       Number.isFinite(pageSizeParsed) && pageSizeParsed > 0
-        ? Math.min(200, Math.trunc(pageSizeParsed))
+        ? Math.min(maxPageSize, Math.trunc(pageSizeParsed))
         : 0;
 
     const [canAnalytics, canOperations, canEntities] = await Promise.all([
@@ -416,7 +419,7 @@ export async function GET(req: Request) {
         ? getLatestUsageByEntity(db, orgId, entityIds)
         : Promise.resolve<Record<string, { value: number; logged_at: string; logged_on: string | null }>>({}),
       needsOperationsData
-        ? getCardFieldsByEntity(db, orgId, entityIds)
+        ? getCardFieldsByEntity(db, orgId, entityIds, mode === "operations" && viewMode === "cards" ? 3 : Number.POSITIVE_INFINITY)
         : Promise.resolve<Record<string, Array<{ name: string; value_text: string }>>>({}),
       needsAnalyticsData
         ? getDynamicDistributionByEntityType(db, orgId, entities.map((e) => ({ id: e.id, entity_type_id: e.entity_type_id })))

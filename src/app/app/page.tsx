@@ -394,7 +394,7 @@ export default function AnalyticsDashboardPage() {
             </h1>
           </div>
 
-          <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-3 gap-1.5 md:grid-cols-5">
             <MetricTile label="Total entidades" value={totals.total} />
             <MetricTile label="Con forecast" value={totals.withForecast} />
             <MetricTile label="Vencidas" value={totals.overdue} tone="danger" />

@@ -87,32 +87,66 @@ function IconGrid({ className }: IconProps) {
   );
 }
 
+function IconClearFilters({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cn("h-4 w-4", className)} aria-hidden>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}
 
-function IconStatus({ status }: { status: Status | "all" }) {
+
+function IconStatusGlyph({ status }: { status: Status | "all" }) {
   if (status === "all") {
     return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
-        <path d="M4 5h16" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+        <path d="M4 7h16" />
         <path d="M7 12h10" />
-        <path d="M10 19h4" />
+        <path d="M10 17h4" />
       </svg>
     );
   }
 
-  const colorClass =
-    status === "red"
-      ? "text-rose-600"
-      : status === "orange"
-        ? "text-orange-600"
-        : status === "yellow"
-          ? "text-amber-500"
-          : status === "green"
-            ? "text-emerald-600"
-            : "text-slate-400";
+  if (status === "red") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+        <path d="M15 9 9 15" />
+        <path d="m9 9 6 6" />
+      </svg>
+    );
+  }
+
+  if (status === "orange") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+        <path d="M12 8v4" />
+        <path d="M12 16h.01" />
+        <path d="M10.3 3.8 3.9 15a2 2 0 0 0 1.7 3h12.8a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z" />
+      </svg>
+    );
+  }
+
+  if (status === "yellow") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+        <circle cx="12" cy="12" r="7" />
+        <path d="M12 8v4l2.5 1.5" />
+      </svg>
+    );
+  }
+
+  if (status === "green") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+        <path d="m7 12 3 3 7-7" />
+      </svg>
+    );
+  }
 
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={cn("h-3.5 w-3.5", colorClass)} aria-hidden>
-      <circle cx="12" cy="12" r="8" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+      <path d="M8 12h8" />
     </svg>
   );
 }
@@ -138,6 +172,22 @@ function statusTone(s: Status): { border: string; soft: string; strong: string }
   return { border: "#e2e8f0", soft: "#f8fafc", strong: "#475569" };
 }
 
+function statusFilterPalette(s: Status) {
+  if (s === "red") return "border-rose-300 bg-rose-100 text-rose-800";
+  if (s === "orange") return "border-orange-300 bg-orange-100 text-orange-800";
+  if (s === "yellow") return "border-amber-300 bg-amber-100 text-amber-800";
+  if (s === "green") return "border-emerald-300 bg-emerald-100 text-emerald-800";
+  return "border-slate-300 bg-slate-100 text-slate-700";
+}
+
+function statusLegendSwatch(s: Status) {
+  if (s === "red") return "border-rose-300 bg-rose-100";
+  if (s === "orange") return "border-orange-300 bg-orange-100";
+  if (s === "yellow") return "border-amber-300 bg-amber-100";
+  if (s === "green") return "border-emerald-300 bg-emerald-100";
+  return "border-slate-300 bg-slate-100";
+}
+
 export default function OperationsPage() {
   const router = useRouter();
 
@@ -155,8 +205,7 @@ export default function OperationsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
-  const [dashboardPanelCollapsed, setDashboardPanelCollapsed] = useState(true);
-  const [secondaryMenuOpen, setSecondaryMenuOpen] = useState(false);
+  const [selectedEntityId, setSelectedEntityId] = useState("");
 
   const [semaphore, setSemaphore] = useState<SemaphoreSettings>({
     yellow_days: 60,
@@ -192,7 +241,12 @@ export default function OperationsPage() {
       return;
     }
 
-    const params = new URLSearchParams({ mode: "operations", page: String(page), page_size: String(pageSize) });
+    const params = new URLSearchParams({
+      mode: "operations",
+      view_mode: viewMode,
+      page: String(page),
+      page_size: String(pageSize),
+    });
     if (filterStatus !== "all") params.set("status", filterStatus);
     if (filterEntityType !== "all") params.set("entity_type_id", filterEntityType);
     if (filterSecondary !== "all") params.set("secondary", filterSecondary);
@@ -225,7 +279,7 @@ export default function OperationsPage() {
     }
 
     setLoading(false);
-  }, [filterEntityType, filterSecondary, filterStatus, page, pageSize, q, router]);
+  }, [filterEntityType, filterSecondary, filterStatus, page, pageSize, q, router, viewMode]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -354,6 +408,11 @@ export default function OperationsPage() {
       return a.localeCompare(b, "es", { sensitivity: "base" });
     });
   }, [pagedRows]);
+  const selectedRow = useMemo(() => {
+    if (pagedRows.length === 0) return null;
+    return pagedRows.find((row) => row.entity.id === selectedEntityId) ?? pagedRows[0] ?? null;
+  }, [pagedRows, selectedEntityId]);
+  const effectiveSelectedEntityId = selectedRow?.entity.id ?? "";
 
   const hasEntities = (meta?.entity_count_in_org ?? entities.length) > 0;
   const hasActiveFilters =
@@ -368,99 +427,47 @@ export default function OperationsPage() {
     return statusCounts.none;
   }
 
-  function statusChipClasses(s: Status | "all", active: boolean) {
+  function statusCircleClasses(s: Status | "all", active: boolean) {
     const tone =
       s === "red"
-        ? "!border-rose-300 !bg-rose-100 !text-rose-800 hover:!bg-rose-200"
+        ? "border-rose-300 bg-rose-500 text-white hover:bg-rose-600"
         : s === "orange"
-          ? "!border-orange-300 !bg-orange-100 !text-orange-800 hover:!bg-orange-200"
+          ? "border-orange-300 bg-orange-500 text-white hover:bg-orange-600"
           : s === "yellow"
-            ? "!border-amber-300 !bg-amber-100 !text-amber-800 hover:!bg-amber-200"
+            ? "border-amber-300 bg-amber-400 text-white hover:bg-amber-500"
             : s === "green"
-              ? "!border-emerald-300 !bg-emerald-100 !text-emerald-800 hover:!bg-emerald-200"
+              ? "border-emerald-300 bg-emerald-500 text-white hover:bg-emerald-600"
               : s === "none"
-                ? "!border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200"
-                : "!border-blue-300 !bg-blue-100 !text-blue-800 hover:!bg-blue-200";
+                ? "border-slate-300 bg-slate-500 text-white hover:bg-slate-600"
+                : "border-blue-300 bg-blue-500 text-white hover:bg-blue-600";
 
     return cn(
-      "min-w-[54px] justify-center border font-semibold",
+      "relative h-11 w-11 shrink-0 rounded-full border shadow-sm transition focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-2",
       tone,
-      active ? "!border-slate-500 opacity-100" : "opacity-80"
+      active ? "ring-2 ring-slate-900/70 ring-offset-2" : "opacity-85"
     );
   }
 
-  function renderSecondaryFilter(placementClassName?: string, menuClassName?: string) {
+  function renderSecondaryFilter() {
     if (secondaryFilterOptions.length === 0) return null;
     return (
-      <div className={cn("relative z-20", placementClassName)}>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setSecondaryMenuOpen((v) => !v)}
-            className="min-h-[var(--control-h)]"
-          >
-            <span>Filtro secundario</span>
-            <span className="text-xs">{secondaryMenuOpen ? "▲" : "▼"}</span>
-          </Button>
-          {filterSecondary !== "all" ? (
-            <Badge variant="outline" className="max-w-[280px] truncate border-indigo-300 bg-indigo-50 text-indigo-800">
-              {filterSecondary}
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
-              Todos
-            </Badge>
-          )}
-        </div>
-
-        {secondaryMenuOpen ? (
-          <div className={cn("mt-2 max-h-44 overflow-auto rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--card)] p-2 shadow-sm z-30", menuClassName)}>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setFilterSecondary("all");
-                  setPage(1);
-                  setSecondaryMenuOpen(false);
-                }}
-                className={cn(
-                  "min-w-[54px] shrink-0 justify-center border font-semibold",
-                  filterSecondary === "all"
-                    ? "!border-indigo-500 !bg-indigo-100 !text-indigo-800"
-                    : "!border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200"
-                )}
-                title="Todos los valores"
-              >
-                <span>Todos</span>
-              </Button>
-              {secondaryFilterOptions.map((opt) => (
-                <Button
-                  key={opt.value}
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setFilterSecondary(opt.value);
-                    setPage(1);
-                    setSecondaryMenuOpen(false);
-                  }}
-                  className={cn(
-                    "min-w-[54px] shrink-0 justify-center border font-semibold",
-                    filterSecondary === opt.value
-                      ? "!border-indigo-500 !bg-indigo-100 !text-indigo-800"
-                      : "!border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200"
-                  )}
-                  title={opt.value}
-                >
-                  <span className="max-w-[180px] truncate">{opt.value}</span>
-                  <span className="font-semibold">{opt.count}</span>
-                </Button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </div>
+      <select
+        id="dashboard_secondary_filter"
+        aria-label="Filtro secundario"
+        value={filterSecondary}
+        onChange={(e) => {
+          setFilterSecondary(e.target.value);
+          setPage(1);
+        }}
+        className="h-[var(--control-h)] min-w-[170px] max-w-[220px] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
+      >
+        <option value="all">Secundario: todos</option>
+        {secondaryFilterOptions.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.value} ({opt.count})
+          </option>
+        ))}
+      </select>
     );
   }
 
@@ -470,135 +477,133 @@ export default function OperationsPage() {
         badge="Operación"
         secondaryBadge="Seguimiento"
         title="Operaciones"
-        actions={
-          <>
-            {renderSecondaryFilter("hidden md:block", "md:absolute md:right-0 md:min-w-[360px]")}
+        subtitle="Control visual del estado operativo y acceso directo al detalle por entidad."
+      />
+
+      <div className="rounded-[18px] border border-slate-200 bg-white px-3 py-3 shadow-[0_10px_30px_-26px_rgba(15,23,42,0.28)]">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <div className="min-w-[240px] flex-[1.2]">
+          <Input
+            id="dashboard_search"
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Buscar por nombre, tipo o vencimiento..."
+            className="w-full"
+          />
+            </div>
+
+            <div className="flex items-center gap-2 rounded-[14px] border border-slate-200 bg-slate-50 px-2 py-1.5">
+            {statusFilterMeta.map((s) => (
+              <Button
+                key={s.key}
+                variant="outline"
+                onClick={() => {
+                  setFilterStatus(s.key);
+                  setPage(1);
+                }}
+                className={cn("p-0", statusCircleClasses(s.key, filterStatus === s.key))}
+                title={`${s.title}: ${countByStatus(s.key)}`}
+                aria-label={`${s.title}: ${countByStatus(s.key)}`}
+              >
+                <IconStatusGlyph status={s.key} />
+                <span className="absolute -right-1.5 -top-1.5 min-w-[16px] rounded-full border border-white bg-slate-950 px-1 text-center text-[9px] font-semibold leading-[16px] text-white shadow-sm">
+                  {countByStatus(s.key)}
+                </span>
+              </Button>
+            ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {renderSecondaryFilter()}
+
+              <select
+                id="dashboard_type_quick"
+                aria-label="Filtrar por tipo"
+                value={filterEntityType}
+                onChange={(e) => {
+                  setFilterEntityType(e.target.value);
+                  setPage(1);
+                }}
+                className="h-[var(--control-h)] min-w-[160px] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
+              >
+                <option value="all">Tipos: todos</option>
+                {entityTypeOptions.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <select
+            id="dashboard_page_size"
+            aria-label="Filas por página"
+            value={String(pageSize)}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
+            className="h-[var(--control-h)] min-w-[128px] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
+          >
+            <option value="25">25 / página</option>
+            <option value="50">50 / página</option>
+            <option value="100">100 / página</option>
+            <option value="250">250 / página</option>
+            <option value="500">500 / página</option>
+          </select>
+
+            <div className="flex shrink-0 items-center gap-2 rounded-[14px] border border-slate-200 bg-slate-50 p-1">
             <Button
               size="sm"
-              variant="outline"
-              onClick={() => setDashboardPanelCollapsed((v) => !v)}
-              className="min-w-[116px] justify-between"
+              variant={viewMode === "cards" ? "secondary" : "outline"}
+              onClick={() => setViewMode("cards")}
+              className="min-h-[var(--control-h)] min-w-[var(--control-h)]"
+              title="Vista mosaico"
+              aria-label="Vista mosaico"
             >
-              <span>{dashboardPanelCollapsed ? "Buscar" : "Ocultar"}</span>
-              <span className="text-xs">{dashboardPanelCollapsed ? "▼" : "▲"}</span>
+              <IconGrid />
             </Button>
-          </>
-        }
-        footer={
-          <>
-            <div className="flex w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 pr-2 lg:w-max lg:pb-0">
-              {statusFilterMeta.map((s) => (
-                <Button
-                  key={s.key}
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setFilterStatus(s.key);
-                    setPage(1);
-                  }}
-                  className={statusChipClasses(s.key, filterStatus === s.key)}
-                  title={s.title}
-                >
-                  <IconStatus status={s.key} />
-                  {filterStatus === s.key ? <span>✓</span> : null}
-                  <span className="hidden sm:inline">{s.title}</span>
-                  <span className="font-semibold">{countByStatus(s.key)}</span>
-                </Button>
-              ))}
-            </div>
-            {renderSecondaryFilter("mt-2 md:hidden")}
-          </>
-        }
-      />
-      <Card>
-        <CardContent className="py-3">
-          {!dashboardPanelCollapsed ? (
-            <div className="mt-3 rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--muted)]/80 px-3 py-2 sm:px-4 sm:py-3">
-              <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_150px_auto]">
-                <Input
-                  id="dashboard_search"
-                  value={q}
-                  onChange={(e) => {
-                    setQ(e.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Buscar por nombre, tipo o vencimiento..."
-                />
-                <select
-                  id="dashboard_page_size"
-                  aria-label="Filas por página"
-                  value={String(pageSize)}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setPage(1);
-                  }}
-                  className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
-                >
-                  <option value="25">25 / página</option>
-                  <option value="50">50 / página</option>
-                  <option value="100">100 / página</option>
-                </select>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setQ("");
-                    setFilterEntityType("all");
-                    setFilterStatus("all");
-                    setFilterSecondary("all");
-                    setPage(1);
-                  }}
-                  disabled={!hasActiveFilters}
-                >
-                  Limpiar filtros
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+            <Button
+              size="sm"
+              variant={viewMode === "list" ? "secondary" : "outline"}
+              onClick={() => setViewMode("list")}
+              className="min-h-[var(--control-h)] min-w-[var(--control-h)]"
+              title="Vista lista"
+              aria-label="Vista lista"
+            >
+              <IconList />
+            </Button>
+          </div>
+
+            <Button
+              variant="outline"
+              onClick={() => {
+                setQ("");
+                setFilterEntityType("all");
+                setFilterStatus("all");
+                setFilterSecondary("all");
+                setPage(1);
+              }}
+              disabled={!hasActiveFilters}
+              className="min-h-[var(--control-h)] min-w-[var(--control-h)] shrink-0"
+              title="Limpiar filtros"
+              aria-label="Limpiar filtros"
+            >
+              <IconClearFilters />
+            </Button>
+          </div>
+        </div>
+      </div>
 
       {errorMsg ? <div className="app-alert app-alert-error whitespace-pre-wrap">{errorMsg}</div> : null}
 
       <section className="space-y-4">
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <select
-            id="dashboard_type_quick"
-            aria-label="Filtrar por tipo"
-            value={filterEntityType}
-            onChange={(e) => {
-              setFilterEntityType(e.target.value);
-              setPage(1);
-            }}
-            className="h-[var(--control-h)] min-w-[170px] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
-          >
-            <option value="all">Todos los tipos</option>
-            {entityTypeOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-          <Button
-            size="sm"
-            variant={viewMode === "cards" ? "secondary" : "outline"}
-            onClick={() => setViewMode("cards")}
-            className="min-h-[var(--control-h)] min-w-[var(--control-h)]"
-            title="Vista tarjetas"
-            aria-label="Vista tarjetas"
-          >
-            <IconGrid />
-          </Button>
-          <Button
-            size="sm"
-            variant={viewMode === "list" ? "secondary" : "outline"}
-            onClick={() => setViewMode("list")}
-            className="min-h-[var(--control-h)] min-w-[var(--control-h)]"
-            title="Vista lista"
-            aria-label="Vista lista"
-          >
-            <IconList />
-          </Button>
-        </div>
         {loading ? (
           <div className="flex min-h-[60vh] items-center justify-center py-6">
             <Loader label="Cargando operaciones..." />
@@ -616,94 +621,152 @@ export default function OperationsPage() {
         ) : (
           <>
             {viewMode === "cards" ? (
-              <div className="space-y-3">
-                {groupedPagedRows.map(([typeName, typeRows]) => (
-                  <section key={typeName} className="space-y-2">
-                    <div className="sticky top-0 z-10 rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--card)]/92 px-3 py-1 text-xs font-semibold text-[var(--muted-foreground)] backdrop-blur">
-                      {typeName}
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+                <div className="space-y-3">
+                  <div className="rounded-[18px] border border-slate-200 bg-white px-3 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Leyenda del mosaico</div>
+                      <div className="flex flex-wrap gap-2 text-[11px]">
+                        {statusFilterMeta.filter((item) => item.key !== "all").map((item) => {
+                          return (
+                            <div key={`legend-inline-${item.key}`} className="inline-flex items-center gap-2 text-slate-600">
+                              <span className={cn("h-3 w-3 rounded-[4px] border", statusLegendSwatch(item.key as Status))} />
+                              {item.title}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
-                      {typeRows.map((r) => {
-                  const e = r.entity;
-                  const nearest = r.nearest;
-                  const tone = statusTone(r.status);
-                  const hasLatestUsage = r.latestUsage != null;
-                  const hasLatestUsageAt = Boolean(r.latestUsageAt);
-                  const cardFields = (e.card_fields ?? []).filter(
-                    (f) => String(f.name ?? "").trim() !== "" && String(f.value_text ?? "").trim() !== ""
-                  );
-                  const dueLabel = !r.hasActiveDeadlines
-                    ? "—"
-                    : nearest?.due
-                      ? fmtDate(nearest.due)
-                      : "Sin fecha estimada";
+                  </div>
 
-                        return (
-                          <article
-                            key={e.id}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => router.push(`/app/entities/${e.id}`)}
-                            onKeyDown={(ev) => {
-                              if (ev.key === "Enter" || ev.key === " ") {
-                                ev.preventDefault();
-                                router.push(`/app/entities/${e.id}`);
-                              }
-                            }}
-                          className="grid min-h-[112px] cursor-pointer content-between gap-1.5 rounded-[var(--radius-lg)] border p-2.5 shadow-sm transition-shadow hover:shadow-md"
-                            style={{ borderColor: tone.border, background: tone.soft }}
-                            title="Abrir ficha"
-                          >
-                            <div className="flex items-center justify-between gap-2">
+                  {groupedPagedRows.map(([typeName, typeRows]) => (
+                    <section key={typeName} className="space-y-2">
+                      <div className="rounded-[18px] border border-slate-200 bg-white p-3">
+                        <div className="mb-3 flex items-center justify-between gap-3 border-b border-slate-100 pb-2">
+                          <div className="text-xs font-semibold text-[var(--muted-foreground)]">{typeName}</div>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">{typeRows.length}</span>
+                        </div>
+                        <div className="grid grid-cols-[repeat(auto-fill,minmax(16px,1fr))] gap-1.5 sm:grid-cols-[repeat(auto-fill,minmax(18px,1fr))]">
+                          {typeRows.map((r) => {
+                            const e = r.entity;
+                            const nearest = r.nearest;
+                            const selected = effectiveSelectedEntityId === e.id;
+                            const palette = statusFilterPalette(r.status);
+                            const dueLabel = !r.hasActiveDeadlines
+                              ? "Sin vencimientos"
+                              : nearest?.due
+                                ? fmtDate(nearest.due)
+                                : "Sin fecha estimada";
+                            return (
+                              <button
+                                key={e.id}
+                                type="button"
+                                onClick={() => setSelectedEntityId(e.id)}
+                                className={cn(
+                                  "aspect-square min-h-4 rounded-[5px] border transition hover:scale-[1.08]",
+                                  palette,
+                                  selected && "ring-2 ring-sky-300 ring-offset-1"
+                                )}
+                                title={`${e.name} · ${nearest?.label ?? "Sin info"} · ${dueLabel}`}
+                                aria-label={`${e.name}: ${nearest?.label ?? "Sin info"}`}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </section>
+                  ))}
+                </div>
+
+                <aside className="grid content-start gap-3 rounded-[20px] border border-slate-200 bg-white p-4">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Detalle</div>
+                    <div className="text-xs text-slate-500">Resumen ampliado del elemento seleccionado.</div>
+                  </div>
+
+                  {!selectedRow ? (
+                    <div className="rounded-[16px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-sm text-slate-500">
+                      Selecciona un cuadro para inspeccionar su contexto operativo.
+                    </div>
+                  ) : (() => {
+                    const e = selectedRow.entity;
+                    const nearest = selectedRow.nearest;
+                    const tone = statusTone(selectedRow.status);
+                    const hasLatestUsage = selectedRow.latestUsage != null;
+                    const hasLatestUsageAt = Boolean(selectedRow.latestUsageAt);
+                    const cardFields = (e.card_fields ?? []).filter(
+                      (f) => String(f.name ?? "").trim() !== "" && String(f.value_text ?? "").trim() !== ""
+                    );
+                    return (
+                      <>
+                        <div className="grid gap-2">
+                          <div className="rounded-[16px] border p-4" style={{ borderColor: tone.border, background: tone.soft }}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="truncate text-base font-semibold text-slate-950">{e.name}</div>
+                                <div className="mt-1 text-xs text-slate-500">{e.entity_types?.name ?? "Sin tipo"}</div>
+                              </div>
                               <Badge variant="outline" className="text-[11px] font-semibold" style={{ borderColor: tone.border, color: tone.strong }}>
-                                {r.hasActiveDeadlines ? nearest?.label ?? "Sin info" : "Sin vencimientos"}
+                                {selectedRow.hasActiveDeadlines ? nearest?.label ?? "Sin info" : "Sin vencimientos"}
                               </Badge>
-                              <div className="text-[11px] font-medium text-slate-600">{dueLabel}</div>
                             </div>
 
-                            <div className="min-w-0">
-                              <div className="truncate text-[14px] font-semibold leading-tight text-slate-900">{e.name}</div>
-                              <div className="mt-0.5 truncate text-[11px] text-slate-500">{e.entity_types?.name ?? "Sin tipo"}</div>
-                              {cardFields.length > 0 ? (
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                  {cardFields.slice(0, 3).map((field, idx) => (
-                                    <Badge key={`${e.id}-${field.name}-${field.value_text}-${idx}`} variant="outline" className="bg-white text-[10px] font-normal text-slate-600">
-                                      {field.value_text}
-                                    </Badge>
-                                  ))}
+                            <div className="mt-4 rounded-[14px] border border-white/70 bg-white/70 px-3 py-2">
+                              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Próximo vencimiento</div>
+                              <div className="mt-1 text-sm font-medium text-slate-900">
+                                {!selectedRow.hasActiveDeadlines
+                                  ? "Sin vencimientos activos"
+                                  : nearest?.due
+                                    ? fmtDate(nearest.due)
+                                    : "Sin fecha estimada"}
+                              </div>
+                              {selectedRow.hasActiveDeadlines ? (
+                                <div className="mt-1 text-xs text-slate-500">
+                                  {`${nearest?.typeName ?? "Sin tipo"}${
+                                    nearest?.measureBy === "usage"
+                                      ? " · por uso"
+                                      : nearest?.measureBy === "date"
+                                        ? " · por fecha"
+                                        : ""
+                                  }`}
                                 </div>
                               ) : null}
                             </div>
+                          </div>
 
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              {r.hasActiveDeadlines ? (
-                                <Badge variant="outline" className="bg-white text-[10px] font-medium text-slate-600">
-                                  {`${nearest?.typeName ?? "Sin tipo"}${
-                                    nearest?.measureBy === "usage"
-                                      ? " · uso"
-                                      : nearest?.measureBy === "date"
-                                        ? " · fecha"
-                                        : ""
-                                  }`}
-                                </Badge>
-                              ) : null}
-                              {hasLatestUsage ? (
-                                <Badge variant="outline" className="bg-white text-[10px] font-medium text-slate-700">
-                                  Uso: {r.latestUsage}
-                                </Badge>
-                              ) : null}
-                              {hasLatestUsageAt ? (
-                                <Badge variant="outline" className="bg-white text-[10px] font-medium text-slate-700">
-                                  Último: {new Date(r.latestUsageAt as string).toLocaleDateString()}
-                                </Badge>
-                              ) : null}
+                          <div className="rounded-[14px] border border-slate-200 bg-slate-50/70 px-3 py-2">
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Uso reciente</div>
+                            <div className="mt-1 text-sm font-medium text-slate-900">
+                              {hasLatestUsage ? selectedRow.latestUsage : "Sin dato"}
                             </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  </section>
-                ))}
+                            {hasLatestUsageAt ? (
+                              <div className="mt-1 text-xs text-slate-500">
+                                Último registro: {new Date(selectedRow.latestUsageAt as string).toLocaleDateString()}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        {cardFields.length > 0 ? (
+                          <div className="grid gap-2">
+                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Contexto</div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {cardFields.map((field, idx) => (
+                                <Badge key={`${e.id}-${field.name}-${field.value_text}-${idx}`} variant="outline" className="bg-slate-50 text-[11px] font-normal text-slate-600">
+                                  {field.name}: {field.value_text}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <Button variant="outline" onClick={() => router.push(`/app/entities/${e.id}`)}>
+                          Abrir ficha
+                        </Button>
+                      </>
+                    );
+                  })()}
+                </aside>
               </div>
             ) : (
               <div className="overflow-x-auto rounded-2xl border bg-white">

@@ -86,10 +86,11 @@ export default function FocusedUsageCapturePage() {
   const [loggedOn, setLoggedOn] = useState("");
   const [pendingPage, setPendingPage] = useState(1);
   const [registeredPage, setRegisteredPage] = useState(1);
-  const [activeTab, setActiveTab] = useState<"pending" | "registered">("pending");
+  const [activeTab, setActiveTab] = useState<"pending" | "registered" | "operative">("pending");
   const [savedLogsByEntity, setSavedLogsByEntity] = useState<Record<string, SavedUsageLog | null | undefined>>({});
   const [loadingSavedByEntity, setLoadingSavedByEntity] = useState<Record<string, boolean>>({});
   const [editingEntity, setEditingEntity] = useState<Entity | null>(null);
+  const [operativeEntityId, setOperativeEntityId] = useState<string>("");
   const [editMainDraft, setEditMainDraft] = useState("");
   const [editFieldDraft, setEditFieldDraft] = useState<Record<string, string>>({});
   const [editLoading, setEditLoading] = useState(false);
@@ -224,6 +225,19 @@ export default function FocusedUsageCapturePage() {
     () => registeredEntities.slice(registeredPageStart, registeredPageStart + registeredPageSize),
     [registeredEntities, registeredPageStart]
   );
+  const operativeEntities = useMemo(
+    () => [...filteredEntities].sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" })),
+    [filteredEntities]
+  );
+  const operativeSummary = useMemo(() => {
+    const pending = operativeEntities.filter((e) => !Boolean(e.logged_days?.includes(loggedOn))).length;
+    const registered = operativeEntities.length - pending;
+    return { total: operativeEntities.length, pending, registered };
+  }, [operativeEntities, loggedOn]);
+  const operativeSelectedEntity = useMemo(
+    () => operativeEntities.find((entity) => entity.id === operativeEntityId) ?? null,
+    [operativeEntities, operativeEntityId]
+  );
   const fullyLoggedDates = useMemo(() => {
     if (entities.length === 0) return [];
     const counts = new Map<string, number>();
@@ -324,7 +338,15 @@ export default function FocusedUsageCapturePage() {
   }, [registeredPage, registeredTotalPages]);
   useEffect(() => {
     setActiveTab("pending");
-  }, [loggedOn, entitySearch, entityTypeName]);
+    setOperativeEntityId("");
+  }, [entityTypeName]);
+
+  useEffect(() => {
+    if (!operativeEntityId) return;
+    if (!operativeEntities.some((entity) => entity.id === operativeEntityId)) {
+      setOperativeEntityId("");
+    }
+  }, [operativeEntities, operativeEntityId]);
 
   function parseRawValue(rawValue: string): { value: number | null; valueText: string | null; error?: string } {
     const clean = String(rawValue ?? "").trim();
@@ -386,6 +408,15 @@ export default function FocusedUsageCapturePage() {
     }
     setEditFieldDraft(nextFieldDraft);
     setEditLoading(false);
+  }
+
+  async function openOperativeDetail(entity: Entity) {
+    setOperativeEntityId(entity.id);
+    if (!Boolean(entity.logged_days?.includes(loggedOn))) return;
+    if (savedLogsByEntity[entity.id] !== undefined || loadingSavedByEntity[entity.id]) return;
+    const token = await getTokenOrRedirect();
+    if (!token) return;
+    await fetchSavedLog(token, entity.id);
   }
 
   async function saveEdit() {
@@ -608,6 +639,18 @@ export default function FocusedUsageCapturePage() {
             <div className="inline-flex w-fit rounded-xl border border-slate-200 bg-slate-50 p-1">
               <button
                 type="button"
+                onClick={() => setActiveTab("operative")}
+                className={[
+                  "rounded-lg px-3 py-2 text-xs font-medium transition",
+                  activeTab === "operative"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-600 hover:text-slate-800",
+                ].join(" ")}
+              >
+                Operativa ({operativeSummary.total})
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveTab("pending")}
                 className={[
                   "rounded-lg px-3 py-2 text-xs font-medium transition",
@@ -638,6 +681,173 @@ export default function FocusedUsageCapturePage() {
             <div className="flex min-h-[60vh] items-center justify-center py-6"><Loader label="Cargando..." /></div>
           ) : entities.length === 0 ? (
             <p className="app-empty">No hay entidades disponibles para este tipo.</p>
+          ) : activeTab === "operative" ? (
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <section className="grid gap-3 rounded-[20px] border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Vista operativa</div>
+                    <div className="text-xs text-slate-500">
+                      Mosaico de control para detectar rápidamente qué entidades siguen pendientes y cuáles ya tienen registro en {loggedOn}.
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                      Total {operativeSummary.total}
+                    </span>
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800">
+                      Pendientes {operativeSummary.pending}
+                    </span>
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-800">
+                      Registrados {operativeSummary.registered}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                  <div className="inline-flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-[4px] border border-slate-200 bg-slate-100" />
+                    Sin registro
+                  </div>
+                  <div className="inline-flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-[4px] border border-emerald-200 bg-emerald-500/80" />
+                    Registrado
+                  </div>
+                  <div className="inline-flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-[4px] border border-sky-200 bg-sky-100" />
+                    Seleccionado
+                  </div>
+                </div>
+
+                {operativeEntities.length === 0 ? (
+                  <p className="app-empty">No hay entidades para mostrar con los filtros actuales.</p>
+                ) : (
+                  <div className="rounded-[18px] border border-slate-200 bg-[linear-gradient(180deg,#fbfdff,#f8fafc)] p-3">
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(16px,1fr))] gap-1.5 sm:grid-cols-[repeat(auto-fill,minmax(18px,1fr))]">
+                      {operativeEntities.map((entity) => {
+                        const selected = operativeEntityId === entity.id;
+                        const registered = Boolean(entity.logged_days?.includes(loggedOn));
+                        return (
+                          <button
+                            key={`operative-${entity.id}`}
+                            type="button"
+                            onClick={() => void openOperativeDetail(entity)}
+                            title={`${entity.name} · ${registered ? "Registrado" : "Sin registro"} · ${loggedOn}`}
+                            className={[
+                              "aspect-square min-h-4 rounded-[5px] border transition hover:scale-[1.08]",
+                              selected
+                                ? "border-sky-300 bg-sky-100 shadow-[0_0_0_1px_rgba(125,211,252,0.35)]"
+                                : registered
+                                  ? "border-emerald-200 bg-emerald-500/80 hover:border-emerald-300"
+                                  : "border-slate-200 bg-slate-100 hover:border-slate-300 hover:bg-slate-200",
+                            ].join(" ")}
+                            aria-label={`${entity.name}: ${registered ? "Registrado" : "Sin registro"}`}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              <aside className="grid gap-3 rounded-[20px] border border-slate-200 bg-white p-4">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">Detalle de entidad</div>
+                  <div className="text-xs text-slate-500">Haz click sobre un cuadro para inspeccionar su estado y contexto.</div>
+                </div>
+
+                {!operativeSelectedEntity ? (
+                  <div className="rounded-[16px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-sm text-slate-500">
+                    Ninguna entidad seleccionada.
+                  </div>
+                ) : (
+                  <>
+                    <div className="rounded-[16px] border border-slate-200 bg-slate-50/70 p-4">
+                      <div className="text-base font-semibold text-slate-950">{operativeSelectedEntity.name}</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <span className={[
+                          "rounded-full border px-2.5 py-1 text-[11px] font-medium",
+                          operativeSelectedEntity.logged_days?.includes(loggedOn)
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                            : "border-slate-200 bg-white text-slate-600",
+                        ].join(" ")}>
+                          {operativeSelectedEntity.logged_days?.includes(loggedOn) ? "Registrado" : "Sin registro"}
+                        </span>
+                        {operativeSelectedEntity.usage_unit_visible && operativeSelectedEntity.usage_unit_name ? (
+                          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                            Unidad: {operativeSelectedEntity.usage_unit_name}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {operativeSelectedEntity.card_fields?.length ? (
+                      <div className="grid gap-2">
+                        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Contexto</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {operativeSelectedEntity.card_fields.map((field) => (
+                            <span key={`${operativeSelectedEntity.id}-${field.name}`} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-600">
+                              {field.name}: {field.value_text}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {loadingSavedByEntity[operativeSelectedEntity.id] ? (
+                      <div className="rounded-[16px] border border-slate-200 bg-slate-50/70 px-4 py-6">
+                        <Loader label="Cargando detalle..." />
+                      </div>
+                    ) : operativeSelectedEntity.logged_days?.includes(loggedOn) ? (
+                      savedLogsByEntity[operativeSelectedEntity.id] ? (
+                        <div className="grid gap-3">
+                          <div className="grid gap-1">
+                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Registro del día</div>
+                            <div className="rounded-[16px] border border-emerald-200 bg-emerald-50/70 p-4">
+                              <div className="text-sm font-medium text-slate-900">
+                                Valor: {
+                                  savedLogsByEntity[operativeSelectedEntity.id]?.value != null &&
+                                  Number.isFinite(Number(savedLogsByEntity[operativeSelectedEntity.id]?.value))
+                                    ? String(savedLogsByEntity[operativeSelectedEntity.id]?.value)
+                                    : String(savedLogsByEntity[operativeSelectedEntity.id]?.value_text ?? "—")
+                                }
+                              </div>
+                              <div className="mt-1 text-xs text-slate-600">
+                                Hora: {savedLogsByEntity[operativeSelectedEntity.id]?.logged_at ?? "—"}
+                              </div>
+                            </div>
+                          </div>
+
+                          {(savedLogsByEntity[operativeSelectedEntity.id]?.field_values?.length ?? 0) > 0 ? (
+                            <div className="grid gap-1">
+                              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Campos dinámicos</div>
+                              <div className="grid gap-2">
+                                {savedLogsByEntity[operativeSelectedEntity.id]?.field_values.map((fieldValue) => {
+                                  const field = operativeSelectedEntity.fields.find((item) => item.id === fieldValue.usage_field_id);
+                                  return (
+                                    <div key={`${operativeSelectedEntity.id}-${fieldValue.usage_field_id}`} className="rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                                      <span className="font-medium text-slate-900">{field?.name ?? "Campo"}:</span> {fieldValue.value}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="rounded-[16px] border border-slate-200 bg-slate-50/70 px-4 py-6 text-sm text-slate-500">
+                          No se pudo cargar el detalle del registro.
+                        </div>
+                      )
+                    ) : (
+                      <div className="rounded-[16px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-sm text-slate-500">
+                        Esta entidad no tiene registro para {loggedOn}.
+                      </div>
+                    )}
+                  </>
+                )}
+              </aside>
+            </div>
           ) : activeTab === "pending" ? (
             <div className="grid gap-4">
               <section className="rounded-[20px] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.88))] p-4">
