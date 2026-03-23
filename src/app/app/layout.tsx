@@ -894,7 +894,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               : "border-slate-200 bg-slate-100 text-slate-500",
           )}>
             <IconSparkles className="h-3.5 w-3.5" />
-            {openAiPowered ? "IA · OpenAI powered" : "IA · OpenAI disabled"}
+            {openAiPowered ? "OpenAI powered" : "OpenAI disabled"}
           </span>
         </div>
       </footer>

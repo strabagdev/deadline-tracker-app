@@ -100,7 +100,7 @@ function IconClearFilters({ className }: IconProps) {
 function IconStatusGlyph({ status }: { status: Status | "all" }) {
   if (status === "all") {
     return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 scale-[1.75]" aria-hidden>
         <path d="M4 7h16" />
         <path d="M7 12h10" />
         <path d="M10 17h4" />
@@ -110,7 +110,7 @@ function IconStatusGlyph({ status }: { status: Status | "all" }) {
 
   if (status === "red") {
     return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 scale-[1.75]" aria-hidden>
         <path d="M15 9 9 15" />
         <path d="m9 9 6 6" />
       </svg>
@@ -119,7 +119,7 @@ function IconStatusGlyph({ status }: { status: Status | "all" }) {
 
   if (status === "orange") {
     return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 scale-[1.75]" aria-hidden>
         <path d="M12 8v4" />
         <path d="M12 16h.01" />
         <path d="M10.3 3.8 3.9 15a2 2 0 0 0 1.7 3h12.8a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z" />
@@ -129,7 +129,7 @@ function IconStatusGlyph({ status }: { status: Status | "all" }) {
 
   if (status === "yellow") {
     return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 scale-[1.75]" aria-hidden>
         <circle cx="12" cy="12" r="7" />
         <path d="M12 8v4l2.5 1.5" />
       </svg>
@@ -138,14 +138,14 @@ function IconStatusGlyph({ status }: { status: Status | "all" }) {
 
   if (status === "green") {
     return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 scale-[1.75]" aria-hidden>
         <path d="m7 12 3 3 7-7" />
       </svg>
     );
   }
 
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 scale-[1.75]" aria-hidden>
       <path d="M8 12h8" />
     </svg>
   );
@@ -414,8 +414,8 @@ export default function OperationsPage() {
     });
   }, [pagedRows]);
   const selectedRow = useMemo(() => {
-    if (pagedRows.length === 0) return null;
-    return pagedRows.find((row) => row.entity.id === selectedEntityId) ?? pagedRows[0] ?? null;
+    if (!selectedEntityId) return null;
+    return pagedRows.find((row) => row.entity.id === selectedEntityId) ?? null;
   }, [pagedRows, selectedEntityId]);
   const effectiveSelectedEntityId = selectedRow?.entity.id ?? "";
 
