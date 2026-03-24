@@ -257,7 +257,7 @@ function getCustomPeriodLabel(fromText: string, toText: string) {
 }
 
 function filterSelectClass() {
-  return "h-9 w-full rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] text-slate-700 sm:text-sm";
+  return "h-9 w-full rounded-[14px] border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100 sm:text-sm";
 }
 
 function DirectionIcon({
@@ -842,15 +842,15 @@ export default function UsageGanttPage() {
       />
 
       <Card>
-        <CardContent className="p-3 sm:p-4">
-          <div className="grid gap-2 rounded-[18px] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(241,245,249,0.88))] p-2.5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] xl:items-start">
-            <section className="h-full rounded-[14px] border border-slate-200 bg-white p-2">
-              <div className="mb-1 flex min-h-9 items-center">
-                <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">Alcance</div>
+        <CardContent className="p-2.5 sm:p-3">
+          <div className="grid gap-1.5 rounded-[20px] border border-slate-200 bg-slate-50/80 p-2 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] xl:items-start">
+            <section className="h-full rounded-[16px] border border-slate-200 bg-white p-2">
+              <div className="mb-1 flex min-h-7 items-center">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Alcance</div>
               </div>
-              <div className="grid gap-1.5 md:grid-cols-[minmax(0,1.8fr)_minmax(0,0.85fr)_minmax(0,0.85fr)]">
+              <div className="grid gap-1 md:grid-cols-[minmax(0,1.8fr)_minmax(0,0.85fr)_minmax(0,0.85fr)]">
               <label className="grid gap-0.5">
-                <span className="text-[11px] text-slate-500">Entidad</span>
+                <span className="text-[11px] font-medium text-slate-500">Entidad</span>
                 <div ref={entityFilterRef} className="relative">
                   <input
                     value={entitySearch}
@@ -868,7 +868,7 @@ export default function UsageGanttPage() {
                     className={filterSelectClass()}
                   />
                   {entitySuggestionsOpen ? (
-                    <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 rounded-[14px] border border-slate-200 bg-white p-1 shadow-[0_18px_32px_-24px_rgba(15,23,42,0.28)]">
+                    <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 rounded-[16px] border border-slate-200 bg-white p-1 shadow-[0_18px_32px_-24px_rgba(15,23,42,0.18)]">
                       <button
                         type="button"
                         onClick={() => {
@@ -904,7 +904,7 @@ export default function UsageGanttPage() {
                 </div>
               </label>
               <label className="grid gap-0.5">
-                <span className="text-[11px] text-slate-500">Tipo</span>
+                <span className="text-[11px] font-medium text-slate-500">Tipo</span>
                 <select value={entityTypeId} onChange={(e) => setEntityTypeId(e.target.value)} className={filterSelectClass()}>
                   <option value="all">Todos los tipos</option>
                   {entityTypeOptions.map((option) => (
@@ -913,7 +913,7 @@ export default function UsageGanttPage() {
                 </select>
               </label>
               <label className="grid gap-0.5">
-                <span className="text-[11px] text-slate-500">Unidad</span>
+                <span className="text-[11px] font-medium text-slate-500">Unidad</span>
                 <select value={usageUnitId} onChange={(e) => setUsageUnitId(e.target.value)} className={filterSelectClass()}>
                   <option value="all">Todas las unidades</option>
                   {usageUnitOptions.map((option) => (
@@ -924,20 +924,20 @@ export default function UsageGanttPage() {
               </div>
             </section>
 
-            <section className="h-full rounded-[14px] border border-slate-200 bg-white p-2">
-            <div className="mb-1 flex min-h-9 flex-wrap items-center justify-between gap-1.5 sm:flex-nowrap">
+            <section className="h-full rounded-[16px] border border-slate-200 bg-white p-2">
+            <div className="mb-1 flex min-h-7 flex-wrap items-center justify-between gap-1.5 sm:flex-nowrap">
               <div className="flex flex-wrap items-center gap-1.5">
-                <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">Periodo</div>
-                <div className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Periodo</div>
+                <div className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-medium text-slate-600">
                   {periodLabel}
                 </div>
               </div>
-              <div className="inline-flex h-9 rounded-full border border-slate-200 bg-slate-50 p-1">
+              <div className="inline-flex h-8 rounded-full border border-slate-200 bg-slate-50 p-1">
                 <button
                   type="button"
                   onClick={() => setRangeMode("preset")}
                   className={cn(
-                    "inline-flex h-7 items-center rounded-full px-2 py-0.5 text-[11px] font-medium transition",
+                    "inline-flex h-6 items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium transition",
                     rangeMode === "preset" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
                   )}
                 >
@@ -947,7 +947,7 @@ export default function UsageGanttPage() {
                   type="button"
                   onClick={() => setRangeMode("custom")}
                   className={cn(
-                    "inline-flex h-7 items-center rounded-full px-2 py-0.5 text-[11px] font-medium transition",
+                    "inline-flex h-6 items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium transition",
                     rangeMode === "custom" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
                   )}
                 >
@@ -957,9 +957,9 @@ export default function UsageGanttPage() {
             </div>
 
             {rangeMode === "preset" ? (
-              <div className="flex flex-wrap items-center justify-between gap-1.5 lg:flex-nowrap">
+              <div className="grid gap-1.5 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-center">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <div className="inline-flex h-9 rounded-full border border-slate-200 bg-slate-50 p-1">
+                  <div className="inline-flex h-8 rounded-full border border-slate-200 bg-slate-50 p-1">
                     {([
                       { value: "week", label: "Semanal" },
                       { value: "month", label: "Mensual" },
@@ -969,7 +969,7 @@ export default function UsageGanttPage() {
                         type="button"
                         onClick={() => setScale(option.value)}
                         className={cn(
-                          "inline-flex h-7 items-center rounded-full px-2 py-0.5 text-[11px] font-medium transition",
+                          "inline-flex h-6 items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium transition",
                           scale === option.value ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-700"
                         )}
                       >
@@ -978,14 +978,14 @@ export default function UsageGanttPage() {
                     ))}
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-1 justify-end">
-                  <Button variant="outline" size="sm" onClick={() => setAnchor((prev) => shiftAnchor(prev, scale, -1))}>Anterior</Button>
-                  <Button variant="outline" size="sm" onClick={() => setAnchor((prev) => shiftAnchor(prev, scale, 1))}>Siguiente</Button>
-                  <Button variant="outline" size="sm" onClick={() => setAnchor(today())}>Hoy</Button>
+                <div className="flex flex-wrap items-center gap-1 lg:justify-end">
+                  <Button className="rounded-full border-slate-200 bg-white hover:bg-slate-50" variant="outline" size="sm" onClick={() => setAnchor((prev) => shiftAnchor(prev, scale, -1))}>Anterior</Button>
+                  <Button className="rounded-full border-slate-200 bg-white hover:bg-slate-50" variant="outline" size="sm" onClick={() => setAnchor((prev) => shiftAnchor(prev, scale, 1))}>Siguiente</Button>
+                  <Button className="rounded-full border-slate-200 bg-white hover:bg-slate-50" variant="outline" size="sm" onClick={() => setAnchor(today())}>Hoy</Button>
                 </div>
               </div>
             ) : (
-              <div className="grid gap-1.5 sm:grid-cols-2">
+              <div className="grid gap-1 sm:grid-cols-2">
                 <MarkedDatePicker
                   value={dateFrom}
                   onChange={setDateFrom}

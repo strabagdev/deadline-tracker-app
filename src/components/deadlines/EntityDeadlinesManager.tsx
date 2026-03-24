@@ -107,6 +107,48 @@ function formatDisplayDate(value: string | null | undefined) {
   return `${day} / ${month} / ${year}`;
 }
 
+function monthKeyFromDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+function dayKeyFromDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function shiftMonth(monthKey: string, delta: number) {
+  const [yearRaw, monthRaw] = monthKey.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return monthKeyFromDate(new Date());
+  const base = new Date(year, month - 1 + delta, 1);
+  return monthKeyFromDate(base);
+}
+
+function monthLabel(monthKey: string) {
+  const [yearRaw, monthRaw] = monthKey.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return monthKey;
+  return new Date(year, month - 1, 1).toLocaleDateString("es-CL", { month: "long", year: "numeric" });
+}
+
+function buildMonthDays(monthKey: string) {
+  const [yearRaw, monthRaw] = monthKey.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return [] as Array<{ key: string; dayNumber: number }>;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  return Array.from({ length: daysInMonth }, (_, index) => {
+    const date = new Date(year, month - 1, index + 1);
+    return { key: dayKeyFromDate(date), dayNumber: index + 1 };
+  });
+}
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function computeAutoDailyAverageFromLogs(logs: UsageLogRow[]) {
@@ -208,7 +250,8 @@ export default function EntityDeadlinesManager({
   const [usageLogsBusy, setUsageLogsBusy] = useState(false);
   const [usageLogsMsg, setUsageLogsMsg] = useState<string>("");
   const [usageLogsMsgTone, setUsageLogsMsgTone] = useState<"error" | "success">("error");
-  const [selectedUsageLogId, setSelectedUsageLogId] = useState<string>("");
+  const [usageHistoryMonth, setUsageHistoryMonth] = useState<string>(() => monthKeyFromDate(new Date()));
+  const [selectedUsageLogDay, setSelectedUsageLogDay] = useState<string>("");
   const [editingDeadlineId, setEditingDeadlineId] = useState<string>("");
   const [editDraft, setEditDraft] = useState<DeadlineEditDraft | null>(null);
   const [showUsagePanel, setShowUsagePanel] = useState(false);
@@ -306,9 +349,23 @@ export default function EntityDeadlinesManager({
       .sort((a, b) => String(a.logged_on ?? "").localeCompare(String(b.logged_on ?? "")))[0];
     return next ? Number(next.value) : null;
   }, [usageLogLoggedAt, usageLogs]);
+  const usageLogsByDay = useMemo(() => {
+    const byDay = new Map<string, UsageLogRow>();
+    for (const log of usageLogs) {
+      const dayKey = String(log.logged_on ?? "").trim() || isoToLocalDateInput(log.logged_at);
+      if (!dayKey) continue;
+      if (!byDay.has(dayKey)) byDay.set(dayKey, log);
+    }
+    return byDay;
+  }, [usageLogs]);
+  const usageHistoryDays = useMemo(() => buildMonthDays(usageHistoryMonth), [usageHistoryMonth]);
+  const usageHistoryMonthHasLogs = useMemo(
+    () => usageHistoryDays.some((day) => usageLogsByDay.has(day.key)),
+    [usageHistoryDays, usageLogsByDay]
+  );
   const selectedUsageLog = useMemo(
-    () => usageLogs.find((log) => log.id === selectedUsageLogId) ?? usageLogs[0] ?? null,
-    [selectedUsageLogId, usageLogs]
+    () => (selectedUsageLogDay ? usageLogsByDay.get(selectedUsageLogDay) ?? null : null),
+    [selectedUsageLogDay, usageLogsByDay]
   );
   const usageLogPrimaryWarning = useMemo(() => {
     if (usageLogExistsForSelectedDay) return "Para esta fecha ya hay un registro.";
@@ -360,14 +417,18 @@ export default function EntityDeadlinesManager({
   }, []);
 
   useEffect(() => {
-    if (usageLogs.length === 0) {
-      setSelectedUsageLogId("");
+    if (usageLogsByDay.size === 0) {
+      setSelectedUsageLogDay("");
       return;
     }
-    if (!selectedUsageLogId || !usageLogs.some((log) => log.id === selectedUsageLogId)) {
-      setSelectedUsageLogId(usageLogs[0]?.id ?? "");
+    if (selectedUsageLogDay && usageHistoryDays.some((day) => day.key === selectedUsageLogDay)) return;
+    const firstDayWithLogInMonth = usageHistoryDays.find((day) => usageLogsByDay.has(day.key));
+    if (firstDayWithLogInMonth) {
+      setSelectedUsageLogDay(firstDayWithLogInMonth.key);
+      return;
     }
-  }, [selectedUsageLogId, usageLogs]);
+    setSelectedUsageLogDay(usageHistoryDays[0]?.key ?? "");
+  }, [selectedUsageLogDay, usageHistoryDays, usageLogsByDay]);
 
   async function bootstrap(loadDetails = true) {
     setLoading(true);
@@ -907,35 +968,66 @@ export default function EntityDeadlinesManager({
                 ) : (
                   <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
                     <div className="rounded-[18px] border border-slate-200 bg-[linear-gradient(180deg,#fbfdff,#f8fafc)] p-3">
-                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-                        <span>Mosaico historico</span>
-                        <span>{usageLogs.length} registros</span>
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <div className="text-xs font-semibold text-slate-700">Mosaico histórico</div>
+                          <div className="text-[11px] text-slate-500">Lectura cronológica por día.</div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button type="button" variant="outline" size="sm" onClick={() => setUsageHistoryMonth((current) => shiftMonth(current, -1))}>
+                            ‹
+                          </Button>
+                          <div className="min-w-[132px] text-center text-xs font-medium capitalize text-slate-700">
+                            {monthLabel(usageHistoryMonth)}
+                          </div>
+                          <Button type="button" variant="outline" size="sm" onClick={() => setUsageHistoryMonth((current) => shiftMonth(current, 1))}>
+                            ›
+                          </Button>
+                        </div>
                       </div>
-                      <div className="grid grid-cols-[repeat(auto-fill,minmax(18px,1fr))] gap-1.5 sm:grid-cols-[repeat(auto-fill,minmax(20px,1fr))]">
-                        {usageLogs.map((log) => {
-                          const selected = selectedUsageLog?.id === log.id;
-                          const label = `${renderUsageMainValue(log)} · ${String(log.logged_on ?? "").trim() || new Date(log.logged_at).toLocaleDateString(undefined, { timeZone: "UTC" })}`;
-                          return (
-                            <button
-                              key={log.id}
-                              type="button"
-                              onClick={() => setSelectedUsageLogId(log.id)}
-                              title={label}
-                              className={[
-                                "aspect-square min-h-5 rounded-[6px] border transition hover:scale-[1.08]",
-                                selected
-                                  ? "border-sky-300 bg-sky-100 shadow-[0_0_0_1px_rgba(125,211,252,0.35)]"
-                                  : "border-emerald-200 bg-emerald-500/80 hover:border-emerald-300",
-                              ].join(" ")}
-                              aria-label={label}
-                            />
-                          );
-                        })}
-                      </div>
+                      {usageHistoryMonthHasLogs ? (
+                        <div className="grid grid-cols-7 gap-1.5">
+                          {usageHistoryDays.map((day) => {
+                            const hasLog = usageLogsByDay.has(day.key);
+                            const selected = selectedUsageLogDay === day.key;
+                            const selectedLog = usageLogsByDay.get(day.key);
+                            const label = hasLog
+                              ? `${day.key} · ${renderUsageMainValue(selectedLog as UsageLogRow)}`
+                              : `${day.key} · Sin registro`;
+                            return (
+                              <button
+                                key={day.key}
+                                type="button"
+                                onClick={() => setSelectedUsageLogDay(day.key)}
+                                title={label}
+                                className={[
+                                  "flex aspect-square min-h-8 items-center justify-center rounded-[7px] border text-[11px] font-medium transition hover:scale-[1.04]",
+                                  selected
+                                    ? "border-sky-300 bg-sky-100 text-sky-800 shadow-[0_0_0_1px_rgba(125,211,252,0.35)]"
+                                    : hasLog
+                                      ? "border-emerald-200 bg-emerald-500/80 text-white hover:border-emerald-300"
+                                      : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:bg-slate-50",
+                                ].join(" ")}
+                                aria-label={label}
+                              >
+                                {day.dayNumber}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="rounded-[14px] border border-dashed border-slate-200 bg-white px-3 py-5 text-sm text-slate-500">
+                          No hay registros en {monthLabel(usageHistoryMonth)}.
+                        </div>
+                      )}
                       <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
                         <div className="inline-flex items-center gap-2">
                           <span className="h-3 w-3 rounded-[4px] border border-emerald-200 bg-emerald-500/80" />
-                          Registro guardado
+                          Día con registro
+                        </div>
+                        <div className="inline-flex items-center gap-2">
+                          <span className="h-3 w-3 rounded-[4px] border border-slate-200 bg-white" />
+                          Sin registro
                         </div>
                         <div className="inline-flex items-center gap-2">
                           <span className="h-3 w-3 rounded-[4px] border border-sky-300 bg-sky-100" />
@@ -944,46 +1036,56 @@ export default function EntityDeadlinesManager({
                       </div>
                     </div>
 
-                    {selectedUsageLog ? (
+                    {selectedUsageLogDay ? (
                       <div className="rounded-[18px] border border-slate-200 bg-white p-3">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Detalle</div>
-                            <div className="mt-1 flex flex-wrap items-center gap-2">
-                              <Badge variant="outline" className="font-semibold">{renderUsageMainValue(selectedUsageLog)}</Badge>
-                              <span className="text-xs text-slate-500">
-                                {String(selectedUsageLog.logged_on ?? "").trim() || new Date(selectedUsageLog.logged_at).toLocaleDateString(undefined, { timeZone: "UTC" })}
-                              </span>
-                            </div>
+                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Detalle del día</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-900">{formatDisplayDate(selectedUsageLogDay)}</div>
+                            <div className="mt-1 text-xs text-slate-500">{selectedUsageLog ? "Registro encontrado." : "Sin registro para esta fecha."}</div>
                           </div>
-                          <Button
-                            onClick={() => deleteUsageLog(selectedUsageLog.id)}
-                            disabled={usageLogsBusy}
-                            variant="outline"
-                            size="sm"
-                          >
-                            Eliminar
-                          </Button>
+                          {selectedUsageLog ? (
+                            <Button
+                              onClick={() => deleteUsageLog(selectedUsageLog.id)}
+                              disabled={usageLogsBusy}
+                              variant="outline"
+                              size="sm"
+                            >
+                              Eliminar
+                            </Button>
+                          ) : null}
                         </div>
                         <div className="mt-3 grid gap-2 text-xs text-slate-600">
-                          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-                            <span className="font-medium text-slate-700">Registrado:</span>{" "}
-                            {new Date(selectedUsageLog.logged_at).toLocaleString()}
-                          </div>
-                          {Array.isArray(selectedUsageLog.field_values) && selectedUsageLog.field_values.length > 0 ? (
-                            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-                              <div className="mb-2 font-medium text-slate-700">Campos asociados</div>
-                              <div className="flex flex-wrap gap-1.5">
-                                {selectedUsageLog.field_values.map((fv) => (
-                                  <Badge key={`${selectedUsageLog.id}-${fv.usage_field_id}`} variant="outline" className="bg-white text-[10px] text-slate-600">
-                                    {(fv.name || fv.key || "Campo")}: {renderUsageFieldValue(fv)}
-                                  </Badge>
-                                ))}
+                          {selectedUsageLog ? (
+                            <>
+                              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+                                <span className="font-medium text-slate-700">Valor:</span>{" "}
+                                {renderUsageMainValue(selectedUsageLog)}
                               </div>
-                            </div>
+                              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+                                <span className="font-medium text-slate-700">Registrado:</span>{" "}
+                                {new Date(selectedUsageLog.logged_at).toLocaleString()}
+                              </div>
+                              {Array.isArray(selectedUsageLog.field_values) && selectedUsageLog.field_values.length > 0 ? (
+                                <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+                                  <div className="mb-2 font-medium text-slate-700">Campos asociados</div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {selectedUsageLog.field_values.map((fv) => (
+                                      <Badge key={`${selectedUsageLog.id}-${fv.usage_field_id}`} variant="outline" className="bg-white text-[10px] text-slate-600">
+                                        {(fv.name || fv.key || "Campo")}: {renderUsageFieldValue(fv)}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50/70 px-3 py-2 text-slate-500">
+                                  Este registro no tiene campos adicionales.
+                                </div>
+                              )}
+                            </>
                           ) : (
-                            <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50/70 px-3 py-2 text-slate-500">
-                              Este registro no tiene campos adicionales.
+                            <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50/70 px-3 py-3 text-slate-500">
+                              No hay registro guardado para esta fecha en el mes seleccionado.
                             </div>
                           )}
                         </div>
