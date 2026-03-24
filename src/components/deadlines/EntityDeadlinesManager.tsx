@@ -6,6 +6,7 @@ import { Loader } from "@/components/ui/loader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { useNotify } from "@/components/ui/notifications";
 import { computeDateStatus, computeUsageStatus, normalizeDeadlinesMode } from "@/lib/api/deadlinesComputations";
 
 type DeadlineType = {
@@ -206,11 +207,14 @@ export default function EntityDeadlinesManager({
   const [usageLogLoggedAt, setUsageLogLoggedAt] = useState<string>("");
   const [usageLogsBusy, setUsageLogsBusy] = useState(false);
   const [usageLogsMsg, setUsageLogsMsg] = useState<string>("");
+  const [usageLogsMsgTone, setUsageLogsMsgTone] = useState<"error" | "success">("error");
+  const [selectedUsageLogId, setSelectedUsageLogId] = useState<string>("");
   const [editingDeadlineId, setEditingDeadlineId] = useState<string>("");
   const [editDraft, setEditDraft] = useState<DeadlineEditDraft | null>(null);
   const [showUsagePanel, setShowUsagePanel] = useState(false);
   const [sectionExpanded, setSectionExpanded] = useState(true);
   const [loadedDetails, setLoadedDetails] = useState(false);
+  const notify = useNotify();
 
   // form
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -236,6 +240,13 @@ export default function EntityDeadlinesManager({
     () => (selectedUsageUnit?.suggested_values ?? []).map((v) => String(v ?? "").trim()).filter((v) => v.length > 0),
     [selectedUsageUnit]
   );
+  const usageSuggestedValueError = useMemo(() => {
+    if (usageSuggestedValues.length === 0) return "";
+    const clean = String(usageLogValue ?? "").trim();
+    if (!clean) return "Debes seleccionar uno de los valores sugeridos.";
+    if (!usageSuggestedValues.includes(clean)) return "El valor debe coincidir con uno de los sugeridos.";
+    return "";
+  }, [usageLogValue, usageSuggestedValues]);
   const usageLogExistsForSelectedDay = useMemo(() => {
     const selected = String(usageLogLoggedAt ?? "").trim();
     if (!selected) return false;
@@ -295,6 +306,28 @@ export default function EntityDeadlinesManager({
       .sort((a, b) => String(a.logged_on ?? "").localeCompare(String(b.logged_on ?? "")))[0];
     return next ? Number(next.value) : null;
   }, [usageLogLoggedAt, usageLogs]);
+  const selectedUsageLog = useMemo(
+    () => usageLogs.find((log) => log.id === selectedUsageLogId) ?? usageLogs[0] ?? null,
+    [selectedUsageLogId, usageLogs]
+  );
+  const usageLogPrimaryWarning = useMemo(() => {
+    if (usageLogExistsForSelectedDay) return "Para esta fecha ya hay un registro.";
+    if (usageSuggestedValueError) return usageSuggestedValueError;
+    if (usageLogWouldDecrease) {
+      return `El valor no puede ser menor al registro anterior (${previousNumericUsageValue}).`;
+    }
+    if (usageLogWouldExceedNext) {
+      return `El valor no puede ser mayor al registro siguiente (${nextNumericUsageValue}).`;
+    }
+    return "";
+  }, [
+    nextNumericUsageValue,
+    previousNumericUsageValue,
+    usageLogExistsForSelectedDay,
+    usageLogWouldDecrease,
+    usageLogWouldExceedNext,
+    usageSuggestedValueError,
+  ]);
 
   const [lastDoneDate, setLastDoneDate] = useState<string>("");
   const [nextDueDate, setNextDueDate] = useState<string>("");
@@ -325,6 +358,16 @@ export default function EntityDeadlinesManager({
   useEffect(() => {
     setUsageLogLoggedAt((prev) => prev || isoToLocalDateInput(new Date().toISOString()));
   }, []);
+
+  useEffect(() => {
+    if (usageLogs.length === 0) {
+      setSelectedUsageLogId("");
+      return;
+    }
+    if (!selectedUsageLogId || !usageLogs.some((log) => log.id === selectedUsageLogId)) {
+      setSelectedUsageLogId(usageLogs[0]?.id ?? "");
+    }
+  }, [selectedUsageLogId, usageLogs]);
 
   async function bootstrap(loadDetails = true) {
     setLoading(true);
@@ -418,10 +461,12 @@ export default function EntityDeadlinesManager({
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
+      setUsageLogsMsgTone("error");
       setUsageLogsMsg(json.error || "No se pudieron cargar los registros de uso");
       setUsageLogs([]);
       return;
     }
+    setUsageLogsMsgTone("error");
     setUsageLogsMsg("");
     setUsageLogs(json.usage_logs ?? []);
   }
@@ -513,6 +558,7 @@ export default function EntityDeadlinesManager({
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
       setCreateMsg(json.error || "No se pudo crear el vencimiento");
+      notify.error(json.error || "No se pudo crear el vencimiento");
       setCreateBusy(false);
       return;
     }
@@ -521,12 +567,14 @@ export default function EntityDeadlinesManager({
     await loadDeadlines();
     setShowCreateForm(false);
     setDeadlineTypeId("");
+    notify.success("Vencimiento agregado correctamente.");
     setCreateBusy(false);
   }
 
   async function createUsageLog() {
     setUsageLogsBusy(true);
     setUsageLogsMsg("");
+    setUsageLogsMsgTone("error");
 
     const token = await getToken();
     if (!token) {
@@ -534,18 +582,34 @@ export default function EntityDeadlinesManager({
       return;
     }
 
-    const valueNum = Number(usageLogValue);
-    if (!Number.isFinite(valueNum)) {
-      setUsageLogsMsg("Ingresa un valor numérico válido");
+    const cleanUsageValue = String(usageLogValue ?? "").trim();
+    if (usageSuggestedValueError) {
+      setUsageLogsMsg(usageSuggestedValueError);
+      notify.error(usageSuggestedValueError);
       setUsageLogsBusy(false);
       return;
     }
-    if (usageLogWouldDecrease) {
+    if (!cleanUsageValue) {
+      setUsageLogsMsg("Ingresa un valor de uso válido");
+      notify.error("Ingresa un valor de uso válido");
+      setUsageLogsBusy(false);
+      return;
+    }
+
+    const valueNum = Number(cleanUsageValue);
+    const isNumericMainValue = Number.isFinite(valueNum);
+    if (usageSuggestedValues.length === 0 && !isNumericMainValue) {
+      setUsageLogsMsg("Ingresa un valor numérico válido");
+      notify.error("Ingresa un valor numérico válido");
+      setUsageLogsBusy(false);
+      return;
+    }
+    if (isNumericMainValue && usageLogWouldDecrease) {
       setUsageLogsMsg(`El valor no puede ser menor al registro anterior (${previousNumericUsageValue}).`);
       setUsageLogsBusy(false);
       return;
     }
-    if (usageLogWouldExceedNext) {
+    if (isNumericMainValue && usageLogWouldExceedNext) {
       setUsageLogsMsg(`El valor no puede ser mayor al registro siguiente (${nextNumericUsageValue}).`);
       setUsageLogsBusy(false);
       return;
@@ -561,14 +625,17 @@ export default function EntityDeadlinesManager({
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         entity_id: entityId,
-        value: valueNum,
+        ...(isNumericMainValue ? { value: valueNum } : { value_text: cleanUsageValue }),
         logged_on: usageLogLoggedAt || null,
       }),
     });
 
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setUsageLogsMsg(json.error || "No se pudo guardar el registro de uso");
+      setUsageLogsMsgTone("error");
+      const message = json.error || "No se pudo guardar el registro de uso";
+      setUsageLogsMsg(message);
+      notify.error(message);
       setUsageLogsBusy(false);
       return;
     }
@@ -576,6 +643,9 @@ export default function EntityDeadlinesManager({
     setUsageLogValue("");
     setUsageLogLoggedAt(isoToLocalDateInput(new Date().toISOString()));
     await loadUsageLogs();
+    setUsageLogsMsgTone("success");
+    setUsageLogsMsg("Registro de uso guardado.");
+    notify.success("Registro de uso guardado.");
     setUsageLogsBusy(false);
   }
 
@@ -585,6 +655,7 @@ export default function EntityDeadlinesManager({
 
     setUsageLogsBusy(true);
     setUsageLogsMsg("");
+    setUsageLogsMsgTone("error");
 
     const token = await getToken();
     if (!token) {
@@ -599,12 +670,18 @@ export default function EntityDeadlinesManager({
 
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setUsageLogsMsg(json.error || "No se pudo eliminar el registro");
+      setUsageLogsMsgTone("error");
+      const message = json.error || "No se pudo eliminar el registro";
+      setUsageLogsMsg(message);
+      notify.error(message);
       setUsageLogsBusy(false);
       return;
     }
 
     await loadUsageLogs();
+    setUsageLogsMsgTone("success");
+    setUsageLogsMsg("Registro de uso eliminado.");
+    notify.success("Registro de uso eliminado.");
     setUsageLogsBusy(false);
   }
 
@@ -690,12 +767,14 @@ export default function EntityDeadlinesManager({
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
       setEditMsg(json.error || "No se pudo actualizar el vencimiento");
+      notify.error(json.error || "No se pudo actualizar el vencimiento");
       setEditBusy(false);
       return;
     }
 
     cancelEditDeadline();
     await loadDeadlines();
+    notify.success("Vencimiento actualizado.");
     setEditBusy(false);
   }
 
@@ -720,6 +799,7 @@ export default function EntityDeadlinesManager({
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
       setEditMsg(json.error || "No se pudo eliminar el vencimiento");
+      notify.error(json.error || "No se pudo eliminar el vencimiento");
       setEditBusy(false);
       return;
     }
@@ -728,61 +808,17 @@ export default function EntityDeadlinesManager({
       cancelEditDeadline();
     }
     await loadDeadlines();
+    notify.success("Vencimiento eliminado.");
     setEditBusy(false);
   }
 
   return (
-    <section className="mt-3 space-y-3 rounded-xl border bg-white p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="m-0 text-base font-semibold">Vencimientos</h3>
-        <div className="flex items-center gap-2">
-          {availableTypes.length > 0 ? (
-            <>
-              <Button
-                onClick={() => {
-                  setShowCreateForm(true);
-                  setCreateMsg("");
-                }}
-                disabled={createBusy || showCreateForm}
-                size="sm"
-                className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700"
-              >
-                Agregar vencimiento
-              </Button>
-              {showCreateForm && sectionExpanded ? (
-                <Button
-                  onClick={() => {
-                    setShowCreateForm(false);
-                    setCreateMsg("");
-                    setDeadlineTypeId("");
-                  }}
-                  disabled={createBusy}
-                  variant="outline"
-                  size="sm"
-                >
-                  Cancelar
-                </Button>
-              ) : null}
-            </>
-          ) : null}
-          <Button
-            onClick={() => void bootstrap(true)}
-            disabled={anyBusy || usageLogsBusy}
-            variant="outline"
-            size="sm"
-          >
-            Refrescar
-          </Button>
-        </div>
-      </div>
-
-      {!sectionExpanded ? null : generalMsg ? <p className="whitespace-pre-wrap text-sm text-rose-600">{generalMsg}</p> : null}
-
-      {sectionExpanded && tracksUsage ? (
-        <div className="rounded-xl border bg-slate-50/50 p-3">
+    <>
+      {tracksUsage ? (
+        <section className="mt-3 space-y-3 rounded-xl border bg-white p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h4 className="m-0 text-sm font-semibold">Registro de uso</h4>
+              <h3 className="m-0 text-base font-semibold">Registro de uso</h3>
               <p className="mt-1 text-xs text-slate-500">Fuente para cálculo automático del promedio diario.</p>
             </div>
             <div className="flex items-center gap-2">
@@ -797,7 +833,11 @@ export default function EntityDeadlinesManager({
 
           {showUsagePanel ? (
             <>
-              {usageLogsMsg ? <p className="mt-2 whitespace-pre-wrap text-sm text-rose-600">{usageLogsMsg}</p> : null}
+              {usageLogsMsg ? (
+                <p className={`mt-2 whitespace-pre-wrap text-sm ${usageLogsMsgTone === "success" ? "text-emerald-700" : "text-rose-600"}`}>
+                  {usageLogsMsg}
+                </p>
+              ) : null}
 
               <div className="mt-3 grid gap-2 md:grid-cols-[minmax(180px,1fr)_180px_auto] md:items-end">
                 <label className="grid gap-1 text-xs text-slate-600">
@@ -848,25 +888,16 @@ export default function EntityDeadlinesManager({
 
                 <Button
                   onClick={createUsageLog}
-                  disabled={usageLogsBusy || usageLogExistsForSelectedDay || usageLogWouldDecrease || usageLogWouldExceedNext}
+                  disabled={usageLogsBusy || usageLogExistsForSelectedDay || usageLogWouldDecrease || usageLogWouldExceedNext || Boolean(usageSuggestedValueError)}
                   className="min-h-10"
+                  title={usageSuggestedValueError || undefined}
                 >
                   {usageLogsBusy ? "Guardando..." : "Guardar uso"}
                 </Button>
               </div>
 
-              {usageLogExistsForSelectedDay ? (
-                <p className="mt-2 text-sm text-amber-700">Para esta fecha ya hay un registro.</p>
-              ) : null}
-              {usageLogWouldDecrease ? (
-                <p className="mt-2 text-sm text-amber-700">
-                  El valor no puede ser menor al registro anterior ({previousNumericUsageValue}).
-                </p>
-              ) : null}
-              {usageLogWouldExceedNext ? (
-                <p className="mt-2 text-sm text-amber-700">
-                  El valor no puede ser mayor al registro siguiente ({nextNumericUsageValue}).
-                </p>
+              {usageLogPrimaryWarning ? (
+                <p className="mt-2 text-sm text-amber-700">{usageLogPrimaryWarning}</p>
               ) : null}
 
               <div className="mt-3 space-y-2">
@@ -874,39 +905,146 @@ export default function EntityDeadlinesManager({
                 {usageLogs.length === 0 ? (
                   <p className="text-sm text-slate-500">Aún no hay registros de uso para esta entidad.</p>
                 ) : (
-                  <div className="space-y-1.5">
-                    {usageLogs.map((l) => (
-                      <div key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white px-2.5 py-2">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant="outline" className="font-semibold">{renderUsageMainValue(l)}</Badge>
-                            <span className="text-xs text-slate-500">{String(l.logged_on ?? "").trim() || new Date(l.logged_at).toLocaleDateString(undefined, { timeZone: "UTC" })}</span>
-                          </div>
-                          {Array.isArray(l.field_values) && l.field_values.length > 0 ? (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {l.field_values.map((fv) => (
-                                <Badge key={`${l.id}-${fv.usage_field_id}`} variant="outline" className="bg-slate-50 text-[10px] text-slate-600">
-                                  {(fv.name || fv.key || "Campo")}: {renderUsageFieldValue(fv)}
-                                </Badge>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                        <Button onClick={() => deleteUsageLog(l.id)} disabled={usageLogsBusy} variant="outline" size="sm">
-                          Eliminar
-                        </Button>
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
+                    <div className="rounded-[18px] border border-slate-200 bg-[linear-gradient(180deg,#fbfdff,#f8fafc)] p-3">
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                        <span>Mosaico historico</span>
+                        <span>{usageLogs.length} registros</span>
                       </div>
-                    ))}
+                      <div className="grid grid-cols-[repeat(auto-fill,minmax(18px,1fr))] gap-1.5 sm:grid-cols-[repeat(auto-fill,minmax(20px,1fr))]">
+                        {usageLogs.map((log) => {
+                          const selected = selectedUsageLog?.id === log.id;
+                          const label = `${renderUsageMainValue(log)} · ${String(log.logged_on ?? "").trim() || new Date(log.logged_at).toLocaleDateString(undefined, { timeZone: "UTC" })}`;
+                          return (
+                            <button
+                              key={log.id}
+                              type="button"
+                              onClick={() => setSelectedUsageLogId(log.id)}
+                              title={label}
+                              className={[
+                                "aspect-square min-h-5 rounded-[6px] border transition hover:scale-[1.08]",
+                                selected
+                                  ? "border-sky-300 bg-sky-100 shadow-[0_0_0_1px_rgba(125,211,252,0.35)]"
+                                  : "border-emerald-200 bg-emerald-500/80 hover:border-emerald-300",
+                              ].join(" ")}
+                              aria-label={label}
+                            />
+                          );
+                        })}
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
+                        <div className="inline-flex items-center gap-2">
+                          <span className="h-3 w-3 rounded-[4px] border border-emerald-200 bg-emerald-500/80" />
+                          Registro guardado
+                        </div>
+                        <div className="inline-flex items-center gap-2">
+                          <span className="h-3 w-3 rounded-[4px] border border-sky-300 bg-sky-100" />
+                          Seleccionado
+                        </div>
+                      </div>
+                    </div>
+
+                    {selectedUsageLog ? (
+                      <div className="rounded-[18px] border border-slate-200 bg-white p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Detalle</div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <Badge variant="outline" className="font-semibold">{renderUsageMainValue(selectedUsageLog)}</Badge>
+                              <span className="text-xs text-slate-500">
+                                {String(selectedUsageLog.logged_on ?? "").trim() || new Date(selectedUsageLog.logged_at).toLocaleDateString(undefined, { timeZone: "UTC" })}
+                              </span>
+                            </div>
+                          </div>
+                          <Button
+                            onClick={() => deleteUsageLog(selectedUsageLog.id)}
+                            disabled={usageLogsBusy}
+                            variant="outline"
+                            size="sm"
+                          >
+                            Eliminar
+                          </Button>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-xs text-slate-600">
+                          <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+                            <span className="font-medium text-slate-700">Registrado:</span>{" "}
+                            {new Date(selectedUsageLog.logged_at).toLocaleString()}
+                          </div>
+                          {Array.isArray(selectedUsageLog.field_values) && selectedUsageLog.field_values.length > 0 ? (
+                            <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+                              <div className="mb-2 font-medium text-slate-700">Campos asociados</div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {selectedUsageLog.field_values.map((fv) => (
+                                  <Badge key={`${selectedUsageLog.id}-${fv.usage_field_id}`} variant="outline" className="bg-white text-[10px] text-slate-600">
+                                    {(fv.name || fv.key || "Campo")}: {renderUsageFieldValue(fv)}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50/70 px-3 py-2 text-slate-500">
+                              Este registro no tiene campos adicionales.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </div>
             </>
           ) : null}
-        </div>
+        </section>
       ) : null}
 
-      {sectionExpanded ? (
-      <div className="grid gap-2">
+      <section className="mt-3 space-y-3 rounded-xl border bg-white p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="m-0 text-base font-semibold">Vencimientos</h3>
+          <div className="flex items-center gap-2">
+            {availableTypes.length > 0 ? (
+              <>
+                <Button
+                  onClick={() => {
+                    setShowCreateForm(true);
+                    setCreateMsg("");
+                  }}
+                  disabled={createBusy || showCreateForm}
+                  size="sm"
+                  className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700"
+                >
+                  Agregar vencimiento
+                </Button>
+                {showCreateForm && sectionExpanded ? (
+                  <Button
+                    onClick={() => {
+                      setShowCreateForm(false);
+                      setCreateMsg("");
+                      setDeadlineTypeId("");
+                    }}
+                    disabled={createBusy}
+                    variant="outline"
+                    size="sm"
+                  >
+                    Cancelar
+                  </Button>
+                ) : null}
+              </>
+            ) : null}
+            <Button
+              onClick={() => void bootstrap(true)}
+              disabled={anyBusy || usageLogsBusy}
+              variant="outline"
+              size="sm"
+            >
+              Refrescar
+            </Button>
+          </div>
+        </div>
+
+        {!sectionExpanded ? null : generalMsg ? <p className="whitespace-pre-wrap text-sm text-rose-600">{generalMsg}</p> : null}
+
+        {sectionExpanded ? (
+        <div className="grid gap-2">
         {types.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-600">
             <strong>No hay tipos de vencimiento disponibles.</strong>
@@ -1061,28 +1199,28 @@ export default function EntityDeadlinesManager({
             ) : null}
           </>
         )}
-      </div>
-      ) : null}
-
-      {sectionExpanded ? (
-      <div className="border-t pt-2">
-        <h4 className="m-0 text-sm font-semibold">Asignados</h4>
-      </div>
-      ) : null}
-      {sectionExpanded && editMsg ? <p className="mt-1 whitespace-pre-wrap text-sm text-rose-600">{editMsg}</p> : null}
-
-      {!sectionExpanded ? null : !loadedDetails ? (
-        <div className="flex min-h-[50vh] items-center justify-center">
-          <Loader label="Cargando datos de vencimientos..." />
         </div>
-      ) : loading ? (
-        <div className="flex min-h-[50vh] items-center justify-center py-3">
-          <Loader label="Cargando vencimientos..." />
+        ) : null}
+
+        {sectionExpanded ? (
+        <div className="border-t pt-2">
+          <h4 className="m-0 text-sm font-semibold">Asignados</h4>
         </div>
-      ) : deadlines.length === 0 ? (
-        <p className="text-sm text-slate-500">Esta entidad aún no tiene vencimientos.</p>
-      ) : (
-        <div className="grid gap-2">
+        ) : null}
+        {sectionExpanded && editMsg ? <p className="mt-1 whitespace-pre-wrap text-sm text-rose-600">{editMsg}</p> : null}
+
+        {!sectionExpanded ? null : !loadedDetails ? (
+          <div className="flex min-h-[50vh] items-center justify-center">
+            <Loader label="Cargando datos de vencimientos..." />
+          </div>
+        ) : loading ? (
+          <div className="flex min-h-[50vh] items-center justify-center py-3">
+            <Loader label="Cargando vencimientos..." />
+          </div>
+        ) : deadlines.length === 0 ? (
+          <p className="text-sm text-slate-500">Esta entidad aún no tiene vencimientos.</p>
+        ) : (
+          <div className="grid gap-2">
           {deadlines.map((d) => {
             const t = d.deadline_types;
             const isEditing = editingDeadlineId === d.id;
@@ -1348,8 +1486,9 @@ export default function EntityDeadlinesManager({
               </div>
             );
           })}
-        </div>
-      )}
-    </section>
+          </div>
+        )}
+      </section>
+    </>
   );
 }

@@ -24,7 +24,7 @@ export function PageHero({
   return (
     <section
       className={cn(
-        "rounded-[26px] border border-[rgba(17,32,28,0.08)] bg-[linear-gradient(180deg,rgba(251,253,252,0.98),rgba(245,249,248,0.96))] p-4 shadow-[0_20px_60px_-44px_rgba(15,23,42,0.3)]",
+        "rounded-[26px] border border-[rgba(36,58,86,0.14)] bg-[radial-gradient(circle_at_top_left,rgba(96,165,250,0.14),transparent_26%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.10),transparent_24%),linear-gradient(180deg,rgba(252,254,255,0.98),rgba(241,247,245,0.96))] p-4 shadow-[0_24px_70px_-46px_rgba(15,23,42,0.34)]",
         className
       )}
     >
@@ -40,8 +40,8 @@ export function PageHero({
               ) : null}
             </div>
           ) : null}
-          <h1 className="mt-2 text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">{title}</h1>
-          {subtitle ? <p className="mt-1 text-sm text-slate-500">{subtitle}</p> : null}
+          <h1 className="mt-2 text-[1.35rem] font-semibold tracking-tight text-slate-950 sm:text-[1.75rem]">{title}</h1>
+          {subtitle ? <p className="mt-1.5 max-w-3xl text-sm text-slate-600">{subtitle}</p> : null}
           {footer ? <div className="mt-2">{footer}</div> : null}
         </div>
 

@@ -48,6 +48,47 @@ function isUsageValueNotNullViolation(error: unknown) {
   return maybe.code === "23502" && text.includes(`column "value"`) && text.includes("usage_logs");
 }
 
+function normalizeSuggestedValues(raw: unknown) {
+  if (!Array.isArray(raw)) return [] as string[];
+  return raw
+    .map((value) => String(value ?? "").trim())
+    .filter((value) => value.length > 0);
+}
+
+async function getUsageUnitSuggestedValues(
+  db: DataClient,
+  organizationId: string,
+  usageUnitId: string | null
+) {
+  if (!usageUnitId) return [] as string[];
+  const { data, error } = await db
+    .from("usage_units")
+    .select("suggested_values")
+    .eq("organization_id", organizationId)
+    .eq("id", usageUnitId)
+    .maybeSingle();
+  if (error) throw error;
+  return normalizeSuggestedValues(data?.suggested_values);
+}
+
+function getSuggestedValueRequirementError(
+  suggestedValues: string[],
+  valueNumber: number | null,
+  valueText: string | null
+) {
+  if (suggestedValues.length === 0) return "";
+  const mainValue = valueText != null && valueText.length > 0
+    ? valueText
+    : valueNumber != null
+      ? String(valueNumber)
+      : "";
+  if (!mainValue) return "Debes seleccionar uno de los valores sugeridos antes de guardar.";
+  if (!suggestedValues.includes(mainValue)) {
+    return "El valor principal debe coincidir con uno de los sugeridos para esta entidad.";
+  }
+  return "";
+}
+
 function makeRepo(db: DataClient): UsageLogsRepo {
   return {
     requireEntityInOrg: async (orgId, entityId) => {
@@ -425,6 +466,22 @@ export async function POST(req: Request) {
     const scope = await ensureEntityTypeAndEntity(db, organizationId, role, memberTypeId, entityTypeName, entityId);
     if ("error" in scope) return scope.error;
     const entity = scope.entity;
+    const parsed = parseUsageLogsCreateBody(body);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error, code: "BAD_REQUEST" }, { status: 400 });
+
+    const suggestedValues = await getUsageUnitSuggestedValues(
+      db,
+      organizationId,
+      entity.usage_unit_id ? String(entity.usage_unit_id) : null
+    );
+    const suggestedValueError = getSuggestedValueRequirementError(
+      suggestedValues,
+      parsed.valueNumber,
+      parsed.valueText
+    );
+    if (suggestedValueError) {
+      return NextResponse.json({ error: suggestedValueError, code: "BAD_REQUEST" }, { status: 400 });
+    }
 
     const incomingFieldValues: Array<{ usage_field_id?: unknown }> = Array.isArray(body?.field_values)
       ? (body.field_values as Array<{ usage_field_id?: unknown }>)
@@ -515,6 +572,19 @@ export async function PUT(req: Request) {
     );
     if ("error" in scope) return scope.error;
     const entity = scope.entity;
+    const suggestedValues = await getUsageUnitSuggestedValues(
+      db,
+      organizationId,
+      entity.usage_unit_id ? String(entity.usage_unit_id) : null
+    );
+    const suggestedValueError = getSuggestedValueRequirementError(
+      suggestedValues,
+      parsed.valueNumber,
+      parsed.valueText
+    );
+    if (suggestedValueError) {
+      return NextResponse.json({ error: suggestedValueError, code: "BAD_REQUEST" }, { status: 400 });
+    }
 
     const normalized = await normalizeFieldValues(
       db,

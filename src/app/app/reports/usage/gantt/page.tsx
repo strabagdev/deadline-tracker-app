@@ -231,8 +231,8 @@ function heatmapTone(value: string | null, inRange: boolean, suggestedColor?: { 
   if (!inRange) return "border-transparent bg-transparent";
   if (suggestedColor && value) return `${suggestedColor.border} ${suggestedColor.bg}`;
   if (!value) return "border-slate-200 bg-slate-100/80";
-  if (isNumericLike(value)) return "border-sky-200 bg-sky-500/80";
-  return "border-emerald-200 bg-emerald-500/80";
+  if (isNumericLike(value)) return "border-blue-200 bg-blue-600/80";
+  return "border-zinc-300 bg-zinc-700/75";
 }
 
 function contextTone(inFocus: boolean) {
@@ -315,8 +315,8 @@ function buildGanttPrintHtml(params: {
       if (!color) return "";
       return `<span class="legend-item"><span class="legend-dot" style="background:${color.printBg}; border-color:${color.printBorder};"></span>${escapeHtml(value)}</span>`;
     }),
-    `<span class="legend-item"><span class="legend-dot" style="background:#0ea5e9; border-color:#bae6fd;"></span>Numérico libre</span>`,
-    `<span class="legend-item"><span class="legend-dot" style="background:#10b981; border-color:#bbf7d0;"></span>Texto libre</span>`,
+    `<span class="legend-item"><span class="legend-dot" style="background:#2563eb; border-color:#bfdbfe;"></span>Numérico</span>`,
+    `<span class="legend-item"><span class="legend-dot" style="background:#3f3f46; border-color:#d4d4d8;"></span>Estado</span>`,
     `<span class="legend-item"><span class="legend-dot" style="background:#e2e8f0; border-color:#cbd5e1;"></span>Sin registro</span>`,
   ]
     .filter(Boolean)
@@ -341,15 +341,15 @@ function buildGanttPrintHtml(params: {
             : suggestedColor
               ? suggestedColor.printBg
               : isNumericLike(value)
-                ? "#0ea5e9"
-                : "#10b981";
+                ? "#2563eb"
+                : "#3f3f46";
           const printBorder = !value
             ? "#cbd5e1"
             : suggestedColor
               ? suggestedColor.printBorder
               : isNumericLike(value)
-                ? "#bae6fd"
-                : "#bbf7d0";
+                ? "#bfdbfe"
+                : "#d4d4d8";
           const cellTitle = detail
             ? `${detail.loggedOn} · ${detail.value}${detail.usageUnitVisible && detail.usageUnitName ? ` · ${detail.usageUnitName}` : ""}`
             : "Sin registro";
@@ -690,15 +690,15 @@ export default function UsageGanttPage() {
       ...suggestedItems,
       {
         key: "legend-free-numeric",
-        label: "Numérico libre",
-        tone: "border-sky-200 bg-sky-50/70 text-sky-900",
-        swatchClassName: "border border-sky-200 bg-sky-500/80",
+        label: "Numérico",
+        tone: "border-blue-200 bg-blue-50/70 text-blue-900",
+        swatchClassName: "border border-blue-200 bg-blue-600/80",
       },
       {
         key: "legend-free-text",
-        label: "Texto libre",
-        tone: "border-emerald-200 bg-emerald-50/70 text-emerald-900",
-        swatchClassName: "border border-emerald-200 bg-emerald-500/80",
+        label: "Estado",
+        tone: "border-zinc-300 bg-zinc-100 text-zinc-900",
+        swatchClassName: "border border-zinc-300 bg-zinc-700/75",
       },
       {
         key: "legend-empty",
@@ -825,6 +825,7 @@ export default function UsageGanttPage() {
         badge="Reportes"
         secondaryBadge="Uso"
         title="Reporte cronológico de actividad"
+        subtitle="Lectura temporal del uso registrado para detectar concentración, vacíos y continuidad operativa."
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => void exportPdf()} disabled={loading || busy}>

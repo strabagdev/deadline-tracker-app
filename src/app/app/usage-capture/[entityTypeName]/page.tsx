@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader } from "@/components/ui/loader";
+import { useNotify } from "@/components/ui/notifications";
 import { PageHero } from "@/components/PageHero";
 import { MarkedDatePicker } from "@/components/marked-date-picker";
 
@@ -65,6 +66,23 @@ function normalizeSearchText(value: string) {
     .replace(/[^a-z0-9]/g, "");
 }
 
+function normalizedSuggestedValues(entity: Entity) {
+  return (entity.usage_unit_suggested_values ?? [])
+    .map((value) => String(value ?? "").trim())
+    .filter((value) => value.length > 0);
+}
+
+function getSuggestedMainValueError(entity: Entity, rawValue: string) {
+  const suggestedValues = normalizedSuggestedValues(entity);
+  if (suggestedValues.length === 0) return "";
+  const clean = String(rawValue ?? "").trim();
+  if (!clean) return `Debes seleccionar uno de los valores sugeridos para ${entity.name}.`;
+  if (!suggestedValues.includes(clean)) {
+    return `El valor principal de ${entity.name} debe ser uno de los sugeridos.`;
+  }
+  return "";
+}
+
 export default function FocusedUsageCapturePage() {
   const params = useParams<{ entityTypeName: string }>();
   const router = useRouter();
@@ -73,7 +91,6 @@ export default function FocusedUsageCapturePage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [okMsg, setOkMsg] = useState("");
 
   const [typeLabel, setTypeLabel] = useState("");
   const [entities, setEntities] = useState<Entity[]>([]);
@@ -97,6 +114,7 @@ export default function FocusedUsageCapturePage() {
   const [editSaving, setEditSaving] = useState(false);
   const pendingPageSize = 10;
   const registeredPageSize = 10;
+  const notify = useNotify();
 
   const filteredEntities = useMemo(() => {
     const needle = entitySearch.trim().toLowerCase();
@@ -215,6 +233,20 @@ export default function FocusedUsageCapturePage() {
     () => filteredPendingEntities.slice(pendingPageStart, pendingPageStart + pendingPageSize),
     [filteredPendingEntities, pendingPageStart]
   );
+  const bulkSuggestedValueError = useMemo(() => {
+    for (const entity of filteredPendingEntities) {
+      const rawValue = String(bulkDraftByEntity[entity.id] ?? "").trim();
+      const hasDynamicDraft = Object.values(bulkFieldDraftByEntity[entity.id] ?? {}).some((value) => String(value ?? "").trim().length > 0);
+      if (!rawValue && !hasDynamicDraft) continue;
+      const error = getSuggestedMainValueError(entity, rawValue);
+      if (error) return error;
+    }
+    return "";
+  }, [bulkDraftByEntity, bulkFieldDraftByEntity, filteredPendingEntities]);
+  const editSuggestedValueError = useMemo(() => {
+    if (!editingEntity) return "";
+    return getSuggestedMainValueError(editingEntity, editMainDraft);
+  }, [editMainDraft, editingEntity]);
   const registeredTotalPages = useMemo(
     () => Math.max(1, Math.ceil(registeredEntities.length / registeredPageSize)),
     [registeredEntities.length]
@@ -393,6 +425,7 @@ export default function FocusedUsageCapturePage() {
     const usageLog = cached === undefined ? await fetchSavedLog(token, entity.id) : cached;
     if (!usageLog) {
       setErrorMsg("No se encontró registro guardado para esa entidad y fecha.");
+      notify.error("No se encontró registro guardado para esa entidad y fecha.");
       setEditLoading(false);
       setEditingEntity(null);
       return;
@@ -423,7 +456,6 @@ export default function FocusedUsageCapturePage() {
     if (!editingEntity) return;
     setEditSaving(true);
     setErrorMsg("");
-    setOkMsg("");
 
     const token = await getTokenOrRedirect();
     if (!token) {
@@ -434,6 +466,11 @@ export default function FocusedUsageCapturePage() {
     const parsed = parseRawValue(editMainDraft);
     if (parsed.error) {
       setErrorMsg(parsed.error);
+      setEditSaving(false);
+      return;
+    }
+    if (editSuggestedValueError) {
+      setErrorMsg(editSuggestedValueError);
       setEditSaving(false);
       return;
     }
@@ -464,13 +501,15 @@ export default function FocusedUsageCapturePage() {
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setErrorMsg(json.error || "No se pudo actualizar el registro.");
+      const message = json.error || "No se pudo actualizar el registro.";
+      setErrorMsg(message);
+      notify.error(message);
       setEditSaving(false);
       return;
     }
 
     await fetchSavedLog(token, editingEntity.id);
-    setOkMsg(`Registro actualizado para ${editingEntity.name}.`);
+    notify.success(`Registro actualizado para ${editingEntity.name}.`);
     setEditSaving(false);
     setEditingEntity(null);
     setEditMainDraft("");
@@ -494,7 +533,6 @@ export default function FocusedUsageCapturePage() {
   async function saveBulkPending() {
     setBusy(true);
     setErrorMsg("");
-    setOkMsg("");
 
     const token = await getTokenOrRedirect();
     if (!token) {
@@ -522,8 +560,22 @@ export default function FocusedUsageCapturePage() {
       setBusy(false);
       return;
     }
+    if (bulkSuggestedValueError) {
+      setErrorMsg(bulkSuggestedValueError);
+      setBusy(false);
+      return;
+    }
 
     for (const c of candidates) {
+      const entity = entities.find((item) => item.id === c.entityId);
+      if (entity) {
+        const suggestedError = getSuggestedMainValueError(entity, c.rawValue);
+        if (suggestedError) {
+          setErrorMsg(suggestedError);
+          setBusy(false);
+          return;
+        }
+      }
       const parsed = parseRawValue(c.rawValue);
       if (parsed.error) {
         setErrorMsg(parsed.error);
@@ -547,7 +599,9 @@ export default function FocusedUsageCapturePage() {
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         const name = entities.find((e) => e.id === c.entityId)?.name ?? c.entityId;
-        setErrorMsg(`${name}: ${json.error || "No se pudo guardar el registro."}`);
+        const message = `${name}: ${json.error || "No se pudo guardar el registro."}`;
+        setErrorMsg(message);
+        notify.error(message);
         setBusy(false);
         return;
       }
@@ -572,7 +626,10 @@ export default function FocusedUsageCapturePage() {
       for (const id of savedIds) delete next[id];
       return next;
     });
-    setOkMsg(`Se guardaron ${savedIds.size} registros.`);
+    notify.success({
+      title: savedIds.size === 1 ? "Registro guardado." : `Se guardaron ${savedIds.size} registros.`,
+      description: `Fecha ${loggedOn}.`,
+    });
     setBusy(false);
   }
 
@@ -591,7 +648,6 @@ export default function FocusedUsageCapturePage() {
       />
 
       {errorMsg ? <div className="app-alert app-alert-error whitespace-pre-wrap">{errorMsg}</div> : null}
-      {okMsg ? <div className="app-alert app-alert-success">{okMsg}</div> : null}
 
       <Card>
         <CardHeader className="pb-4">
@@ -611,7 +667,12 @@ export default function FocusedUsageCapturePage() {
                   Fecha: {loggedOn}
                 </span>
                 {activeTab === "pending" ? (
-                  <Button onClick={() => void saveBulkPending()} disabled={busy || filteredPendingEntities.length === 0} size="sm">
+                  <Button
+                    onClick={() => void saveBulkPending()}
+                    disabled={busy || filteredPendingEntities.length === 0 || Boolean(bulkSuggestedValueError)}
+                    size="sm"
+                    title={bulkSuggestedValueError || undefined}
+                  >
                     {busy ? "Guardando..." : "Guardar lote"}
                   </Button>
                 ) : null}
@@ -1039,6 +1100,11 @@ export default function FocusedUsageCapturePage() {
                   <p className="app-empty">No hay pendientes para la fecha seleccionada.</p>
                 ) : (
                   <div className="grid gap-2">
+                    {bulkSuggestedValueError ? (
+                      <div className="rounded-[16px] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        {bulkSuggestedValueError}
+                      </div>
+                    ) : null}
                     <div className="hidden grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 lg:grid">
                       <div className="flex h-8 items-center">Entidad</div>
                       <div className="flex h-8 items-center">Valor</div>
@@ -1388,12 +1454,43 @@ export default function FocusedUsageCapturePage() {
               <div className="grid gap-3">
                 <div className="grid gap-1">
                   <label className="text-xs text-[var(--muted-foreground)]">Valor principal</label>
-                  <Input
-                    value={editMainDraft}
-                    onChange={(e) => setEditMainDraft(e.target.value)}
-                    placeholder={editingEntity.usage_unit_visible && editingEntity.usage_unit_name ? `Valor (${editingEntity.usage_unit_name})` : "Valor"}
-                    disabled={editSaving}
-                  />
+                  {normalizedSuggestedValues(editingEntity).length > 0 ? (
+                    <div className="grid gap-2 rounded-[16px] border border-slate-200 bg-slate-50/70 p-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {normalizedSuggestedValues(editingEntity).map((opt) => {
+                          const active = String(editMainDraft ?? "").trim() === opt;
+                          return (
+                            <button
+                              key={`${editingEntity.id}-edit-main-${opt}`}
+                              type="button"
+                              disabled={editSaving}
+                              onClick={() => setEditMainDraft((current) => (String(current ?? "").trim() === opt ? "" : opt))}
+                              className={[
+                                "rounded-full border px-2.5 py-1 text-[11px] transition",
+                                active
+                                  ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                  : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                              ].join(" ")}
+                            >
+                              {opt}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {editSuggestedValueError ? (
+                        <div className="text-xs text-amber-700">{editSuggestedValueError}</div>
+                      ) : (
+                        <div className="text-xs text-slate-500">Selecciona uno de los valores sugeridos para guardar este registro.</div>
+                      )}
+                    </div>
+                  ) : (
+                    <Input
+                      value={editMainDraft}
+                      onChange={(e) => setEditMainDraft(e.target.value)}
+                      placeholder={editingEntity.usage_unit_visible && editingEntity.usage_unit_name ? `Valor (${editingEntity.usage_unit_name})` : "Valor"}
+                      disabled={editSaving}
+                    />
+                  )}
                 </div>
                 {(editingEntity.fields ?? []).length > 0 ? (
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -1449,7 +1546,7 @@ export default function FocusedUsageCapturePage() {
                   </div>
                 ) : null}
                 <div className="flex items-center gap-2">
-                  <Button type="button" onClick={() => void saveEdit()} disabled={editSaving}>
+                  <Button type="button" onClick={() => void saveEdit()} disabled={editSaving || Boolean(editSuggestedValueError)}>
                     {editSaving ? "Guardando..." : "Guardar cambios"}
                   </Button>
                 </div>

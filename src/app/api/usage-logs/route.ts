@@ -32,6 +32,46 @@ function isUsageValueNotNullViolation(error: unknown) {
   return maybe.code === "23502" && text.includes(`column "value"`) && text.includes("usage_logs");
 }
 
+function normalizeSuggestedValues(raw: unknown) {
+  if (!Array.isArray(raw)) return [] as string[];
+  return raw
+    .map((value) => String(value ?? "").trim())
+    .filter((value) => value.length > 0);
+}
+
+async function getEntityUsageUnitSuggestedValues(db: DataClient, orgId: string, entityId: string) {
+  const { data: entity, error: entityError } = await db
+    .from("entities")
+    .select("usage_unit_id")
+    .eq("organization_id", orgId)
+    .eq("id", entityId)
+    .maybeSingle();
+  if (entityError) throw entityError;
+  const usageUnitId = String(entity?.usage_unit_id ?? "").trim();
+  if (!usageUnitId) return [] as string[];
+
+  const { data: usageUnit, error: usageUnitError } = await db
+    .from("usage_units")
+    .select("suggested_values")
+    .eq("organization_id", orgId)
+    .eq("id", usageUnitId)
+    .maybeSingle();
+  if (usageUnitError) throw usageUnitError;
+  return normalizeSuggestedValues(usageUnit?.suggested_values);
+}
+
+function getSuggestedMainValueError(suggestedValues: string[], rawValue: unknown, rawValueText: unknown) {
+  if (suggestedValues.length === 0) return "";
+  const valueText = String(rawValueText ?? "").trim();
+  const value = rawValue == null ? "" : String(rawValue).trim();
+  const mainValue = valueText || value;
+  if (!mainValue) return "Debes seleccionar uno de los valores sugeridos antes de guardar.";
+  if (!suggestedValues.includes(mainValue)) {
+    return "El valor principal debe coincidir con uno de los sugeridos para esta unidad.";
+  }
+  return "";
+}
+
 async function requireEntityInOrg(db: DataClient, orgId: string, entityId: string) {
   const { data, error } = await db
     .from("entities")
@@ -337,13 +377,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
     }
     const body = await req.json().catch(() => ({}));
+    const entityId = String((body as { entity_id?: unknown })?.entity_id ?? "").trim();
+    if (entityId) {
+      const suggestedValues = await getEntityUsageUnitSuggestedValues(db, access.organizationId, entityId);
+      const suggestedValueError = getSuggestedMainValueError(
+        suggestedValues,
+        (body as { value?: unknown })?.value,
+        (body as { value_text?: unknown })?.value_text
+      );
+      if (suggestedValueError) {
+        return NextResponse.json({ error: suggestedValueError, code: "BAD_REQUEST" }, { status: 400 });
+      }
+    }
     const response = await handleUsageLogsPost(access.organizationId, body, makeRepo(db));
-    const entityId = typeof response.body?.entity_id === "string" ? response.body.entity_id : "";
-    if (response.status < 400 && entityId) {
+    const savedEntityId = typeof response.body?.entity_id === "string" ? response.body.entity_id : "";
+    if (response.status < 400 && savedEntityId) {
       let syncWarning = "";
       let summaryWarning = "";
       try {
-        await syncForecastAndAlertsForEntity(db, access.organizationId, entityId);
+        await syncForecastAndAlertsForEntity(db, access.organizationId, savedEntityId);
       } catch (syncErr: unknown) {
         syncWarning = getErrorMessage(syncErr);
       }

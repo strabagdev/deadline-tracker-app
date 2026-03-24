@@ -434,7 +434,7 @@ export default function OperationsPage() {
 
   function statusCircleClasses(s: Status | "all", active: boolean) {
     return cn(
-      "relative h-11 w-11 shrink-0 rounded-full border shadow-sm transition focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-2",
+      "relative h-11 w-11 shrink-0 rounded-full border shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-2",
       statusControlPalette(s),
       active ? "border-slate-500 ring-2 ring-slate-900/70 ring-offset-2" : "opacity-90"
     );
@@ -488,22 +488,25 @@ export default function OperationsPage() {
           />
             </div>
 
-            <div className="flex items-center gap-2">
-            {statusFilterMeta.map((s) => (
-              <Button
-                key={s.key}
-                variant="outline"
-                onClick={() => {
-                  setFilterStatus(s.key);
-                  setPage(1);
-                }}
-                className={cn("p-0", statusCircleClasses(s.key, filterStatus === s.key))}
-                title={`${s.title}: ${countByStatus(s.key)}`}
-                aria-label={`${s.title}: ${countByStatus(s.key)}`}
-              >
-                <IconStatusGlyph status={s.key} />
-              </Button>
-            ))}
+            <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-2 py-2">
+              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Estado</div>
+              <div className="flex items-center gap-2">
+              {statusFilterMeta.map((s) => (
+                <Button
+                  key={s.key}
+                  variant="outline"
+                  onClick={() => {
+                    setFilterStatus(s.key);
+                    setPage(1);
+                  }}
+                  className={cn("p-0", statusCircleClasses(s.key, filterStatus === s.key))}
+                  title={`${s.title}: ${countByStatus(s.key)}`}
+                  aria-label={`${s.title}: ${countByStatus(s.key)}`}
+                >
+                  <IconStatusGlyph status={s.key} />
+                </Button>
+              ))}
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -547,26 +550,28 @@ export default function OperationsPage() {
             <option value="500">500 / página</option>
           </select>
 
-            <div className="flex shrink-0 items-center gap-2 rounded-[14px] border border-slate-200 bg-slate-50 p-1">
+            <div className="flex shrink-0 items-center gap-2 rounded-[14px] border border-slate-200 bg-slate-50 p-1.5">
             <Button
               size="sm"
               variant={viewMode === "cards" ? "secondary" : "outline"}
               onClick={() => setViewMode("cards")}
-              className="min-h-[var(--control-h)] min-w-[var(--control-h)]"
+              className="min-h-[var(--control-h)] min-w-[var(--control-h)] gap-2 px-3"
               title="Vista mosaico"
               aria-label="Vista mosaico"
             >
               <IconGrid />
+              <span className="hidden sm:inline">Mosaico</span>
             </Button>
             <Button
               size="sm"
               variant={viewMode === "list" ? "secondary" : "outline"}
               onClick={() => setViewMode("list")}
-              className="min-h-[var(--control-h)] min-w-[var(--control-h)]"
+              className="min-h-[var(--control-h)] min-w-[var(--control-h)] gap-2 px-3"
               title="Vista lista"
               aria-label="Vista lista"
             >
               <IconList />
+              <span className="hidden sm:inline">Lista</span>
             </Button>
           </div>
 
@@ -580,11 +585,12 @@ export default function OperationsPage() {
                 setPage(1);
               }}
               disabled={!hasActiveFilters}
-              className="min-h-[var(--control-h)] min-w-[var(--control-h)] shrink-0"
+              className="min-h-[var(--control-h)] min-w-[var(--control-h)] shrink-0 gap-2 px-3"
               title="Limpiar filtros"
               aria-label="Limpiar filtros"
             >
               <IconClearFilters />
+              <span className="hidden sm:inline">Limpiar</span>
             </Button>
           </div>
         </div>
@@ -652,9 +658,9 @@ export default function OperationsPage() {
                                 type="button"
                                 onClick={() => setSelectedEntityId(e.id)}
                                 className={cn(
-                                  "aspect-square min-h-4 rounded-[5px] border transition hover:scale-[1.08]",
+                                  "aspect-square min-h-4 rounded-[5px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] transition hover:-translate-y-0.5 hover:scale-[1.08] hover:shadow-[0_6px_14px_-10px_rgba(15,23,42,0.55)]",
                                   palette,
-                                  selected && "ring-2 ring-sky-300 ring-offset-1"
+                                  selected && "ring-2 ring-sky-300 ring-offset-1 shadow-[0_0_0_1px_rgba(125,211,252,0.2)]"
                                 )}
                                 title={`${e.name} · ${nearest?.label ?? "Sin info"} · ${dueLabel}`}
                                 aria-label={`${e.name}: ${nearest?.label ?? "Sin info"}`}
@@ -749,7 +755,7 @@ export default function OperationsPage() {
                           </div>
                         ) : null}
 
-                        <Button variant="outline" onClick={() => router.push(`/app/entities/${e.id}`)}>
+                        <Button variant="secondary" onClick={() => router.push(`/app/entities/${e.id}`)}>
                           Abrir ficha
                         </Button>
                       </>
@@ -843,7 +849,7 @@ export default function OperationsPage() {
               <div className="text-xs text-slate-500">
                 Mostrando {totalRowsForPagination === 0 ? 0 : pageStart + 1}-{Math.min(pageStart + effectivePageSize, totalRowsForPagination)} de {totalRowsForPagination}
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-slate-50 p-1">
                 <Button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={safePage <= 1}
@@ -855,7 +861,7 @@ export default function OperationsPage() {
                 >
                   ◀
                 </Button>
-                <div className="px-1 text-xs text-slate-600">Página {safePage} de {totalPages}</div>
+                <div className="px-1 text-xs font-medium text-slate-600">Página {safePage} de {totalPages}</div>
                 <Button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={safePage >= totalPages}
