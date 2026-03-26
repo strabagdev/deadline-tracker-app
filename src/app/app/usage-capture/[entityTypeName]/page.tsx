@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { supabaseAuth } from "@/lib/supabase/authClient";
@@ -34,6 +34,8 @@ type SavedUsageLog = {
   logged_at: string;
   field_values: Array<{ usage_field_id: string; value: string }>;
 };
+
+type PendingSaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
 function todayDateInput() {
   const d = new Date();
@@ -89,7 +91,6 @@ export default function FocusedUsageCapturePage() {
   const entityTypeName = String(params?.entityTypeName ?? "");
 
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
   const [typeLabel, setTypeLabel] = useState("");
@@ -100,6 +101,8 @@ export default function FocusedUsageCapturePage() {
   const [entitySearch, setEntitySearch] = useState("");
   const [bulkDraftByEntity, setBulkDraftByEntity] = useState<Record<string, string>>({});
   const [bulkFieldDraftByEntity, setBulkFieldDraftByEntity] = useState<Record<string, Record<string, string>>>({});
+  const [pendingSaveStateByEntity, setPendingSaveStateByEntity] = useState<Record<string, PendingSaveState>>({});
+  const [pendingSaveMessageByEntity, setPendingSaveMessageByEntity] = useState<Record<string, string>>({});
   const [loggedOn, setLoggedOn] = useState("");
   const [pendingPage, setPendingPage] = useState(1);
   const [registeredPage, setRegisteredPage] = useState(1);
@@ -115,6 +118,7 @@ export default function FocusedUsageCapturePage() {
   const pendingPageSize = 10;
   const registeredPageSize = 10;
   const notify = useNotify();
+  const pendingSaveSeqRef = useRef<Record<string, number>>({});
 
   const filteredEntities = useMemo(() => {
     const needle = entitySearch.trim().toLowerCase();
@@ -233,16 +237,6 @@ export default function FocusedUsageCapturePage() {
     () => filteredPendingEntities.slice(pendingPageStart, pendingPageStart + pendingPageSize),
     [filteredPendingEntities, pendingPageStart]
   );
-  const bulkSuggestedValueError = useMemo(() => {
-    for (const entity of filteredPendingEntities) {
-      const rawValue = String(bulkDraftByEntity[entity.id] ?? "").trim();
-      const hasDynamicDraft = Object.values(bulkFieldDraftByEntity[entity.id] ?? {}).some((value) => String(value ?? "").trim().length > 0);
-      if (!rawValue && !hasDynamicDraft) continue;
-      const error = getSuggestedMainValueError(entity, rawValue);
-      if (error) return error;
-    }
-    return "";
-  }, [bulkDraftByEntity, bulkFieldDraftByEntity, filteredPendingEntities]);
   const editSuggestedValueError = useMemo(() => {
     if (!editingEntity) return "";
     return getSuggestedMainValueError(editingEntity, editMainDraft);
@@ -353,6 +347,12 @@ export default function FocusedUsageCapturePage() {
     setPendingSecondaryFilters([]);
   }, [loggedOn, entitySearch, entityTypeName]);
   useEffect(() => {
+    setBulkDraftByEntity({});
+    setBulkFieldDraftByEntity({});
+    setPendingSaveStateByEntity({});
+    setPendingSaveMessageByEntity({});
+  }, [loggedOn, entityTypeName]);
+  useEffect(() => {
     setPendingSecondaryMenuOpen(false);
     setPendingSecondarySearch("");
   }, [loggedOn, entitySearch, entityTypeName]);
@@ -389,6 +389,198 @@ export default function FocusedUsageCapturePage() {
       return { value: n, valueText: null };
     }
     return { value: null, valueText: clean };
+  }
+
+  function setPendingRowState(entityId: string, state: PendingSaveState, message = "") {
+    setPendingSaveStateByEntity((prev) => ({ ...prev, [entityId]: state }));
+    setPendingSaveMessageByEntity((prev) => {
+      if (!message) {
+        const next = { ...prev };
+        delete next[entityId];
+        return next;
+      }
+      return { ...prev, [entityId]: message };
+    });
+  }
+
+  function updatePendingMainDraft(entityId: string, value: string) {
+    setBulkDraftByEntity((prev) => ({
+      ...prev,
+      [entityId]: value,
+    }));
+    setPendingRowState(entityId, "dirty");
+  }
+
+  function updatePendingFieldDraft(entityId: string, fieldId: string, value: string) {
+    setBulkFieldDraftByEntity((prev) => ({
+      ...prev,
+      [entityId]: { ...(prev[entityId] ?? {}), [fieldId]: value },
+    }));
+    setPendingRowState(entityId, "dirty");
+  }
+
+  function buildPendingFieldValues(entity: Entity, fieldDrafts?: Record<string, string>) {
+    return (entity.fields ?? [])
+      .map((f) => {
+        const raw = String(fieldDrafts?.[f.id] ?? "").trim();
+        if (!raw) return null;
+        if (f.field_type === "number") return { usage_field_id: f.id, value: Number(raw) };
+        if (f.field_type === "boolean") return { usage_field_id: f.id, value: raw === "true" };
+        return { usage_field_id: f.id, value: raw };
+      })
+      .filter(Boolean) as Array<{ usage_field_id: string; value: string | number | boolean }>;
+  }
+
+  function formatMissingPendingFields(fieldNames: string[]) {
+    if (fieldNames.length === 0) return "";
+    if (fieldNames.length === 1) return `Falta completar ${fieldNames[0]}.`;
+    if (fieldNames.length === 2) return `Falta completar ${fieldNames[0]} y ${fieldNames[1]}.`;
+    return `Falta completar ${fieldNames[0]}, ${fieldNames[1]} y ${fieldNames.length - 2} campo(s) más.`;
+  }
+
+  function hasPendingDraft(entity: Entity) {
+    const mainValue = String(bulkDraftByEntity[entity.id] ?? "").trim();
+    if (mainValue.length > 0) return true;
+    return (entity.fields ?? []).some((field) => String(bulkFieldDraftByEntity[entity.id]?.[field.id] ?? "").trim().length > 0);
+  }
+
+  function isPendingMainMissing(entity: Entity) {
+    return hasPendingDraft(entity) && String(bulkDraftByEntity[entity.id] ?? "").trim().length === 0;
+  }
+
+  function isPendingFieldMissing(entity: Entity, fieldId: string) {
+    return hasPendingDraft(entity) && String(bulkFieldDraftByEntity[entity.id]?.[fieldId] ?? "").trim().length === 0;
+  }
+
+  function pendingFieldShellClass(isMissing: boolean) {
+    return isMissing
+      ? "border-amber-300 bg-amber-50/70"
+      : "border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fafc)]";
+  }
+
+  async function submitPendingPayload(
+    token: string,
+    payload: Record<string, unknown>,
+    preferUpdate: boolean
+  ) {
+    const send = async (method: "POST" | "PUT") => {
+      const res = await fetch("/api/usage-capture/log", {
+        method,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => ({}));
+      return { res, json };
+    };
+
+    const firstMethod = preferUpdate ? "PUT" : "POST";
+    const first = await send(firstMethod);
+    if (first.res.ok) return first;
+
+    if (firstMethod === "PUT" && first.res.status === 404) {
+      return send("POST");
+    }
+    if (firstMethod === "POST" && first.res.status === 409) {
+      return send("PUT");
+    }
+    return first;
+  }
+
+  async function savePendingEntity(
+    entity: Entity,
+    overrides?: { mainValue?: string; fieldDrafts?: Record<string, string> }
+  ) {
+    const entityId = entity.id;
+    const rawValue = String(overrides?.mainValue ?? bulkDraftByEntity[entityId] ?? "").trim();
+    const fieldDrafts = overrides?.fieldDrafts ?? bulkFieldDraftByEntity[entityId] ?? {};
+    const fieldValues = buildPendingFieldValues(entity, fieldDrafts);
+    const missingFieldNames = (entity.fields ?? [])
+      .filter((field) => String(fieldDrafts[field.id] ?? "").trim().length === 0)
+      .map((field) => field.name);
+
+    if (!rawValue && fieldValues.length === 0) {
+      setPendingRowState(entityId, "idle");
+      return;
+    }
+
+    const parsed = parseRawValue(rawValue);
+    if (parsed.error) {
+      setPendingRowState(entityId, "error", parsed.error);
+      return;
+    }
+
+    if (parsed.value == null && !parsed.valueText) {
+      const missingMessage = missingFieldNames.length > 0 ? ` ${formatMissingPendingFields(missingFieldNames)}` : "";
+      setPendingRowState(entityId, "dirty", `Completa el valor principal para guardar esta fila.${missingMessage}`);
+      return;
+    }
+
+    if (missingFieldNames.length > 0) {
+      setPendingRowState(entityId, "dirty", formatMissingPendingFields(missingFieldNames));
+      return;
+    }
+
+    const suggestedError = getSuggestedMainValueError(entity, rawValue);
+    if (suggestedError) {
+      setPendingRowState(entityId, "error", suggestedError);
+      return;
+    }
+
+    const token = await getTokenOrRedirect();
+    if (!token) return;
+
+    const requestId = (pendingSaveSeqRef.current[entityId] ?? 0) + 1;
+    pendingSaveSeqRef.current[entityId] = requestId;
+    setPendingRowState(entityId, "saving", "Guardando...");
+
+    const payload: Record<string, unknown> = {
+      entity_type: entityTypeName,
+      entity_id: entityId,
+      logged_on: loggedOn,
+      field_values: fieldValues,
+    };
+    if (parsed.value != null) payload.value = parsed.value;
+    else if (parsed.valueText) payload.value_text = parsed.valueText;
+
+    const preferUpdate = Boolean(entity.logged_days?.includes(loggedOn) || savedLogsByEntity[entityId]);
+    const { res, json } = await submitPendingPayload(token, payload, preferUpdate);
+    if (pendingSaveSeqRef.current[entityId] !== requestId) return;
+
+    if (!res.ok) {
+      const message =
+        json && typeof json === "object" && "error" in json ? String(json.error ?? "").trim() : "No se pudo guardar el registro.";
+      setPendingRowState(entityId, "error", message);
+      return;
+    }
+
+    setEntities((prev) =>
+      prev.map((item) => {
+        if (item.id !== entityId) return item;
+        const nextDays = new Set(item.logged_days ?? []);
+        nextDays.add(loggedOn);
+        return { ...item, logged_days: Array.from(nextDays).sort((a, b) => b.localeCompare(a)) };
+      })
+    );
+    setBulkDraftByEntity((prev) => {
+      const next = { ...prev };
+      delete next[entityId];
+      return next;
+    });
+    setBulkFieldDraftByEntity((prev) => {
+      const next = { ...prev };
+      delete next[entityId];
+      return next;
+    });
+    await fetchSavedLog(token, entityId);
+    setPendingRowState(entityId, "saved", "Guardado.");
+  }
+
+  function pendingStatusClass(state: PendingSaveState) {
+    if (state === "saving") return "border-sky-200 bg-sky-50 text-sky-700";
+    if (state === "saved") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    if (state === "error") return "border-rose-200 bg-rose-50 text-rose-700";
+    if (state === "dirty") return "border-amber-200 bg-amber-50 text-amber-700";
+    return "border-slate-200 bg-slate-50 text-slate-500";
   }
 
   async function fetchSavedLog(token: string, entityId: string) {
@@ -530,109 +722,6 @@ export default function FocusedUsageCapturePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [registeredPagedEntities, loggedOn, entityTypeName]);
 
-  async function saveBulkPending() {
-    setBusy(true);
-    setErrorMsg("");
-
-    const token = await getTokenOrRedirect();
-    if (!token) {
-      setBusy(false);
-      return;
-    }
-
-    const candidates = filteredPendingEntities
-      .map((e) => {
-        const rawValue = String(bulkDraftByEntity[e.id] ?? "").trim();
-        const dynamic = (e.fields ?? [])
-          .map((f) => {
-            const raw = String(bulkFieldDraftByEntity[e.id]?.[f.id] ?? "").trim();
-            if (!raw) return null;
-            if (f.field_type === "number") return { usage_field_id: f.id, value: Number(raw) };
-            if (f.field_type === "boolean") return { usage_field_id: f.id, value: raw === "true" };
-            return { usage_field_id: f.id, value: raw };
-          })
-          .filter(Boolean) as Array<{ usage_field_id: string; value: string | number | boolean }>;
-        return { entityId: e.id, rawValue, fieldValues: dynamic };
-      })
-      .filter((x) => x.rawValue.length > 0 || x.fieldValues.length > 0);
-    if (candidates.length === 0) {
-      setErrorMsg("Ingresa al menos un valor o campo para guardar en lote.");
-      setBusy(false);
-      return;
-    }
-    if (bulkSuggestedValueError) {
-      setErrorMsg(bulkSuggestedValueError);
-      setBusy(false);
-      return;
-    }
-
-    for (const c of candidates) {
-      const entity = entities.find((item) => item.id === c.entityId);
-      if (entity) {
-        const suggestedError = getSuggestedMainValueError(entity, c.rawValue);
-        if (suggestedError) {
-          setErrorMsg(suggestedError);
-          setBusy(false);
-          return;
-        }
-      }
-      const parsed = parseRawValue(c.rawValue);
-      if (parsed.error) {
-        setErrorMsg(parsed.error);
-        setBusy(false);
-        return;
-      }
-      const payload: Record<string, unknown> = {
-        entity_type: entityTypeName,
-        entity_id: c.entityId,
-        logged_on: loggedOn || undefined,
-      };
-      if (parsed.value != null) payload.value = parsed.value;
-      if (parsed.valueText) payload.value_text = parsed.valueText;
-      if (c.fieldValues.length > 0) payload.field_values = c.fieldValues;
-
-      const res = await fetch("/api/usage-capture/log", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const name = entities.find((e) => e.id === c.entityId)?.name ?? c.entityId;
-        const message = `${name}: ${json.error || "No se pudo guardar el registro."}`;
-        setErrorMsg(message);
-        notify.error(message);
-        setBusy(false);
-        return;
-      }
-    }
-
-    const savedIds = new Set(candidates.map((c) => c.entityId));
-    setEntities((prev) =>
-      prev.map((e) => {
-        if (!savedIds.has(e.id)) return e;
-        const nextDays = new Set(e.logged_days ?? []);
-        if (loggedOn) nextDays.add(loggedOn);
-        return { ...e, logged_days: Array.from(nextDays).sort((a, b) => b.localeCompare(a)) };
-      })
-    );
-    setBulkDraftByEntity((prev) => {
-      const next = { ...prev };
-      for (const id of savedIds) delete next[id];
-      return next;
-    });
-    setBulkFieldDraftByEntity((prev) => {
-      const next = { ...prev };
-      for (const id of savedIds) delete next[id];
-      return next;
-    });
-    notify.success({
-      title: savedIds.size === 1 ? "Registro guardado." : `Se guardaron ${savedIds.size} registros.`,
-      description: `Fecha ${loggedOn}.`,
-    });
-    setBusy(false);
-  }
-
   return (
     <main className="mx-auto w-full max-w-[1400px] space-y-5 px-4 py-4 sm:space-y-6">
       <PageHero
@@ -667,14 +756,9 @@ export default function FocusedUsageCapturePage() {
                   Fecha: {loggedOn}
                 </span>
                 {activeTab === "pending" ? (
-                  <Button
-                    onClick={() => void saveBulkPending()}
-                    disabled={busy || filteredPendingEntities.length === 0 || Boolean(bulkSuggestedValueError)}
-                    size="sm"
-                    title={bulkSuggestedValueError || undefined}
-                  >
-                    {busy ? "Guardando..." : "Guardar lote"}
-                  </Button>
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
+                    Autosave por fila activo
+                  </span>
                 ) : null}
               </div>
             </div>
@@ -929,7 +1013,7 @@ export default function FocusedUsageCapturePage() {
                     highlightedDates={highlightedCalendarDates}
                     disabledDates={[]}
                     label="Fecha de registro"
-                    disabled={busy}
+                    disabled={loading}
                   />
 
                   <div className="grid gap-1">
@@ -938,7 +1022,7 @@ export default function FocusedUsageCapturePage() {
                       value={entitySearch}
                       onChange={(e) => setEntitySearch(e.target.value)}
                       placeholder="Buscar entidad..."
-                      disabled={busy}
+                      disabled={loading}
                     />
                     {entitySearch.trim().length > 0 ? (
                       <div className="max-h-44 overflow-auto rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--card)] p-2 text-xs">
@@ -1044,7 +1128,7 @@ export default function FocusedUsageCapturePage() {
                             value={pendingSecondarySearch}
                             onChange={(e) => setPendingSecondarySearch(e.target.value)}
                             placeholder="Buscar filtro secundario..."
-                            disabled={busy}
+                            disabled={loading}
                           />
                           <div className="max-h-44 overflow-auto">
                             <div className="flex flex-wrap gap-2">
@@ -1088,7 +1172,7 @@ export default function FocusedUsageCapturePage() {
                   <div>
                     <div className="text-sm font-semibold text-slate-900">Lista operativa de pendientes</div>
                     <div className="text-xs text-slate-500">
-                      Enfócate en completar valor principal y campos dinámicos solo para quienes faltan en {loggedOn}.
+                      Enfócate en completar valor principal y campos dinámicos. Cada fila se guarda al salir del campo o al elegir una opción.
                     </div>
                   </div>
                   <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
@@ -1100,11 +1184,6 @@ export default function FocusedUsageCapturePage() {
                   <p className="app-empty">No hay pendientes para la fecha seleccionada.</p>
                 ) : (
                   <div className="grid gap-2">
-                    {bulkSuggestedValueError ? (
-                      <div className="rounded-[16px] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                        {bulkSuggestedValueError}
-                      </div>
-                    ) : null}
                     <div className="hidden grid-cols-[minmax(220px,1fr)_220px_minmax(480px,1fr)] items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 lg:grid">
                       <div className="flex h-8 items-center">Entidad</div>
                       <div className="flex h-8 items-center">Valor</div>
@@ -1127,6 +1206,17 @@ export default function FocusedUsageCapturePage() {
                       >
                         <div className="min-w-0">
                           <div className="truncate text-sm font-semibold text-slate-900" title={e.name}>{e.name}</div>
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {(() => {
+                              const state = pendingSaveStateByEntity[e.id] ?? "idle";
+                              const message = pendingSaveMessageByEntity[e.id] ?? "";
+                              return state === "idle" && !message ? null : (
+                                <span className={["rounded-full border px-2 py-0.5 text-[11px] font-medium", pendingStatusClass(state)].join(" ")}>
+                                  {message || (state === "dirty" ? "Cambios pendientes" : state === "saving" ? "Guardando..." : state === "saved" ? "Guardado." : "Revisar")}
+                                </span>
+                              );
+                            })()}
+                          </div>
                           {e.card_fields?.length ? (
                             <div className="mt-1 flex flex-wrap gap-1">
                               {e.card_fields.slice(0, 3).map((field) => (
@@ -1139,7 +1229,15 @@ export default function FocusedUsageCapturePage() {
                         </div>
                         <div className="min-w-0">
                           {(e.usage_unit_suggested_values ?? []).length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
+                            <div
+                              className={[
+                                "flex flex-wrap gap-1 rounded-[16px] border p-2",
+                                pendingFieldShellClass(isPendingMainMissing(e)),
+                              ].join(" ")}
+                            >
+                              <div className="w-full text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400">
+                                Valor principal
+                              </div>
                               {(e.usage_unit_suggested_values ?? []).map((opt) => {
                                 const current = String(bulkDraftByEntity[e.id] ?? "").trim();
                                 const active = current === opt;
@@ -1147,13 +1245,12 @@ export default function FocusedUsageCapturePage() {
                                   <button
                                     key={`${e.id}-main-${opt}`}
                                     type="button"
-                                    disabled={busy}
-                                    onClick={() =>
-                                      setBulkDraftByEntity((prev) => ({
-                                        ...prev,
-                                        [e.id]: current === opt ? "" : opt,
-                                      }))
-                                    }
+                                    disabled={pendingSaveStateByEntity[e.id] === "saving"}
+                                    onClick={() => {
+                                      const nextValue = current === opt ? "" : opt;
+                                      updatePendingMainDraft(e.id, nextValue);
+                                      void savePendingEntity(e, { mainValue: nextValue });
+                                    }}
                                     className={[
                                       "rounded-full border px-2 py-1 text-[10px] transition",
                                       active
@@ -1167,20 +1264,27 @@ export default function FocusedUsageCapturePage() {
                               })}
                             </div>
                           ) : (
-                            <div className="rounded-[16px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fafc)] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
+                            <div
+                              className={[
+                                "rounded-[16px] border p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]",
+                                pendingFieldShellClass(isPendingMainMissing(e)),
+                              ].join(" ")}
+                            >
                               <div className="mb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400">
-                                Valor libre
+                                Valor principal
                               </div>
                               <Input
                                 value={bulkDraftByEntity[e.id] ?? ""}
-                                onChange={(ev) =>
-                                  setBulkDraftByEntity((prev) => ({
-                                    ...prev,
-                                    [e.id]: ev.target.value,
-                                  }))
-                                }
+                                onChange={(ev) => updatePendingMainDraft(e.id, ev.target.value)}
+                                onBlur={() => void savePendingEntity(e)}
+                                onKeyDown={(ev) => {
+                                  if (ev.key === "Enter") {
+                                    ev.preventDefault();
+                                    void savePendingEntity(e);
+                                  }
+                                }}
                                 placeholder={e.usage_unit_visible && e.usage_unit_name ? `Valor (${e.usage_unit_name})` : "Valor"}
-                                disabled={busy}
+                                disabled={pendingSaveStateByEntity[e.id] === "saving"}
                                 className="border-slate-200 bg-white"
                               />
                             </div>
@@ -1203,8 +1307,17 @@ export default function FocusedUsageCapturePage() {
                               }
                               if (fieldOptions(f).length > 0) {
                                 return (
-                                  <div key={f.id} className="min-w-0">
-                                    <div className="flex flex-wrap gap-1 pb-1">
+                                  <div
+                                    key={f.id}
+                                    className={[
+                                      "min-w-0 rounded-[14px] border p-2",
+                                      pendingFieldShellClass(isPendingFieldMissing(e, f.id)),
+                                    ].join(" ")}
+                                  >
+                                    <div className="pb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400">
+                                      {f.name}
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
                                       {fieldOptions(f).map((opt) => {
                                         const current = String(bulkFieldDraftByEntity[e.id]?.[f.id] ?? "");
                                         const active = current === opt;
@@ -1212,16 +1325,16 @@ export default function FocusedUsageCapturePage() {
                                           <button
                                             key={`${e.id}-${f.id}-${opt}`}
                                             type="button"
-                                            disabled={busy}
-                                            onClick={() =>
-                                              setBulkFieldDraftByEntity((prev) => ({
-                                                ...prev,
-                                                [e.id]: {
-                                                  ...(prev[e.id] ?? {}),
-                                                  [f.id]: current === opt ? "" : opt,
-                                                },
-                                              }))
-                                            }
+                                            disabled={pendingSaveStateByEntity[e.id] === "saving"}
+                                            onClick={() => {
+                                              const nextValue = current === opt ? "" : opt;
+                                              const nextFieldDrafts = {
+                                                ...(bulkFieldDraftByEntity[e.id] ?? {}),
+                                                [f.id]: nextValue,
+                                              };
+                                              updatePendingFieldDraft(e.id, f.id, nextValue);
+                                              void savePendingEntity(e, { fieldDrafts: nextFieldDrafts });
+                                            }}
                                             className={[
                                               "rounded-full border px-2 py-1 text-[10px] transition",
                                               active
@@ -1239,17 +1352,29 @@ export default function FocusedUsageCapturePage() {
                               }
                               if (f.field_type === "boolean") {
                                 return (
-                                  <div key={f.id} className="min-w-0">
+                                  <div
+                                    key={f.id}
+                                    className={[
+                                      "min-w-0 rounded-[14px] border p-2",
+                                      pendingFieldShellClass(isPendingFieldMissing(e, f.id)),
+                                    ].join(" ")}
+                                  >
+                                    <div className="pb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400">
+                                      {f.name}
+                                    </div>
                                     <select
                                       value={bulkFieldDraftByEntity[e.id]?.[f.id] ?? ""}
-                                      onChange={(ev) =>
-                                        setBulkFieldDraftByEntity((prev) => ({
-                                          ...prev,
-                                          [e.id]: { ...(prev[e.id] ?? {}), [f.id]: ev.target.value },
-                                        }))
-                                      }
+                                      onChange={(ev) => {
+                                        const nextValue = ev.target.value;
+                                        const nextFieldDrafts = {
+                                          ...(bulkFieldDraftByEntity[e.id] ?? {}),
+                                          [f.id]: nextValue,
+                                        };
+                                        updatePendingFieldDraft(e.id, f.id, nextValue);
+                                        void savePendingEntity(e, { fieldDrafts: nextFieldDrafts });
+                                      }}
                                       className="h-[var(--control-h)] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
-                                      disabled={busy}
+                                      disabled={pendingSaveStateByEntity[e.id] === "saving"}
                                     >
                                       <option value="">(vacío)</option>
                                       <option value="true">Sí</option>
@@ -1259,17 +1384,28 @@ export default function FocusedUsageCapturePage() {
                                 );
                               }
                               return (
-                                <div key={f.id} className="min-w-0">
+                                <div
+                                  key={f.id}
+                                  className={[
+                                    "min-w-0 rounded-[14px] border p-2",
+                                    pendingFieldShellClass(isPendingFieldMissing(e, f.id)),
+                                  ].join(" ")}
+                                >
+                                  <div className="pb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400">
+                                    {f.name}
+                                  </div>
                                   <Input
                                     type={f.field_type === "number" ? "number" : f.field_type === "date" ? "date" : "text"}
                                     value={bulkFieldDraftByEntity[e.id]?.[f.id] ?? ""}
-                                    onChange={(ev) =>
-                                      setBulkFieldDraftByEntity((prev) => ({
-                                        ...prev,
-                                        [e.id]: { ...(prev[e.id] ?? {}), [f.id]: ev.target.value },
-                                      }))
-                                    }
-                                    disabled={busy}
+                                    onChange={(ev) => updatePendingFieldDraft(e.id, f.id, ev.target.value)}
+                                    onBlur={() => void savePendingEntity(e)}
+                                    onKeyDown={(ev) => {
+                                      if (ev.key === "Enter") {
+                                        ev.preventDefault();
+                                        void savePendingEntity(e);
+                                      }
+                                    }}
+                                    disabled={pendingSaveStateByEntity[e.id] === "saving"}
                                     className="h-[var(--control-h)] text-[13px] sm:text-sm"
                                   />
                                 </div>
@@ -1329,7 +1465,7 @@ export default function FocusedUsageCapturePage() {
                 ) : null}
 
                 <div className="text-[11px] text-slate-500">
-                  En modo lote puedes cargar valor principal y campos dinámicos en formato compacto.
+                  Los cambios se guardan por entidad cuando sales del campo o eliges una opción.
                 </div>
               </section>
             </div>
@@ -1378,7 +1514,7 @@ export default function FocusedUsageCapturePage() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            disabled={busy || isLoadingSaved}
+                            disabled={isLoadingSaved}
                             onClick={() => void openEdit(e)}
                           >
                             Editar
