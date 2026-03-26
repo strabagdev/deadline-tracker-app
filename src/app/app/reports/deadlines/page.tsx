@@ -102,6 +102,15 @@ function buildCsv(rows: Row[]) {
   ]);
 }
 
+function getFriendlyFetchError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message.trim() : "";
+  if (!message) return fallback;
+  if (/fetch failed|econnreset|failed to fetch/i.test(message)) {
+    return "La conexión con el servidor se interrumpió mientras se cargaba el reporte. Intenta nuevamente.";
+  }
+  return message;
+}
+
 export default function DeadlineReportsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -125,27 +134,33 @@ export default function DeadlineReportsPage() {
   async function load() {
     setLoading(true);
     setErrorMsg("");
+    try {
+      const token = await getTokenOrRedirect();
+      if (!token) {
+        setLoading(false);
+        return;
+      }
 
-    const token = await getTokenOrRedirect();
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+      const res = await fetch("/api/reporting/deadlines", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => []);
+      if (!res.ok) {
+        const error =
+          json && typeof json === "object" && "error" in json ? String((json as { error?: unknown }).error ?? "").trim() : "";
+        setErrorMsg(error || "No se pudo cargar reportabilidad de vencimientos.");
+        setRows([]);
+        setLoading(false);
+        return;
+      }
 
-    const res = await fetch("/api/reporting/deadlines", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const json = await res.json().catch(() => []);
-    if (!res.ok) {
-      const error = json && typeof json === "object" && "error" in json ? String((json as { error?: unknown }).error ?? "") : "";
-      setErrorMsg(error || "No se pudo cargar reportabilidad de vencimientos.");
+      setRows(Array.isArray(json) ? (json as Row[]) : []);
+    } catch (error) {
+      setErrorMsg(getFriendlyFetchError(error, "No se pudo cargar reportabilidad de vencimientos."));
       setRows([]);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setRows(Array.isArray(json) ? (json as Row[]) : []);
-    setLoading(false);
   }
 
   useEffect(() => {

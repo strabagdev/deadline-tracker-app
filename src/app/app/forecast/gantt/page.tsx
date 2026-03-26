@@ -149,6 +149,15 @@ function clampPct(value: number) {
   return Math.max(0, Math.min(100, value));
 }
 
+function getFriendlyFetchError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message.trim() : "";
+  if (!message) return fallback;
+  if (/fetch failed|econnreset|failed to fetch/i.test(message)) {
+    return "La conexión con el servidor se interrumpió mientras se cargaba la carta Gantt. Intenta nuevamente.";
+  }
+  return message;
+}
+
 export default function ForecastGanttPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -165,34 +174,48 @@ export default function ForecastGanttPage() {
   async function load() {
     setLoading(true);
     setErrorMsg("");
-    const { data } = await supabaseAuth.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) {
-      window.location.href = "/login";
-      return;
-    }
+    try {
+      const { data } = await supabaseAuth.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) {
+        window.location.href = "/login";
+        return;
+      }
 
-    const params = new URLSearchParams();
-    if (entityId !== "all") params.set("entity_id", entityId);
-    if (entityTypeId !== "all") params.set("entity_type_id", entityTypeId);
-    if (deadlineTypeId !== "all") params.set("deadline_type_id", deadlineTypeId);
+      const params = new URLSearchParams();
+      if (entityId !== "all") params.set("entity_id", entityId);
+      if (entityTypeId !== "all") params.set("entity_type_id", entityTypeId);
+      if (deadlineTypeId !== "all") params.set("deadline_type_id", deadlineTypeId);
 
-    const res = await fetch(`/api/forecasts/gantt?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setErrorMsg(json.error || "No se pudo cargar la carta Gantt.");
+      const res = await fetch(`/api/forecasts/gantt?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message =
+          json && typeof json === "object" && "error" in json ? String(json.error ?? "").trim() : "";
+        setErrorMsg(message || "No se pudo cargar la carta Gantt.");
+        setRows([]);
+        setEntityOptions([]);
+        setEntityTypeOptions([]);
+        setDeadlineTypeOptions([]);
+        setLoading(false);
+        return;
+      }
+
+      setRows(Array.isArray(json.rows) ? json.rows : []);
+      setEntityOptions(Array.isArray(json.options?.entities) ? json.options.entities : []);
+      setEntityTypeOptions(Array.isArray(json.options?.entity_types) ? json.options.entity_types : []);
+      setDeadlineTypeOptions(Array.isArray(json.options?.deadline_types) ? json.options.deadline_types : []);
+    } catch (error) {
+      setErrorMsg(getFriendlyFetchError(error, "No se pudo cargar la carta Gantt."));
       setRows([]);
+      setEntityOptions([]);
+      setEntityTypeOptions([]);
+      setDeadlineTypeOptions([]);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setRows(Array.isArray(json.rows) ? json.rows : []);
-    setEntityOptions(Array.isArray(json.options?.entities) ? json.options.entities : []);
-    setEntityTypeOptions(Array.isArray(json.options?.entity_types) ? json.options.entity_types : []);
-    setDeadlineTypeOptions(Array.isArray(json.options?.deadline_types) ? json.options.deadline_types : []);
-    setLoading(false);
   }
 
   useEffect(() => {
