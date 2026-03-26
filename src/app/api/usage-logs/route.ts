@@ -8,6 +8,7 @@ import {
   handleUsageLogsPost,
   type UsageLogsRepo,
 } from "@/lib/api/usageLogsService";
+import { parseUsageLogsCreateBody } from "@/lib/api/usageLogsInput";
 import { syncForecastAndAlertsForEntity } from "@/lib/api/forecastAlertsSync";
 import { refreshDashboardSummary } from "@/lib/api/dashboardSummaryService";
 
@@ -60,6 +61,18 @@ async function getEntityUsageUnitSuggestedValues(db: DataClient, orgId: string, 
   return normalizeSuggestedValues(usageUnit?.suggested_values);
 }
 
+async function getEntityUsageUnitId(db: DataClient, orgId: string, entityId: string) {
+  const { data: entity, error: entityError } = await db
+    .from("entities")
+    .select("usage_unit_id")
+    .eq("organization_id", orgId)
+    .eq("id", entityId)
+    .maybeSingle();
+  if (entityError) throw entityError;
+  const usageUnitId = String(entity?.usage_unit_id ?? "").trim();
+  return usageUnitId || null;
+}
+
 function getSuggestedMainValueError(suggestedValues: string[], rawValue: unknown, rawValueText: unknown) {
   if (suggestedValues.length === 0) return "";
   const valueText = String(rawValueText ?? "").trim();
@@ -70,6 +83,127 @@ function getSuggestedMainValueError(suggestedValues: string[], rawValue: unknown
     return "El valor principal debe coincidir con uno de los sugeridos para esta unidad.";
   }
   return "";
+}
+
+async function normalizeFieldValues(
+  db: DataClient,
+  orgId: string,
+  usageUnitId: string | null,
+  incomingFieldValues: Array<{ usageFieldId: string; value: unknown }>
+) {
+  if (incomingFieldValues.length === 0) {
+    return {
+      typed: [] as Array<{
+        usageFieldId: string;
+        valueText: string | null;
+        valueNumber: number | null;
+        valueDate: string | null;
+        valueBoolean: boolean | null;
+      }>,
+    };
+  }
+
+  const usageFieldIds = Array.from(new Set(incomingFieldValues.map((f) => String(f.usageFieldId)).filter(Boolean)));
+  if (!usageUnitId) {
+    return {
+      error: NextResponse.json(
+        { error: "entity has no usage unit assigned for dynamic fields", code: "BAD_REQUEST" },
+        { status: 400 }
+      ),
+    };
+  }
+
+  const { data: fields, error: fieldsErr } = await db
+    .from("usage_fields")
+    .select("id, field_type, usage_unit_id")
+    .eq("organization_id", orgId)
+    .eq("usage_unit_id", usageUnitId)
+    .in("id", usageFieldIds);
+  if (fieldsErr) throw fieldsErr;
+  if ((fields ?? []).length !== usageFieldIds.length) {
+    return {
+      error: NextResponse.json(
+        { error: "invalid usage_field_id for entity usage unit", code: "BAD_REQUEST" },
+        { status: 400 }
+      ),
+    };
+  }
+
+  const defsById = new Map((fields ?? []).map((f) => [String(f.id), String(f.field_type)]));
+  const typedValues: Array<{
+    usageFieldId: string;
+    valueText: string | null;
+    valueNumber: number | null;
+    valueDate: string | null;
+    valueBoolean: boolean | null;
+  }> = [];
+  const seen = new Set<string>();
+
+  for (const fv of incomingFieldValues) {
+    const usageFieldId = String(fv.usageFieldId ?? "").trim();
+    if (!usageFieldId) {
+      return { error: NextResponse.json({ error: "usage_field_id required in field_values", code: "BAD_REQUEST" }, { status: 400 }) };
+    }
+    if (seen.has(usageFieldId)) {
+      return { error: NextResponse.json({ error: "duplicate usage_field_id in field_values", code: "BAD_REQUEST" }, { status: 400 }) };
+    }
+    seen.add(usageFieldId);
+
+    const type = defsById.get(usageFieldId);
+    if (!type) {
+      return {
+        error: NextResponse.json(
+          { error: "invalid usage_field_id for entity usage unit", code: "BAD_REQUEST" },
+          { status: 400 }
+        ),
+      };
+    }
+
+    if (type === "number") {
+      const n = Number(fv.value);
+      if (!Number.isFinite(n)) {
+        return { error: NextResponse.json({ error: `field ${usageFieldId} requires numeric value`, code: "BAD_REQUEST" }, { status: 400 }) };
+      }
+      typedValues.push({ usageFieldId, valueText: null, valueNumber: n, valueDate: null, valueBoolean: null });
+      continue;
+    }
+
+    if (type === "boolean") {
+      let b: boolean | null = null;
+      if (typeof fv.value === "boolean") b = fv.value;
+      else if (typeof fv.value === "string") {
+        const s = fv.value.trim().toLowerCase();
+        if (s === "true" || s === "1") b = true;
+        if (s === "false" || s === "0") b = false;
+      } else if (typeof fv.value === "number") {
+        if (fv.value === 1) b = true;
+        if (fv.value === 0) b = false;
+      }
+      if (b === null) {
+        return { error: NextResponse.json({ error: `field ${usageFieldId} requires boolean value`, code: "BAD_REQUEST" }, { status: 400 }) };
+      }
+      typedValues.push({ usageFieldId, valueText: null, valueNumber: null, valueDate: null, valueBoolean: b });
+      continue;
+    }
+
+    if (type === "date") {
+      const s = String(fv.value ?? "").trim();
+      const d = new Date(s);
+      if (!s || !Number.isFinite(d.getTime())) {
+        return { error: NextResponse.json({ error: `field ${usageFieldId} requires date value`, code: "BAD_REQUEST" }, { status: 400 }) };
+      }
+      typedValues.push({ usageFieldId, valueText: null, valueNumber: null, valueDate: d.toISOString().slice(0, 10), valueBoolean: null });
+      continue;
+    }
+
+    const text = String(fv.value ?? "").trim();
+    if (!text) {
+      return { error: NextResponse.json({ error: `field ${usageFieldId} requires text value`, code: "BAD_REQUEST" }, { status: 400 }) };
+    }
+    typedValues.push({ usageFieldId, valueText: text, valueNumber: null, valueDate: null, valueBoolean: null });
+  }
+
+  return { typed: typedValues };
 }
 
 async function requireEntityInOrg(db: DataClient, orgId: string, entityId: string) {
@@ -89,6 +223,18 @@ async function getUsageLogById(db: DataClient, orgId: string, id: string) {
     .select("id, organization_id, entity_id")
     .eq("organization_id", orgId)
     .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function getUsageLogByEntityAndDay(db: DataClient, orgId: string, entityId: string, loggedOn: string) {
+  const { data, error } = await db
+    .from("usage_logs")
+    .select("id, organization_id, entity_id")
+    .eq("organization_id", orgId)
+    .eq("entity_id", entityId)
+    .eq("logged_on", loggedOn)
     .maybeSingle();
   if (error) throw error;
   return data || null;
@@ -481,6 +627,146 @@ export async function DELETE(req: Request) {
     }
     return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
+  }
+}
+
+/**
+ * PUT /api/usage-logs
+ * body: { entity_id, value | value_text, logged_on }
+ */
+export async function PUT(req: Request) {
+  try {
+    const { user } = await requireAuthUser(req);
+    const db = createDataServerClient();
+    const access = await getOrgAccess(db, user.id);
+    if ("error" in access) {
+      return NextResponse.json(
+        { error: access.error, code: access.error === "no active organization" ? "NO_ACTIVE_ORGANIZATION" : "FORBIDDEN" },
+        { status: access.error === "no active organization" ? 400 : 403 }
+      );
+    }
+    const [canUsageCapture, canEntities] = await Promise.all([
+      canViewModule(db, access.organizationId, access.role, access.memberTypeId, "usage_capture"),
+      canViewModule(db, access.organizationId, access.role, access.memberTypeId, "entities"),
+    ]);
+    if (!canUsageCapture && !canEntities) {
+      return NextResponse.json({ error: "forbidden", code: "FORBIDDEN" }, { status: 403 });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const parsed = parseUsageLogsCreateBody(body);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error, code: "BAD_REQUEST" }, { status: 400 });
+    const shouldReplaceFieldValues = Array.isArray((body as { field_values?: unknown }).field_values);
+
+    const okEntity = await requireEntityInOrg(db, access.organizationId, parsed.entityId);
+    if (!okEntity) return NextResponse.json({ error: "entity not found", code: "ENTITY_NOT_FOUND" }, { status: 404 });
+
+    const suggestedValues = await getEntityUsageUnitSuggestedValues(db, access.organizationId, parsed.entityId);
+    const suggestedValueError = getSuggestedMainValueError(suggestedValues, parsed.valueNumber, parsed.valueText);
+    if (suggestedValueError) {
+      return NextResponse.json({ error: suggestedValueError, code: "BAD_REQUEST" }, { status: 400 });
+    }
+
+    const existing = await getUsageLogByEntityAndDay(db, access.organizationId, parsed.entityId, parsed.loggedOn);
+    if (!existing) {
+      return NextResponse.json({ error: "usage log not found for day", code: "USAGE_LOG_NOT_FOUND" }, { status: 404 });
+    }
+
+    if (parsed.valueNumber != null) {
+      const bounds = await getNumericUsageBounds(db, access.organizationId, parsed.entityId, parsed.loggedOn);
+      if (bounds.previous && parsed.valueNumber < bounds.previous.value) {
+        return NextResponse.json(
+          {
+            error: `El valor no puede ser menor al registro anterior (${bounds.previous.value}).`,
+            code: "USAGE_VALUE_CANNOT_DECREASE",
+          },
+          { status: 400 }
+        );
+      }
+      if (bounds.next && parsed.valueNumber > bounds.next.value) {
+        return NextResponse.json(
+          {
+            error: `El valor no puede ser mayor al registro siguiente (${bounds.next.value}).`,
+            code: "USAGE_VALUE_CANNOT_INCREASE_OVER_NEXT",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    const { error: updateErr } = await db
+      .from("usage_logs")
+      .update({
+        value: parsed.valueNumber,
+        value_text: parsed.valueText,
+        logged_at: parsed.loggedAt,
+      })
+      .eq("organization_id", access.organizationId)
+      .eq("id", existing.id);
+    if (updateErr) throw updateErr;
+
+    if (shouldReplaceFieldValues) {
+      const usageUnitId = await getEntityUsageUnitId(db, access.organizationId, parsed.entityId);
+      const normalized = await normalizeFieldValues(db, access.organizationId, usageUnitId, parsed.fieldValues);
+      if ("error" in normalized) return normalized.error;
+
+      const { error: deleteFieldValuesErr } = await db
+        .from("usage_log_field_values")
+        .delete()
+        .eq("organization_id", access.organizationId)
+        .eq("usage_log_id", existing.id);
+      if (deleteFieldValuesErr) throw deleteFieldValuesErr;
+
+      if (normalized.typed.length > 0) {
+        const { error: insertFieldValuesErr } = await db.from("usage_log_field_values").insert(
+          normalized.typed.map((fieldValue) => ({
+            organization_id: access.organizationId,
+            usage_log_id: existing.id,
+            usage_field_id: fieldValue.usageFieldId,
+            value_text: fieldValue.valueText,
+            value_number: fieldValue.valueNumber,
+            value_date: fieldValue.valueDate,
+            value_boolean: fieldValue.valueBoolean,
+          }))
+        );
+        if (insertFieldValuesErr) throw insertFieldValuesErr;
+      }
+    }
+
+    let syncWarning = "";
+    let summaryWarning = "";
+    try {
+      await syncForecastAndAlertsForEntity(db, access.organizationId, parsed.entityId);
+    } catch (syncErr: unknown) {
+      syncWarning = getErrorMessage(syncErr);
+    }
+    try {
+      await refreshDashboardSummary(db, access.organizationId);
+    } catch (summaryErr: unknown) {
+      summaryWarning = getErrorMessage(summaryErr);
+    }
+
+    return NextResponse.json(
+      {
+        id: String(existing.id),
+        entity_id: parsed.entityId,
+        updated: true,
+        ...(syncWarning ? { sync_warning: syncWarning } : {}),
+        ...(summaryWarning ? { summary_warning: summaryWarning } : {}),
+      },
+      { status: 200 }
+    );
+  } catch (error: unknown) {
+    if (isUsageValueNotNullViolation(error)) {
+      return NextResponse.json(
+        {
+          error: "La base actual todavía exige un valor numérico en usage_logs.value. Debe alinearse para permitir registros de texto.",
+          code: "LEGACY_USAGE_VALUE_NOT_NULL",
+        },
+        { status: 500 }
+      );
+    }
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
