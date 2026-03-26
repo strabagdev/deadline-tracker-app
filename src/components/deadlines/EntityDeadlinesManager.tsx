@@ -359,16 +359,13 @@ export default function EntityDeadlinesManager({
     return byDay;
   }, [usageLogs]);
   const usageHistoryDays = useMemo(() => buildMonthDays(usageHistoryMonth), [usageHistoryMonth]);
-  const usageHistoryMonthHasLogs = useMemo(
-    () => usageHistoryDays.some((day) => usageLogsByDay.has(day.key)),
-    [usageHistoryDays, usageLogsByDay]
-  );
   const selectedUsageLog = useMemo(
     () => (selectedUsageLogDay ? usageLogsByDay.get(selectedUsageLogDay) ?? null : null),
     [selectedUsageLogDay, usageLogsByDay]
   );
+  const isEditingSelectedUsageLog = Boolean(selectedUsageLog?.id);
   const usageLogPrimaryWarning = useMemo(() => {
-    if (usageLogExistsForSelectedDay) return "Para esta fecha ya hay un registro.";
+    if (!isEditingSelectedUsageLog && usageLogExistsForSelectedDay) return "Para esta fecha ya hay un registro.";
     if (usageSuggestedValueError) return usageSuggestedValueError;
     if (usageLogWouldDecrease) {
       return `El valor no puede ser menor al registro anterior (${previousNumericUsageValue}).`;
@@ -380,6 +377,7 @@ export default function EntityDeadlinesManager({
   }, [
     nextNumericUsageValue,
     previousNumericUsageValue,
+    isEditingSelectedUsageLog,
     usageLogExistsForSelectedDay,
     usageLogWouldDecrease,
     usageLogWouldExceedNext,
@@ -417,10 +415,6 @@ export default function EntityDeadlinesManager({
   }, []);
 
   useEffect(() => {
-    if (usageLogsByDay.size === 0) {
-      setSelectedUsageLogDay("");
-      return;
-    }
     if (selectedUsageLogDay && usageHistoryDays.some((day) => day.key === selectedUsageLogDay)) return;
     const firstDayWithLogInMonth = usageHistoryDays.find((day) => usageLogsByDay.has(day.key));
     if (firstDayWithLogInMonth) {
@@ -429,6 +423,16 @@ export default function EntityDeadlinesManager({
     }
     setSelectedUsageLogDay(usageHistoryDays[0]?.key ?? "");
   }, [selectedUsageLogDay, usageHistoryDays, usageLogsByDay]);
+
+  useEffect(() => {
+    if (!selectedUsageLogDay) return;
+    setUsageLogLoggedAt(selectedUsageLogDay);
+  }, [selectedUsageLogDay]);
+
+  useEffect(() => {
+    if (!selectedUsageLogDay) return;
+    setUsageLogValue(selectedUsageLog ? renderUsageMainValue(selectedUsageLog) : "");
+  }, [selectedUsageLog, selectedUsageLogDay]);
 
   async function bootstrap(loadDetails = true) {
     setLoading(true);
@@ -510,7 +514,7 @@ export default function EntityDeadlinesManager({
     setDeadlines(json.deadlines ?? []);
   }
 
-  async function loadUsageLogs(limit = 10) {
+  async function loadUsageLogs(limit = 400) {
     const token = await getToken();
     if (!token) {
       setUsageLogsBusy(false);
@@ -701,12 +705,83 @@ export default function EntityDeadlinesManager({
       return;
     }
 
-    setUsageLogValue("");
-    setUsageLogLoggedAt(isoToLocalDateInput(new Date().toISOString()));
     await loadUsageLogs();
     setUsageLogsMsgTone("success");
     setUsageLogsMsg("Registro de uso guardado.");
     notify.success("Registro de uso guardado.");
+    setUsageLogsBusy(false);
+  }
+
+  async function updateUsageLog() {
+    if (!selectedUsageLogDay) return;
+
+    setUsageLogsBusy(true);
+    setUsageLogsMsg("");
+    setUsageLogsMsgTone("error");
+
+    const token = await getToken();
+    if (!token) {
+      setUsageLogsBusy(false);
+      return;
+    }
+
+    const cleanUsageValue = String(usageLogValue ?? "").trim();
+    if (usageSuggestedValueError) {
+      setUsageLogsMsg(usageSuggestedValueError);
+      notify.error(usageSuggestedValueError);
+      setUsageLogsBusy(false);
+      return;
+    }
+    if (!cleanUsageValue) {
+      setUsageLogsMsg("Ingresa un valor de uso válido");
+      notify.error("Ingresa un valor de uso válido");
+      setUsageLogsBusy(false);
+      return;
+    }
+
+    const valueNum = Number(cleanUsageValue);
+    const isNumericMainValue = Number.isFinite(valueNum);
+    if (usageSuggestedValues.length === 0 && !isNumericMainValue) {
+      setUsageLogsMsg("Ingresa un valor numérico válido");
+      notify.error("Ingresa un valor numérico válido");
+      setUsageLogsBusy(false);
+      return;
+    }
+    if (isNumericMainValue && usageLogWouldDecrease) {
+      setUsageLogsMsg(`El valor no puede ser menor al registro anterior (${previousNumericUsageValue}).`);
+      setUsageLogsBusy(false);
+      return;
+    }
+    if (isNumericMainValue && usageLogWouldExceedNext) {
+      setUsageLogsMsg(`El valor no puede ser mayor al registro siguiente (${nextNumericUsageValue}).`);
+      setUsageLogsBusy(false);
+      return;
+    }
+
+    const res = await fetch("/api/usage-logs", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        entity_id: entityId,
+        ...(isNumericMainValue ? { value: valueNum } : { value_text: cleanUsageValue }),
+        logged_on: selectedUsageLogDay,
+      }),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setUsageLogsMsgTone("error");
+      const message = json.error || "No se pudo actualizar el registro de uso";
+      setUsageLogsMsg(message);
+      notify.error(message);
+      setUsageLogsBusy(false);
+      return;
+    }
+
+    await loadUsageLogs();
+    setUsageLogsMsgTone("success");
+    setUsageLogsMsg("Registro de uso actualizado.");
+    notify.success("Registro de uso actualizado.");
     setUsageLogsBusy(false);
   }
 
@@ -900,171 +975,187 @@ export default function EntityDeadlinesManager({
                 </p>
               ) : null}
 
-              <div className="mt-3 grid gap-2 md:grid-cols-[minmax(180px,1fr)_180px_auto] md:items-end">
-                <label className="grid gap-1 text-xs text-slate-600">
-                  Valor de uso
-                  {usageSuggestedValues.length > 0 ? (
-                    <div className="flex min-h-10 flex-wrap gap-1 rounded-xl border border-slate-300 bg-white px-2 py-2">
-                      {usageSuggestedValues.map((opt) => {
-                        const current = String(usageLogValue ?? "").trim();
-                        const active = current === opt;
-                        return (
-                          <button
-                            key={`usage-suggested-${opt}`}
-                            type="button"
-                            disabled={usageLogsBusy}
-                            onClick={() => setUsageLogValue(current === opt ? "" : opt)}
-                            className={[
-                              "rounded-full border px-2.5 py-1 text-[10px] transition",
-                              active
-                                ? "border-emerald-600 bg-emerald-50 text-emerald-700"
-                                : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
-                            ].join(" ")}
-                          >
-                            {opt}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <Input
-                      inputMode="decimal"
-                      value={usageLogValue}
-                      onChange={(e) => setUsageLogValue(e.target.value)}
-                      placeholder={selectedUsageUnit?.name ? `Valor (${selectedUsageUnit.name})` : "Ej: 1530"}
-                      disabled={usageLogsBusy}
-                    />
-                  )}
-                </label>
-
-                <label className="grid gap-1 text-xs text-slate-600">
-                  Fecha
-                  <Input
-                    type="date"
-                    value={usageLogLoggedAt}
-                    onChange={(e) => setUsageLogLoggedAt(e.target.value)}
-                    disabled={usageLogsBusy}
-                  />
-                </label>
-
-                <Button
-                  onClick={createUsageLog}
-                  disabled={usageLogsBusy || usageLogExistsForSelectedDay || usageLogWouldDecrease || usageLogWouldExceedNext || Boolean(usageSuggestedValueError)}
-                  className="min-h-10"
-                  title={usageSuggestedValueError || undefined}
-                >
-                  {usageLogsBusy ? "Guardando..." : "Guardar uso"}
-                </Button>
-              </div>
-
-              {usageLogPrimaryWarning ? (
-                <p className="mt-2 text-sm text-amber-700">{usageLogPrimaryWarning}</p>
-              ) : null}
-
               <div className="mt-3 space-y-2">
-                <div className="text-xs font-semibold text-slate-700">Últimos registros</div>
-                {usageLogs.length === 0 ? (
-                  <p className="text-sm text-slate-500">Aún no hay registros de uso para esta entidad.</p>
-                ) : (
-                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
-                    <div className="rounded-[18px] border border-slate-200 bg-[linear-gradient(180deg,#fbfdff,#f8fafc)] p-3">
-                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-semibold text-slate-700">Historial de registros</div>
+                <div className="grid gap-3 xl:grid-cols-[minmax(380px,1fr)_minmax(300px,380px)] xl:items-stretch xl:justify-between">
+                    <div className="flex h-full max-w-full flex-col rounded-[16px] border border-slate-200 bg-[linear-gradient(180deg,#fbfdff,#f8fafc)] p-3 shadow-sm">
+                      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <div className="text-xs font-semibold text-slate-700">Mosaico histórico</div>
-                          <div className="text-[11px] text-slate-500">Lectura cronológica por día.</div>
+                          <div className="text-[11px] font-semibold text-slate-700">Mosaico histórico</div>
+                          <div className="text-[10px] text-slate-500">Selecciona un día para crear o editar su registro.</div>
                         </div>
                         <div className="flex items-center gap-1">
-                          <Button type="button" variant="outline" size="sm" onClick={() => setUsageHistoryMonth((current) => shiftMonth(current, -1))}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-6 min-w-6 rounded-md px-1.5 text-[10px] sm:h-6"
+                            onClick={() => setUsageHistoryMonth((current) => shiftMonth(current, -1))}
+                          >
                             ‹
                           </Button>
-                          <div className="min-w-[132px] text-center text-xs font-medium capitalize text-slate-700">
+                          <div className="min-w-[112px] text-center text-[10px] font-medium capitalize text-slate-700">
                             {monthLabel(usageHistoryMonth)}
                           </div>
-                          <Button type="button" variant="outline" size="sm" onClick={() => setUsageHistoryMonth((current) => shiftMonth(current, 1))}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-6 min-w-6 rounded-md px-1.5 text-[10px] sm:h-6"
+                            onClick={() => setUsageHistoryMonth((current) => shiftMonth(current, 1))}
+                          >
                             ›
                           </Button>
                         </div>
                       </div>
-                      {usageHistoryMonthHasLogs ? (
-                        <div className="grid grid-cols-7 gap-1.5">
-                          {usageHistoryDays.map((day) => {
-                            const hasLog = usageLogsByDay.has(day.key);
-                            const selected = selectedUsageLogDay === day.key;
-                            const selectedLog = usageLogsByDay.get(day.key);
-                            const label = hasLog
-                              ? `${day.key} · ${renderUsageMainValue(selectedLog as UsageLogRow)}`
-                              : `${day.key} · Sin registro`;
-                            return (
-                              <button
-                                key={day.key}
-                                type="button"
-                                onClick={() => setSelectedUsageLogDay(day.key)}
-                                title={label}
-                                className={[
-                                  "flex aspect-square min-h-8 items-center justify-center rounded-[7px] border text-[11px] font-medium transition hover:scale-[1.04]",
-                                  selected
-                                    ? "border-sky-300 bg-sky-100 text-sky-800 shadow-[0_0_0_1px_rgba(125,211,252,0.35)]"
-                                    : hasLog
-                                      ? "border-emerald-200 bg-emerald-500/80 text-white hover:border-emerald-300"
-                                      : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:bg-slate-50",
-                                ].join(" ")}
-                                aria-label={label}
-                              >
-                                {day.dayNumber}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="rounded-[14px] border border-dashed border-slate-200 bg-white px-3 py-5 text-sm text-slate-500">
-                          No hay registros en {monthLabel(usageHistoryMonth)}.
-                        </div>
-                      )}
-                      <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
-                        <div className="inline-flex items-center gap-2">
-                          <span className="h-3 w-3 rounded-[4px] border border-emerald-200 bg-emerald-500/80" />
+                      <div className="inline-grid grid-cols-7 gap-1.5 align-top xl:flex-1 xl:content-start">
+                        {usageHistoryDays.map((day) => {
+                          const hasLog = usageLogsByDay.has(day.key);
+                          const selected = selectedUsageLogDay === day.key;
+                          const selectedLog = usageLogsByDay.get(day.key);
+                          const label = hasLog
+                            ? `${day.key} · ${renderUsageMainValue(selectedLog as UsageLogRow)}`
+                            : `${day.key} · Sin registro`;
+                          return (
+                            <button
+                              key={day.key}
+                              type="button"
+                              onClick={() => setSelectedUsageLogDay(day.key)}
+                              title={label}
+                              className={[
+                                "flex h-7 w-7 items-center justify-center rounded-[6px] border text-[10px] font-medium leading-none transition hover:scale-[1.02] xl:h-8 xl:w-8 xl:text-[11px]",
+                                selected
+                                  ? "border-sky-300 bg-sky-100 text-sky-800 shadow-[0_0_0_1px_rgba(125,211,252,0.35)]"
+                                  : hasLog
+                                    ? "border-emerald-200 bg-emerald-500/80 text-white hover:border-emerald-300"
+                                    : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:bg-slate-50",
+                              ].join(" ")}
+                              aria-label={label}
+                            >
+                              {day.dayNumber}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {usageLogs.length === 0 ? (
+                        <div className="mt-1.5 text-[10px] text-slate-500">Aun no hay registros. Selecciona cualquier dia para ingresar uno.</div>
+                      ) : null}
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-[9px] text-slate-500">
+                        <div className="inline-flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-[2px] border border-emerald-200 bg-emerald-500/80" />
                           Día con registro
                         </div>
-                        <div className="inline-flex items-center gap-2">
-                          <span className="h-3 w-3 rounded-[4px] border border-slate-200 bg-white" />
+                        <div className="inline-flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-[2px] border border-slate-200 bg-white" />
                           Sin registro
                         </div>
-                        <div className="inline-flex items-center gap-2">
-                          <span className="h-3 w-3 rounded-[4px] border border-sky-300 bg-sky-100" />
+                        <div className="inline-flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-[2px] border border-sky-300 bg-sky-100" />
                           Seleccionado
                         </div>
                       </div>
                     </div>
 
                     {selectedUsageLogDay ? (
-                      <div className="rounded-[18px] border border-slate-200 bg-white p-3">
-                        <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 rounded-[16px] border border-slate-200 bg-white p-2.5 shadow-sm">
+                        <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
                           <div className="min-w-0">
-                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Detalle del día</div>
+                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Editor del día</div>
                             <div className="mt-1 text-sm font-semibold text-slate-900">{formatDisplayDate(selectedUsageLogDay)}</div>
-                            <div className="mt-1 text-xs text-slate-500">{selectedUsageLog ? "Registro encontrado." : "Sin registro para esta fecha."}</div>
+                            <div className="mt-1 text-xs text-slate-500">{selectedUsageLog ? "Registro encontrado. Puedes actualizarlo o eliminarlo." : "Día libre. Puedes ingresar un nuevo valor."}</div>
                           </div>
-                          {selectedUsageLog ? (
-                            <Button
-                              onClick={() => deleteUsageLog(selectedUsageLog.id)}
-                              disabled={usageLogsBusy}
-                              variant="outline"
-                              size="sm"
-                            >
-                              Eliminar
-                            </Button>
-                          ) : null}
+                          <span
+                            className={[
+                              "inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium",
+                              selectedUsageLog ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500",
+                            ].join(" ")}
+                          >
+                            {selectedUsageLog ? "Con registro" : "Sin registro"}
+                          </span>
                         </div>
-                        <div className="mt-3 grid gap-2 text-xs text-slate-600">
+
+                        <div className="mt-2.5 grid gap-2.5">
+                          <label className="grid gap-1 text-xs text-slate-600">
+                            Valor de uso
+                            {usageSuggestedValues.length > 0 ? (
+                              <div className="flex min-h-12 flex-wrap gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-3">
+                                {usageSuggestedValues.map((opt) => {
+                                  const current = String(usageLogValue ?? "").trim();
+                                  const active = current === opt;
+                                  return (
+                                    <button
+                                      key={`usage-suggested-${opt}`}
+                                      type="button"
+                                      disabled={usageLogsBusy}
+                                      onClick={() => setUsageLogValue(current === opt ? "" : opt)}
+                                      className={[
+                                        "rounded-full border px-3 py-1.5 text-[11px] transition",
+                                        active
+                                          ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                          : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                                      ].join(" ")}
+                                    >
+                                      {opt}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <Input
+                                inputMode="decimal"
+                                value={usageLogValue}
+                                onChange={(e) => setUsageLogValue(e.target.value)}
+                                placeholder={selectedUsageUnit?.name ? `Valor (${selectedUsageUnit.name})` : "Ej: 1530"}
+                                disabled={usageLogsBusy}
+                                className="h-12 text-base"
+                              />
+                            )}
+                          </label>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              onClick={isEditingSelectedUsageLog ? updateUsageLog : createUsageLog}
+                              disabled={
+                                usageLogsBusy ||
+                                !selectedUsageLogDay ||
+                                (!isEditingSelectedUsageLog && usageLogExistsForSelectedDay) ||
+                                usageLogWouldDecrease ||
+                                usageLogWouldExceedNext ||
+                                Boolean(usageSuggestedValueError)
+                              }
+                              className="min-h-9 flex-1"
+                              title={usageSuggestedValueError || undefined}
+                            >
+                              {usageLogsBusy ? (isEditingSelectedUsageLog ? "Actualizando..." : "Guardando...") : isEditingSelectedUsageLog ? "Actualizar uso" : "Guardar uso"}
+                            </Button>
+                            {selectedUsageLog ? (
+                              <Button
+                                onClick={() => deleteUsageLog(selectedUsageLog.id)}
+                                disabled={usageLogsBusy}
+                                variant="outline"
+                                size="sm"
+                                className="min-h-9"
+                              >
+                                Eliminar
+                              </Button>
+                            ) : null}
+                          </div>
+
+                          {usageLogPrimaryWarning ? (
+                            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">{usageLogPrimaryWarning}</p>
+                          ) : null}
+
                           {selectedUsageLog ? (
                             <>
-                              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-                                <span className="font-medium text-slate-700">Valor:</span>{" "}
-                                {renderUsageMainValue(selectedUsageLog)}
-                              </div>
-                              <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-                                <span className="font-medium text-slate-700">Registrado:</span>{" "}
-                                {new Date(selectedUsageLog.logged_at).toLocaleString()}
+                              <div className="grid gap-2 text-xs text-slate-600">
+                                <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+                                  <div className="font-medium text-slate-700">Valor actual</div>
+                                  <div className="mt-1 text-sm font-semibold text-slate-900">{renderUsageMainValue(selectedUsageLog)}</div>
+                                </div>
+                                <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
+                                  <div className="font-medium text-slate-700">Registrado</div>
+                                  <div className="mt-1 text-sm font-semibold text-slate-900">{new Date(selectedUsageLog.logged_at).toLocaleString()}</div>
+                                </div>
                               </div>
                               {Array.isArray(selectedUsageLog.field_values) && selectedUsageLog.field_values.length > 0 ? (
                                 <div className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
@@ -1084,15 +1175,14 @@ export default function EntityDeadlinesManager({
                               )}
                             </>
                           ) : (
-                            <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50/70 px-3 py-3 text-slate-500">
-                              No hay registro guardado para esta fecha en el mes seleccionado.
+                            <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50/70 px-3 py-3 text-sm text-slate-500">
+                              No hay registro guardado para esta fecha. Ingresa un valor y guárdalo desde este panel.
                             </div>
                           )}
                         </div>
                       </div>
                     ) : null}
-                  </div>
-                )}
+                </div>
               </div>
             </>
           ) : null}
