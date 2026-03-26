@@ -37,6 +37,8 @@ type SavedUsageLog = {
 
 type PendingSaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
+const LOCAL_DRAFTS_KEY_PREFIX = "usage-capture-pending-drafts";
+
 function todayDateInput() {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -119,6 +121,12 @@ export default function FocusedUsageCapturePage() {
   const registeredPageSize = 10;
   const notify = useNotify();
   const pendingSaveSeqRef = useRef<Record<string, number>>({});
+  const pendingRetryTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const restoredAutoFlushRef = useRef<Record<string, string>>({});
+  const pendingDraftsStorageKey = useMemo(
+    () => `${LOCAL_DRAFTS_KEY_PREFIX}:${entityTypeName}:${loggedOn}`,
+    [entityTypeName, loggedOn]
+  );
 
   const filteredEntities = useMemo(() => {
     const needle = entitySearch.trim().toLowerCase();
@@ -351,6 +359,12 @@ export default function FocusedUsageCapturePage() {
     setBulkFieldDraftByEntity({});
     setPendingSaveStateByEntity({});
     setPendingSaveMessageByEntity({});
+    restoredAutoFlushRef.current = {};
+    Object.keys(pendingRetryTimerRef.current).forEach((entityId) => {
+      const timer = pendingRetryTimerRef.current[entityId];
+      if (timer) clearTimeout(timer);
+      delete pendingRetryTimerRef.current[entityId];
+    });
   }, [loggedOn, entityTypeName]);
   useEffect(() => {
     setPendingSecondaryMenuOpen(false);
@@ -379,6 +393,12 @@ export default function FocusedUsageCapturePage() {
       setOperativeEntityId("");
     }
   }, [operativeEntities, operativeEntityId]);
+  useEffect(() => {
+    return () => {
+      Object.values(pendingRetryTimerRef.current).forEach((timer) => clearTimeout(timer));
+      pendingRetryTimerRef.current = {};
+    };
+  }, []);
 
   function parseRawValue(rawValue: string): { value: number | null; valueText: string | null; error?: string } {
     const clean = String(rawValue ?? "").trim();
@@ -458,23 +478,54 @@ export default function FocusedUsageCapturePage() {
       : "border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fafc)]";
   }
 
+  function getPendingDraftSnapshot(entity: Entity) {
+    return {
+      mainValue: String(bulkDraftByEntity[entity.id] ?? "").trim(),
+      fieldDrafts: bulkFieldDraftByEntity[entity.id] ?? {},
+    };
+  }
+
+  function isPendingEntityComplete(entity: Entity) {
+    const { mainValue, fieldDrafts } = getPendingDraftSnapshot(entity);
+    const parsed = parseRawValue(mainValue);
+    if (parsed.error || (parsed.value == null && !parsed.valueText)) return false;
+    if (getSuggestedMainValueError(entity, mainValue)) return false;
+    return (entity.fields ?? []).every((field) => String(fieldDrafts[field.id] ?? "").trim().length > 0);
+  }
+
+  function clearPendingRetry(entityId: string) {
+    const timer = pendingRetryTimerRef.current[entityId];
+    if (timer) clearTimeout(timer);
+    delete pendingRetryTimerRef.current[entityId];
+  }
+
+  function isRetryableSaveError(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error ?? "");
+    return /fetch failed|failed to fetch|networkerror|econnreset|load failed/i.test(message);
+  }
+
   async function submitPendingPayload(
     token: string,
     payload: Record<string, unknown>,
     preferUpdate: boolean
   ) {
     const send = async (method: "POST" | "PUT") => {
-      const res = await fetch("/api/usage-capture/log", {
-        method,
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json().catch(() => ({}));
-      return { res, json };
+      try {
+        const res = await fetch("/api/usage-capture/log", {
+          method,
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload),
+        });
+        const json = await res.json().catch(() => ({}));
+        return { res, json, error: null };
+      } catch (error) {
+        return { res: null, json: {}, error };
+      }
     };
 
     const firstMethod = preferUpdate ? "PUT" : "POST";
     const first = await send(firstMethod);
+    if (first.error || !first.res) return first;
     if (first.res.ok) return first;
 
     if (firstMethod === "PUT" && first.res.status === 404) {
@@ -488,7 +539,8 @@ export default function FocusedUsageCapturePage() {
 
   async function savePendingEntity(
     entity: Entity,
-    overrides?: { mainValue?: string; fieldDrafts?: Record<string, string> }
+    overrides?: { mainValue?: string; fieldDrafts?: Record<string, string> },
+    isRetry = false
   ) {
     const entityId = entity.id;
     const rawValue = String(overrides?.mainValue ?? bulkDraftByEntity[entityId] ?? "").trim();
@@ -531,6 +583,7 @@ export default function FocusedUsageCapturePage() {
 
     const requestId = (pendingSaveSeqRef.current[entityId] ?? 0) + 1;
     pendingSaveSeqRef.current[entityId] = requestId;
+    clearPendingRetry(entityId);
     setPendingRowState(entityId, "saving", "Guardando...");
 
     const payload: Record<string, unknown> = {
@@ -543,8 +596,27 @@ export default function FocusedUsageCapturePage() {
     else if (parsed.valueText) payload.value_text = parsed.valueText;
 
     const preferUpdate = Boolean(entity.logged_days?.includes(loggedOn) || savedLogsByEntity[entityId]);
-    const { res, json } = await submitPendingPayload(token, payload, preferUpdate);
+    const { res, json, error } = await submitPendingPayload(token, payload, preferUpdate);
     if (pendingSaveSeqRef.current[entityId] !== requestId) return;
+
+    if (error || !res) {
+      const retryable = isRetryableSaveError(error);
+      setPendingRowState(
+        entityId,
+        "error",
+        retryable
+          ? isRetry
+            ? "Sin conexión. Seguimos reintentando..."
+            : "Sin conexión. Reintentaremos automáticamente."
+          : "No se pudo guardar el registro."
+      );
+      if (retryable) {
+        pendingRetryTimerRef.current[entityId] = setTimeout(() => {
+          void savePendingEntity(entity, overrides, true);
+        }, 2000);
+      }
+      return;
+    }
 
     if (!res.ok) {
       const message =
@@ -553,6 +625,7 @@ export default function FocusedUsageCapturePage() {
       return;
     }
 
+    clearPendingRetry(entityId);
     setEntities((prev) =>
       prev.map((item) => {
         if (item.id !== entityId) return item;
@@ -582,6 +655,81 @@ export default function FocusedUsageCapturePage() {
     if (state === "dirty") return "border-amber-200 bg-amber-50 text-amber-700";
     return "border-slate-200 bg-slate-50 text-slate-500";
   }
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !loggedOn || entities.length === 0) return;
+    const allowedEntityIds = new Set(entities.map((entity) => entity.id));
+    try {
+      const raw = window.localStorage.getItem(pendingDraftsStorageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        main?: Record<string, string>;
+        fields?: Record<string, Record<string, string>>;
+      };
+      const nextMain = Object.fromEntries(
+        Object.entries(parsed.main ?? {}).filter(([entityId, value]) => allowedEntityIds.has(entityId) && String(value ?? "").trim().length > 0)
+      );
+      const nextFields = Object.fromEntries(
+        Object.entries(parsed.fields ?? {}).flatMap(([entityId, fieldMap]) => {
+          if (!allowedEntityIds.has(entityId) || !fieldMap || typeof fieldMap !== "object") return [];
+          const filtered = Object.fromEntries(
+            Object.entries(fieldMap).filter(([, value]) => String(value ?? "").trim().length > 0)
+          );
+          return Object.keys(filtered).length > 0 ? [[entityId, filtered]] : [];
+        })
+      );
+      setBulkDraftByEntity(nextMain);
+      setBulkFieldDraftByEntity(nextFields);
+    } catch {
+      // Ignore invalid local draft payloads.
+    }
+  }, [entities, loggedOn, pendingDraftsStorageKey]);
+  useEffect(() => {
+    if (typeof window === "undefined" || !loggedOn) return;
+    const mainEntries = Object.entries(bulkDraftByEntity).filter(([, value]) => String(value ?? "").trim().length > 0);
+    const fieldEntries = Object.entries(bulkFieldDraftByEntity)
+      .map(([entityId, fieldMap]) => [
+        entityId,
+        Object.fromEntries(
+          Object.entries(fieldMap ?? {}).filter(([, value]) => String(value ?? "").trim().length > 0)
+        ),
+      ] as const)
+      .filter(([, fieldMap]) => Object.keys(fieldMap).length > 0);
+
+    if (mainEntries.length === 0 && fieldEntries.length === 0) {
+      window.localStorage.removeItem(pendingDraftsStorageKey);
+      return;
+    }
+
+    window.localStorage.setItem(
+      pendingDraftsStorageKey,
+      JSON.stringify({
+        main: Object.fromEntries(mainEntries),
+        fields: Object.fromEntries(fieldEntries),
+      })
+    );
+  }, [bulkDraftByEntity, bulkFieldDraftByEntity, loggedOn, pendingDraftsStorageKey]);
+  useEffect(() => {
+    if (!loggedOn || entities.length === 0) return;
+    for (const entity of entities) {
+      if (entity.logged_days?.includes(loggedOn)) continue;
+      if (!hasPendingDraft(entity)) continue;
+      if (!isPendingEntityComplete(entity)) continue;
+      if (pendingSaveStateByEntity[entity.id] === "saving") continue;
+
+      const snapshot = JSON.stringify({
+        main: String(bulkDraftByEntity[entity.id] ?? "").trim(),
+        fields: bulkFieldDraftByEntity[entity.id] ?? {},
+      });
+      if (restoredAutoFlushRef.current[entity.id] === snapshot) continue;
+      restoredAutoFlushRef.current[entity.id] = snapshot;
+
+      const { mainValue, fieldDrafts } = getPendingDraftSnapshot(entity);
+      void savePendingEntity(entity, { mainValue, fieldDrafts });
+    }
+    // We intentionally key this effect off restored drafts and row state, not helper identities.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bulkDraftByEntity, bulkFieldDraftByEntity, entities, loggedOn, pendingSaveStateByEntity]);
 
   async function fetchSavedLog(token: string, entityId: string) {
     setLoadingSavedByEntity((prev) => ({ ...prev, [entityId]: true }));
