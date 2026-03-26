@@ -698,10 +698,14 @@ export default function OperationsPage() {
                           <div className="rounded-[16px] border p-4" style={{ borderColor: tone.border, background: tone.soft }}>
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <div className="truncate text-base font-semibold text-slate-950">{e.name}</div>
-                                <div className="mt-1 text-xs text-slate-500">{e.entity_types?.name ?? "Sin tipo"}</div>
+                                <div className="break-words text-base font-semibold leading-6 text-slate-950">{e.name}</div>
+                                <div className="mt-1 break-words text-xs text-slate-500">{e.entity_types?.name ?? "Sin tipo"}</div>
                               </div>
-                              <Badge variant="outline" className="text-[11px] font-semibold" style={{ borderColor: tone.border, color: tone.strong }}>
+                              <Badge
+                                variant="outline"
+                                className="max-w-[11rem] shrink-0 whitespace-normal break-words text-[11px] font-semibold leading-4 text-center"
+                                style={{ borderColor: tone.border, color: tone.strong }}
+                              >
                                 {selectedRow.hasActiveDeadlines ? nearest?.label ?? "Sin info" : "Sin vencimientos"}
                               </Badge>
                             </div>
