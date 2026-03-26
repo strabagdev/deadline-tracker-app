@@ -34,6 +34,18 @@ function getErrorMessage(error: unknown): string {
   return "No se pudo guardar el registro de uso.";
 }
 
+function isTransientNetworkError(error: unknown) {
+  const text = getErrorMessage(error).toLowerCase();
+  return (
+    text.includes("fetch failed") ||
+    text.includes("connect timeout") ||
+    text.includes("und_err_connect_timeout") ||
+    text.includes("econnreset") ||
+    text.includes("etimedout") ||
+    text.includes("network")
+  );
+}
+
 function isUsagePerDayUniqueViolation(error: unknown) {
   if (!error || typeof error !== "object") return false;
   const maybe = error as { code?: string; message?: string; details?: string };
@@ -427,6 +439,12 @@ export async function GET(req: Request) {
       },
     });
   } catch (error: unknown) {
+    if (isTransientNetworkError(error)) {
+      return NextResponse.json(
+        { error: getErrorMessage(error), code: "TRANSIENT_NETWORK_ERROR" },
+        { status: 503 }
+      );
+    }
     if (isUsagePerDayUniqueViolation(error)) {
       return NextResponse.json(
         { error: "Para esta fecha ya hay un registro de uso.", code: "USAGE_ALREADY_EXISTS_FOR_DAY" },
@@ -539,6 +557,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json(response.body, { status: response.status });
   } catch (error: unknown) {
+    if (isTransientNetworkError(error)) {
+      return NextResponse.json(
+        { error: getErrorMessage(error), code: "TRANSIENT_NETWORK_ERROR" },
+        { status: 503 }
+      );
+    }
     if (isUsagePerDayUniqueViolation(error)) {
       return NextResponse.json(
         { error: "Ya existe un registro para esta entidad en esa fecha.", code: "USAGE_ALREADY_EXISTS_FOR_DAY" },
@@ -677,6 +701,12 @@ export async function PUT(req: Request) {
 
     return NextResponse.json({ id: String(existing.id), entity_id: parsed.entityId, updated: true }, { status: 200 });
   } catch (error: unknown) {
+    if (isTransientNetworkError(error)) {
+      return NextResponse.json(
+        { error: getErrorMessage(error), code: "TRANSIENT_NETWORK_ERROR" },
+        { status: 503 }
+      );
+    }
     if (isUsagePerDayUniqueViolation(error)) {
       return NextResponse.json(
         { error: "Para esta fecha ya hay un registro de uso.", code: "USAGE_ALREADY_EXISTS_FOR_DAY" },

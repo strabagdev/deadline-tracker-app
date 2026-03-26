@@ -501,7 +501,15 @@ export default function FocusedUsageCapturePage() {
 
   function isRetryableSaveError(error: unknown) {
     const message = error instanceof Error ? error.message : String(error ?? "");
-    return /fetch failed|failed to fetch|networkerror|econnreset|load failed/i.test(message);
+    return /fetch failed|failed to fetch|networkerror|econnreset|load failed|connect timeout|und_err_connect_timeout/i.test(message);
+  }
+
+  function isRetryableSaveResponse(res: Response, json: unknown) {
+    const code =
+      json && typeof json === "object" && "code" in json ? String((json as { code?: unknown }).code ?? "").trim() : "";
+    const message =
+      json && typeof json === "object" && "error" in json ? String((json as { error?: unknown }).error ?? "").trim() : "";
+    return res.status === 503 || code === "TRANSIENT_NETWORK_ERROR" || isRetryableSaveError(message);
   }
 
   async function submitPendingPayload(
@@ -621,6 +629,17 @@ export default function FocusedUsageCapturePage() {
     if (!res.ok) {
       const message =
         json && typeof json === "object" && "error" in json ? String(json.error ?? "").trim() : "No se pudo guardar el registro.";
+      if (isRetryableSaveResponse(res, json)) {
+        setPendingRowState(
+          entityId,
+          "error",
+          isRetry ? "Sin conexión. Seguimos reintentando..." : "Sin conexión. Reintentaremos automáticamente."
+        );
+        pendingRetryTimerRef.current[entityId] = setTimeout(() => {
+          void savePendingEntity(entity, overrides, true);
+        }, 2000);
+        return;
+      }
       setPendingRowState(entityId, "error", message);
       return;
     }

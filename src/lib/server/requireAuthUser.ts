@@ -16,6 +16,8 @@ function isTransientAuthError(error: unknown) {
   const text = getErrorText(error).toLowerCase();
   return (
     text.includes("fetch failed") ||
+    text.includes("connect timeout") ||
+    text.includes("und_err_connect_timeout") ||
     text.includes("econnreset") ||
     text.includes("etimedout") ||
     text.includes("socket hang up") ||
