@@ -361,6 +361,14 @@ export async function GET(req: Request) {
     const queryNeedle = query.toLowerCase();
     const entityTypeIdFilter = String(url.searchParams.get("entity_type_id") ?? "").trim();
     const secondaryFilter = String(url.searchParams.get("secondary") ?? "").trim();
+    const secondaryFilters = Array.from(
+      new Set(
+        secondaryFilter
+          .split(",")
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0)
+      )
+    );
     const statuses = Array.from(
       new Set(
         statusRaw
@@ -630,17 +638,23 @@ export async function GET(req: Request) {
       if (entityTypeIdFilter) {
         filtered = filtered.filter((e) => String(e.entity_type_id ?? "") === entityTypeIdFilter);
       }
-      if (secondaryFilter) {
-        filtered = filtered.filter((e) =>
-          (e.card_fields ?? []).some((f) => String(f.value_text ?? "").trim() === secondaryFilter)
-        );
-      }
       if (queryNeedle) {
         filtered = filtered.filter((e) => {
           const name = String(e.name ?? "").toLowerCase();
           const typeName = String(e.entity_types?.name ?? "").toLowerCase();
           const nearestName = String(e.nearest_forecast?.deadline_name ?? "").toLowerCase();
           return name.includes(queryNeedle) || typeName.includes(queryNeedle) || nearestName.includes(queryNeedle);
+        });
+      }
+
+      if (secondaryFilters.length > 0) {
+        filtered = filtered.filter((e) => {
+          const cardValueSet = new Set(
+            (e.card_fields ?? [])
+              .map((f) => String(f.value_text ?? "").trim())
+              .filter((value) => value.length > 0)
+          );
+          return secondaryFilters.every((value) => cardValueSet.has(value));
         });
       }
 

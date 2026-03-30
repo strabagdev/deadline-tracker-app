@@ -76,6 +76,16 @@ function IconClearFilters({ className }: IconProps) {
   return <IconRotateClockwise stroke={2} className={cn("h-5 w-5", className)} aria-hidden />;
 }
 
+function InlineSpinner({ className }: { className?: string }) {
+  return (
+    <span className={cn("inline-flex items-center gap-1", className)} aria-hidden>
+      <span className="h-1.5 w-1.5 rounded-full bg-sky-200 animate-pulse [animation-delay:0ms]" />
+      <span className="h-1.5 w-1.5 rounded-full bg-sky-300 animate-pulse [animation-delay:150ms]" />
+      <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse [animation-delay:300ms]" />
+    </span>
+  );
+}
+
 function fmtDate(d: Date | null) {
   if (!d) return "—";
   return d.toLocaleDateString();
@@ -118,12 +128,6 @@ function statusBadgeClasses(s: Status | "all") {
   return statusFilterPalette(s);
 }
 
-function secondaryBadgeClasses(active: boolean) {
-  return active
-    ? "border-sky-200 bg-sky-50 text-sky-700"
-    : "border-slate-200 bg-slate-50 text-slate-600";
-}
-
 function entityTypeBadgeClasses(active: boolean) {
   return active
     ? "border-violet-200 bg-violet-50 text-violet-700"
@@ -160,16 +164,19 @@ function FilterDropdown({
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex min-h-[var(--control-h)] min-w-[170px] items-center justify-between gap-2 rounded-[1.2rem] bg-stone-900 px-3.5 text-left text-stone-50 transition hover:bg-stone-800"
+        className={cn(
+          "flex min-h-[var(--control-h)] min-w-[170px] items-center justify-between gap-2 rounded-[1.2rem] px-3.5 text-left text-stone-50 transition",
+          isDefault ? "bg-transparent hover:bg-white/5" : "bg-stone-900 hover:bg-stone-800"
+        )}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
         <div className="min-w-0">
-          <span className={cn("block truncate text-sm font-medium", isDefault ? "text-stone-400" : "text-stone-50")}>
+          <span className={cn("block truncate text-base font-semibold", isDefault ? "text-stone-50" : "text-stone-50")}>
             {isDefault ? label : selected.label}
           </span>
         </div>
-        <IconChevronDown className={cn("h-4 w-4 shrink-0 text-stone-400 transition-transform", open && "rotate-180")} stroke={2} aria-hidden />
+        <IconChevronDown className={cn("h-4 w-4 shrink-0 text-stone-300 transition-transform", open && "rotate-180")} stroke={2} aria-hidden />
       </button>
 
       {open ? (
@@ -206,6 +213,7 @@ function FilterDropdown({
 
 export default function OperationsPage() {
   const router = useRouter();
+  const operationsPanelRef = useRef<HTMLDivElement | null>(null);
 
   const [entities, setEntities] = useState<EntityRow[]>([]);
   const [usage, setUsage] = useState<LatestUsageByEntity>({});
@@ -215,11 +223,12 @@ export default function OperationsPage() {
   const [errorMsg, setErrorMsg] = useState<string>("");
 
   const [filterStatus, setFilterStatus] = useState<Status | "all">("all");
-  const [filterSecondary, setFilterSecondary] = useState<string>("all");
+  const [filterSecondary, setFilterSecondary] = useState<string[]>([]);
   const [filterEntityType, setFilterEntityType] = useState<string>("all");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [selectedEntityId, setSelectedEntityId] = useState("");
+  const [filtersCollapsed, setFiltersCollapsed] = useState(false);
 
   const [semaphore, setSemaphore] = useState<SemaphoreSettings>({
     yellow_days: 60,
@@ -263,7 +272,7 @@ export default function OperationsPage() {
     });
     if (filterStatus !== "all") params.set("status", filterStatus);
     if (filterEntityType !== "all") params.set("entity_type_id", filterEntityType);
-    if (filterSecondary !== "all") params.set("secondary", filterSecondary);
+    if (filterSecondary.length > 0) params.set("secondary", filterSecondary.join(","));
     if (q.trim()) params.set("q", q.trim());
 
     const res = await fetch(`/api/dashboard?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
@@ -307,6 +316,17 @@ export default function OperationsPage() {
     window.addEventListener("dashboard-refresh", handler);
     return () => window.removeEventListener("dashboard-refresh", handler);
   }, [load]);
+
+  useEffect(() => {
+    if (!selectedEntityId) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!operationsPanelRef.current?.contains(event.target as Node)) {
+        setSelectedEntityId("");
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [selectedEntityId]);
 
   const entityTypeOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -430,7 +450,7 @@ export default function OperationsPage() {
 
   const hasEntities = (meta?.entity_count_in_org ?? entities.length) > 0;
   const hasActiveFilters =
-    q.trim().length > 0 || filterEntityType !== "all" || filterStatus !== "all" || filterSecondary !== "all";
+    q.trim().length > 0 || filterEntityType !== "all" || filterStatus !== "all" || filterSecondary.length > 0;
 
   function countByStatus(s: Status | "all") {
     if (s === "all") return statusCounts.total;
@@ -452,20 +472,8 @@ export default function OperationsPage() {
     [statusFilterMeta, statusCounts]
   );
 
-  const secondaryFilterDropdownOptions = useMemo<FilterDropdownOption[]>(
-    () => [
-      {
-        value: "all",
-        label: "Todos",
-        badgeClassName: secondaryBadgeClasses(filterSecondary === "all"),
-      },
-      ...secondaryFilterOptions.map((opt) => ({
-        value: opt.value,
-        label: opt.value,
-        count: opt.count,
-        badgeClassName: secondaryBadgeClasses(filterSecondary === opt.value),
-      })),
-    ],
+  const selectedSecondaryOptions = useMemo(
+    () => secondaryFilterOptions.filter((option) => filterSecondary.includes(option.value)),
     [filterSecondary, secondaryFilterOptions]
   );
 
@@ -485,6 +493,24 @@ export default function OperationsPage() {
     [entityTypeOptions, filterEntityType]
   );
 
+  const filtersSummary = useMemo(() => {
+    const selectedType = entityTypeDropdownOptions.find((option) => option.value === filterEntityType);
+    const selectedStatus = statusFilterOptions.find((option) => option.value === filterStatus);
+    const clauses: string[] = [];
+
+    if (filterEntityType !== "all" && selectedType) clauses.push(`del tipo ${selectedType.label}`);
+    if (filterStatus !== "all" && selectedStatus) clauses.push(`en estado ${selectedStatus.label.toLowerCase()}`);
+    if (filterSecondary.length > 0) {
+      clauses.push(
+        `con ${filterSecondary.slice(0, 2).join(", ")}${filterSecondary.length > 2 ? ` y ${filterSecondary.length - 2} más` : ""}`
+      );
+    }
+    if (q.trim()) clauses.push(`que coinciden con "${q.trim()}"`);
+
+    if (clauses.length === 0) return "Mostrando todas las entidades";
+    return `Se están mostrando entidades ${clauses.join(" ")}`;
+  }, [entityTypeDropdownOptions, filterEntityType, filterSecondary, filterStatus, q, statusFilterOptions]);
+
   return (
     <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-4 sm:space-y-6">
       <PageHero
@@ -495,75 +521,157 @@ export default function OperationsPage() {
       />
 
       <div className="rounded-[2rem] border border-stone-200 bg-stone-950 px-6 py-6 text-stone-50 shadow-[0_20px_45px_rgba(42,26,8,0.35)]">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <div className="min-w-[240px] flex-[1.2]">
-          <Input
-            id="dashboard_search"
-            value={q}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setPage(1);
-            }}
-            placeholder="Buscar por nombre, tipo o vencimiento..."
-            className="w-full border-0 bg-stone-900 text-stone-50 placeholder:text-stone-400 focus-visible:ring-0 focus-visible:ring-offset-0"
-          />
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-400">Filtros</div>
+            <div className="mt-1 text-sm font-semibold text-stone-50">
+              {hasActiveFilters ? filtersSummary : "Mostrando todas las entidades"}
             </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFiltersCollapsed((current) => !current)}
+            className="inline-flex items-center gap-2 rounded-full bg-stone-900 px-3 py-2 text-sm font-medium text-stone-100 transition hover:bg-stone-800"
+            aria-expanded={!filtersCollapsed}
+            aria-label={filtersCollapsed ? "Expandir filtros" : "Colapsar filtros"}
+          >
+            <span>{filtersCollapsed ? "Mostrar" : "Ocultar"}</span>
+            <IconChevronDown className={cn("h-4 w-4 transition-transform", filtersCollapsed && "rotate-180")} stroke={2} aria-hidden />
+          </button>
+        </div>
+        {!filtersCollapsed ? (
+          <>
+            <div className="mt-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                <div className="min-w-[240px] flex-[1.2]">
+                  <Input
+                    id="dashboard_search"
+                    value={q}
+                    onChange={(e) => {
+                      setQ(e.target.value);
+                      setPage(1);
+                    }}
+                    placeholder="Buscar por nombre, tipo o vencimiento..."
+                    className="w-full border-0 bg-transparent text-xl font-semibold text-stone-50 placeholder:text-lg placeholder:font-semibold placeholder:text-stone-300 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  />
+                </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <FilterDropdown
-                label="Estado"
-                value={filterStatus}
-                options={statusFilterOptions}
-                onSelect={(value) => {
-                  setFilterStatus(value as Status | "all");
-                  setPage(1);
-                }}
-              />
+                <div className="flex flex-wrap items-center gap-2">
+                  <FilterDropdown
+                    label="Tipo"
+                    value={filterEntityType}
+                    options={entityTypeDropdownOptions}
+                    onSelect={(value) => {
+                      setFilterEntityType(value);
+                      setPage(1);
+                    }}
+                  />
 
-              {secondaryFilterOptions.length > 0 ? (
-                <FilterDropdown
-                  label="Secundario"
-                  value={filterSecondary}
-                  options={secondaryFilterDropdownOptions}
-                  onSelect={(value) => {
-                    setFilterSecondary(value);
+                  <FilterDropdown
+                    label="Estado"
+                    value={filterStatus}
+                    options={statusFilterOptions}
+                    onSelect={(value) => {
+                      setFilterStatus(value as Status | "all");
+                      setPage(1);
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setQ("");
+                    setFilterEntityType("all");
+                    setFilterStatus("all");
+                    setFilterSecondary([]);
                     setPage(1);
                   }}
-                />
-              ) : null}
-
-              <FilterDropdown
-                label="Tipo"
-                value={filterEntityType}
-                options={entityTypeDropdownOptions}
-                onSelect={(value) => {
-                  setFilterEntityType(value);
-                  setPage(1);
-                }}
-              />
+                  disabled={!hasActiveFilters}
+                  className="min-h-[var(--control-h)] min-w-[var(--control-h)] shrink-0 border-0 bg-transparent px-0 text-stone-50 hover:bg-white/5 hover:text-stone-50"
+                  title="Limpiar filtros"
+                  aria-label="Limpiar filtros"
+                >
+                  <IconClearFilters />
+                </Button>
+              </div>
             </div>
-          </div>
+            {secondaryFilterOptions.length > 0 ? (
+              <div className="mt-4 rounded-[1.35rem] bg-stone-900/80 px-4 py-4">
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-400">Filtro secundario</div>
+                      <div className="mt-1 flex items-center gap-2 text-sm font-semibold text-stone-50">
+                        {filterSecondary.length > 0
+                          ? `${filterSecondary.length} seleccion${filterSecondary.length === 1 ? "" : "es"}`
+                          : "Selecciona una o varias opciones"}
+                        {loading ? <InlineSpinner /> : null}
+                      </div>
+                    </div>
+                  </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setQ("");
-                setFilterEntityType("all");
-                setFilterStatus("all");
-                setFilterSecondary("all");
-                setPage(1);
-              }}
-              disabled={!hasActiveFilters}
-              className="min-h-[var(--control-h)] min-w-[var(--control-h)] shrink-0 border-0 bg-stone-900 px-0 text-stone-50 hover:bg-stone-800 hover:text-stone-50"
-              title="Limpiar filtros"
-              aria-label="Limpiar filtros"
-            >
-              <IconClearFilters />
-            </Button>
-          </div>
-        </div>
+                  {selectedSecondaryOptions.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedSecondaryOptions.map((option) => (
+                        <button
+                          key={`secondary-selected-${option.value}`}
+                          type="button"
+                          onClick={() => {
+                            setFilterSecondary((current) => current.filter((value) => value !== option.value));
+                            setPage(1);
+                          }}
+                          className="inline-flex items-center gap-2 rounded-full border border-sky-300/20 bg-sky-400/15 px-3 py-1.5 text-xs font-medium text-sky-200 transition hover:bg-sky-400/20"
+                        >
+                          <span className="truncate">{option.value}</span>
+                          <span aria-hidden>×</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto pr-1">
+                    {secondaryFilterOptions.length > 0 ? (
+                      secondaryFilterOptions.map((option) => {
+                        const selected = filterSecondary.includes(option.value);
+                        return (
+                          <button
+                            key={`secondary-option-${option.value}`}
+                            type="button"
+                            onClick={() => {
+                              setFilterSecondary((current) => {
+                                if (current.includes(option.value)) {
+                                  return current.filter((value) => value !== option.value);
+                                }
+                                return [...current, option.value];
+                              });
+                              setPage(1);
+                            }}
+                            className={cn(
+                              "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                              selected
+                                ? "border-sky-300/20 bg-sky-400/15 text-sky-200"
+                                : "border-stone-700 bg-stone-950 text-stone-300 hover:bg-stone-800"
+                            )}
+                          >
+                            <span className="truncate">{option.value}</span>
+                            <span className="text-[11px] text-stone-400">{option.count}</span>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="rounded-[1rem] border border-dashed border-stone-700 px-4 py-3 text-sm text-stone-400">
+                        No hay opciones secundarias disponibles.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </div>
 
       {errorMsg ? <div className="app-alert app-alert-error whitespace-pre-wrap">{errorMsg}</div> : null}
@@ -584,7 +692,7 @@ export default function OperationsPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div ref={operationsPanelRef} className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
                 <div className="space-y-3">
                   <div className="rounded-[18px] border border-slate-200 bg-white px-3 py-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">

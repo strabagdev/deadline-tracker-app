@@ -929,25 +929,6 @@ export default function FocusedUsageCapturePage() {
                 ) : null}
               </div>
             </div>
-
-            <div className="grid gap-2 md:grid-cols-3">
-              <div className="rounded-[18px] border border-amber-200 bg-amber-50/70 px-4 py-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">Pendientes</div>
-                <div className="mt-1 text-2xl font-semibold text-slate-950">{pendingEntities.length}</div>
-                <div className="text-xs text-slate-600">Entidades sin registro para la fecha activa.</div>
-              </div>
-              <div className="rounded-[18px] border border-emerald-200 bg-emerald-50/70 px-4 py-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Registrados</div>
-                <div className="mt-1 text-2xl font-semibold text-slate-950">{registeredEntities.length}</div>
-                <div className="text-xs text-slate-600">Registros ya guardados disponibles para revisión.</div>
-              </div>
-              <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Total visible</div>
-                <div className="mt-1 text-2xl font-semibold text-slate-950">{entities.length}</div>
-                <div className="text-xs text-slate-600">Base completa del tipo seleccionada para esta jornada.</div>
-              </div>
-            </div>
-
             <div className="inline-flex w-fit rounded-xl border border-slate-200 bg-slate-50 p-1">
               <button
                 type="button"
@@ -1035,7 +1016,7 @@ export default function FocusedUsageCapturePage() {
                   <p className="app-empty">No hay entidades para mostrar con los filtros actuales.</p>
                 ) : (
                   <div className="rounded-[18px] border border-slate-200 bg-[linear-gradient(180deg,#fbfdff,#f8fafc)] p-3">
-                    <div className="grid grid-cols-[repeat(auto-fill,minmax(16px,1fr))] gap-1.5 sm:grid-cols-[repeat(auto-fill,minmax(18px,1fr))]">
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(24px,1fr))] gap-2 sm:grid-cols-[repeat(auto-fill,minmax(28px,1fr))]">
                       {operativeEntities.map((entity) => {
                         const selected = operativeEntityId === entity.id;
                         const registered = Boolean(entity.logged_days?.includes(loggedOn));
@@ -1046,7 +1027,7 @@ export default function FocusedUsageCapturePage() {
                             onClick={() => void openOperativeDetail(entity)}
                             title={`${entity.name} · ${registered ? "Registrado" : "Sin registro"} · ${loggedOn}`}
                             className={[
-                              "aspect-square min-h-4 rounded-[5px] border transition hover:scale-[1.08]",
+                              "aspect-square min-h-6 rounded-[7px] border transition hover:scale-[1.08]",
                               selected
                                 ? "border-sky-300 bg-sky-100 shadow-[0_0_0_1px_rgba(125,211,252,0.35)]"
                                 : registered
