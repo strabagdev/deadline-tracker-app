@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { IconChevronDown, IconRotateClockwise } from "@tabler/icons-react";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 import { Loader } from "@/components/ui/loader";
 import { Button } from "@/components/ui/button";
@@ -57,98 +58,22 @@ type SemaphoreSettings = {
   label_orange: string;
   label_red: string;
 };
-type ViewMode = "cards" | "list";
 
 type IconProps = {
   className?: string;
 };
 
-function IconList({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cn("h-4 w-4", className)} aria-hidden>
-      <path d="M8 6h13" />
-      <path d="M8 12h13" />
-      <path d="M8 18h13" />
-      <path d="M3 6h.01" />
-      <path d="M3 12h.01" />
-      <path d="M3 18h.01" />
-    </svg>
-  );
-}
+type FilterDropdownOption = {
+  value: string;
+  label: string;
+  count?: number;
+  badgeClassName?: string;
+};
 
-function IconGrid({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cn("h-4 w-4", className)} aria-hidden>
-      <rect x="3" y="3" width="8" height="8" rx="1.5" />
-      <rect x="13" y="3" width="8" height="8" rx="1.5" />
-      <rect x="3" y="13" width="8" height="8" rx="1.5" />
-      <rect x="13" y="13" width="8" height="8" rx="1.5" />
-    </svg>
-  );
-}
+const CARD_PAGE_SIZE = 250;
 
 function IconClearFilters({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cn("h-4 w-4", className)} aria-hidden>
-      <path d="M18 6 6 18" />
-      <path d="m6 6 12 12" />
-    </svg>
-  );
-}
-
-
-function IconStatusGlyph({ status }: { status: Status | "all" }) {
-  if (status === "all") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 scale-[1.75]" aria-hidden>
-        <path d="M4 7h16" />
-        <path d="M7 12h10" />
-        <path d="M10 17h4" />
-      </svg>
-    );
-  }
-
-  if (status === "red") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 scale-[1.75]" aria-hidden>
-        <path d="M15 9 9 15" />
-        <path d="m9 9 6 6" />
-      </svg>
-    );
-  }
-
-  if (status === "orange") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 scale-[1.75]" aria-hidden>
-        <path d="M12 8v4" />
-        <path d="M12 16h.01" />
-        <path d="M10.3 3.8 3.9 15a2 2 0 0 0 1.7 3h12.8a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z" />
-      </svg>
-    );
-  }
-
-  if (status === "yellow") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 scale-[1.75]" aria-hidden>
-        <circle cx="12" cy="12" r="7" />
-        <path d="M12 8v4l2.5 1.5" />
-      </svg>
-    );
-  }
-
-  if (status === "green") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 scale-[1.75]" aria-hidden>
-        <path d="m7 12 3 3 7-7" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 scale-[1.75]" aria-hidden>
-      <path d="M8 12h8" />
-    </svg>
-  );
+  return <IconRotateClockwise stroke={2} className={cn("h-5 w-5", className)} aria-hidden />;
 }
 
 function fmtDate(d: Date | null) {
@@ -188,9 +113,95 @@ function statusLegendSwatch(s: Status) {
   return "border-slate-300 bg-slate-100";
 }
 
-function statusControlPalette(s: Status | "all") {
-  if (s === "all") return "border-slate-300 bg-white text-slate-700 hover:bg-slate-50";
+function statusBadgeClasses(s: Status | "all") {
+  if (s === "all") return "border-slate-300 bg-slate-100 text-slate-700";
   return statusFilterPalette(s);
+}
+
+function secondaryBadgeClasses(active: boolean) {
+  return active
+    ? "border-sky-200 bg-sky-50 text-sky-700"
+    : "border-slate-200 bg-slate-50 text-slate-600";
+}
+
+function entityTypeBadgeClasses(active: boolean) {
+  return active
+    ? "border-violet-200 bg-violet-50 text-violet-700"
+    : "border-slate-200 bg-slate-50 text-slate-600";
+}
+
+function FilterDropdown({
+  label,
+  value,
+  options,
+  onSelect,
+}: {
+  label: string;
+  value: string;
+  options: FilterDropdownOption[];
+  onSelect: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const selected = options.find((option) => option.value === value) ?? options[0];
+  const isDefault = value === "all";
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex min-h-[var(--control-h)] min-w-[170px] items-center justify-between gap-2 rounded-[1.2rem] bg-stone-900 px-3.5 text-left text-stone-50 transition hover:bg-stone-800"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <div className="min-w-0">
+          <span className={cn("block truncate text-sm font-medium", isDefault ? "text-stone-400" : "text-stone-50")}>
+            {isDefault ? label : selected.label}
+          </span>
+        </div>
+        <IconChevronDown className={cn("h-4 w-4 shrink-0 text-stone-400 transition-transform", open && "rotate-180")} stroke={2} aria-hidden />
+      </button>
+
+      {open ? (
+        <div className="absolute left-0 top-[calc(100%+8px)] z-30 w-full min-w-[250px] rounded-[1.25rem] border border-stone-700 bg-stone-950 p-2 shadow-[0_18px_38px_-24px_rgba(42,26,8,0.45)]">
+          <div role="listbox" aria-label={label} className="grid gap-1">
+            {options.map((option) => {
+              const active = option.value === value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    onSelect(option.value);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    "flex items-center justify-between gap-3 rounded-[12px] px-2.5 py-2 text-left transition-colors",
+                    active ? "bg-stone-800" : "hover:bg-stone-900"
+                  )}
+                >
+                  <span className={cn("inline-flex min-w-0 items-center gap-2 rounded-full border px-2 py-0.5 text-[11px] font-medium", option.badgeClassName)}>
+                    <span className="truncate">{option.label}</span>
+                  </span>
+                  {option.count != null ? <span className="shrink-0 text-[11px] text-stone-400">{option.count}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export default function OperationsPage() {
@@ -208,8 +219,6 @@ export default function OperationsPage() {
   const [filterEntityType, setFilterEntityType] = useState<string>("all");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [selectedEntityId, setSelectedEntityId] = useState("");
 
   const [semaphore, setSemaphore] = useState<SemaphoreSettings>({
@@ -248,9 +257,9 @@ export default function OperationsPage() {
 
     const params = new URLSearchParams({
       mode: "operations",
-      view_mode: viewMode,
+      view_mode: "cards",
       page: String(page),
-      page_size: String(pageSize),
+      page_size: String(CARD_PAGE_SIZE),
     });
     if (filterStatus !== "all") params.set("status", filterStatus);
     if (filterEntityType !== "all") params.set("entity_type_id", filterEntityType);
@@ -284,7 +293,7 @@ export default function OperationsPage() {
     }
 
     setLoading(false);
-  }, [filterEntityType, filterSecondary, filterStatus, page, pageSize, q, router, viewMode]);
+  }, [filterEntityType, filterSecondary, filterStatus, page, q, router]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -394,7 +403,7 @@ export default function OperationsPage() {
   }, [computedAll]);
 
   const totalRowsForPagination = Math.max(0, Number(meta?.filtered_count ?? rows.length));
-  const effectivePageSize = Number(meta?.page_size ?? pageSize);
+  const effectivePageSize = Number(meta?.page_size ?? CARD_PAGE_SIZE);
   const totalPages = Math.max(1, Math.ceil(totalRowsForPagination / Math.max(1, effectivePageSize)));
   const safePage = Math.min(Number(meta?.page ?? page), totalPages);
   const pageStart = totalRowsForPagination === 0 ? 0 : (safePage - 1) * effectivePageSize;
@@ -432,36 +441,49 @@ export default function OperationsPage() {
     return statusCounts.none;
   }
 
-  function statusCircleClasses(s: Status | "all", active: boolean) {
-    return cn(
-      "relative h-11 w-11 shrink-0 rounded-full border shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-2",
-      statusControlPalette(s),
-      active ? "border-slate-500 ring-2 ring-slate-900/70 ring-offset-2" : "opacity-90"
-    );
-  }
+  const statusFilterOptions = useMemo<FilterDropdownOption[]>(
+    () =>
+      statusFilterMeta.map((item) => ({
+        value: item.key,
+        label: item.title,
+        count: countByStatus(item.key),
+        badgeClassName: statusBadgeClasses(item.key),
+      })),
+    [statusFilterMeta, statusCounts]
+  );
 
-  function renderSecondaryFilter() {
-    if (secondaryFilterOptions.length === 0) return null;
-    return (
-      <select
-        id="dashboard_secondary_filter"
-        aria-label="Filtro secundario"
-        value={filterSecondary}
-        onChange={(e) => {
-          setFilterSecondary(e.target.value);
-          setPage(1);
-        }}
-        className="h-[var(--control-h)] min-w-[170px] max-w-[220px] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
-      >
-        <option value="all">Secundario: todos</option>
-        {secondaryFilterOptions.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.value} ({opt.count})
-          </option>
-        ))}
-      </select>
-    );
-  }
+  const secondaryFilterDropdownOptions = useMemo<FilterDropdownOption[]>(
+    () => [
+      {
+        value: "all",
+        label: "Todos",
+        badgeClassName: secondaryBadgeClasses(filterSecondary === "all"),
+      },
+      ...secondaryFilterOptions.map((opt) => ({
+        value: opt.value,
+        label: opt.value,
+        count: opt.count,
+        badgeClassName: secondaryBadgeClasses(filterSecondary === opt.value),
+      })),
+    ],
+    [filterSecondary, secondaryFilterOptions]
+  );
+
+  const entityTypeDropdownOptions = useMemo<FilterDropdownOption[]>(
+    () => [
+      {
+        value: "all",
+        label: "Todos",
+        badgeClassName: entityTypeBadgeClasses(filterEntityType === "all"),
+      },
+      ...entityTypeOptions.map((option) => ({
+        value: option.id,
+        label: option.name,
+        badgeClassName: entityTypeBadgeClasses(filterEntityType === option.id),
+      })),
+    ],
+    [entityTypeOptions, filterEntityType]
+  );
 
   return (
     <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-4 sm:space-y-6">
@@ -472,7 +494,7 @@ export default function OperationsPage() {
         subtitle="Control visual del estado operativo y acceso directo al detalle por entidad."
       />
 
-      <div className="rounded-[18px] border border-slate-200 bg-white px-3 py-3 shadow-[0_10px_30px_-26px_rgba(15,23,42,0.28)]">
+      <div className="rounded-[2rem] border border-stone-200 bg-stone-950 px-6 py-6 text-stone-50 shadow-[0_20px_45px_rgba(42,26,8,0.35)]">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
             <div className="min-w-[240px] flex-[1.2]">
@@ -484,97 +506,46 @@ export default function OperationsPage() {
               setPage(1);
             }}
             placeholder="Buscar por nombre, tipo o vencimiento..."
-            className="w-full"
+            className="w-full border-0 bg-stone-900 text-stone-50 placeholder:text-stone-400 focus-visible:ring-0 focus-visible:ring-offset-0"
           />
             </div>
 
-            <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-2 py-2">
-              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Estado</div>
-              <div className="flex items-center gap-2">
-              {statusFilterMeta.map((s) => (
-                <Button
-                  key={s.key}
-                  variant="outline"
-                  onClick={() => {
-                    setFilterStatus(s.key);
-                    setPage(1);
-                  }}
-                  className={cn("p-0", statusCircleClasses(s.key, filterStatus === s.key))}
-                  title={`${s.title}: ${countByStatus(s.key)}`}
-                  aria-label={`${s.title}: ${countByStatus(s.key)}`}
-                >
-                  <IconStatusGlyph status={s.key} />
-                </Button>
-              ))}
-              </div>
-            </div>
-
             <div className="flex flex-wrap items-center gap-2">
-              {renderSecondaryFilter()}
-
-              <select
-                id="dashboard_type_quick"
-                aria-label="Filtrar por tipo"
-                value={filterEntityType}
-                onChange={(e) => {
-                  setFilterEntityType(e.target.value);
+              <FilterDropdown
+                label="Estado"
+                value={filterStatus}
+                options={statusFilterOptions}
+                onSelect={(value) => {
+                  setFilterStatus(value as Status | "all");
                   setPage(1);
                 }}
-                className="h-[var(--control-h)] min-w-[160px] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
-              >
-                <option value="all">Tipos: todos</option>
-                {entityTypeOptions.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name}
-                  </option>
-                ))}
-              </select>
+              />
+
+              {secondaryFilterOptions.length > 0 ? (
+                <FilterDropdown
+                  label="Secundario"
+                  value={filterSecondary}
+                  options={secondaryFilterDropdownOptions}
+                  onSelect={(value) => {
+                    setFilterSecondary(value);
+                    setPage(1);
+                  }}
+                />
+              ) : null}
+
+              <FilterDropdown
+                label="Tipo"
+                value={filterEntityType}
+                options={entityTypeDropdownOptions}
+                onSelect={(value) => {
+                  setFilterEntityType(value);
+                  setPage(1);
+                }}
+              />
             </div>
           </div>
 
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <select
-            id="dashboard_page_size"
-            aria-label="Filas por página"
-            value={String(pageSize)}
-            onChange={(e) => {
-              setPageSize(Number(e.target.value));
-              setPage(1);
-            }}
-            className="h-[var(--control-h)] min-w-[128px] rounded-[var(--radius-md)] border border-[color:var(--input)] bg-[var(--card)] px-3 text-[13px] sm:text-sm"
-          >
-            <option value="25">25 / página</option>
-            <option value="50">50 / página</option>
-            <option value="100">100 / página</option>
-            <option value="250">250 / página</option>
-            <option value="500">500 / página</option>
-          </select>
-
-            <div className="flex shrink-0 items-center gap-2 rounded-[14px] border border-slate-200 bg-slate-50 p-1.5">
-            <Button
-              size="sm"
-              variant={viewMode === "cards" ? "secondary" : "outline"}
-              onClick={() => setViewMode("cards")}
-              className="min-h-[var(--control-h)] min-w-[var(--control-h)] gap-2 px-3"
-              title="Vista mosaico"
-              aria-label="Vista mosaico"
-            >
-              <IconGrid />
-              <span className="hidden sm:inline">Mosaico</span>
-            </Button>
-            <Button
-              size="sm"
-              variant={viewMode === "list" ? "secondary" : "outline"}
-              onClick={() => setViewMode("list")}
-              className="min-h-[var(--control-h)] min-w-[var(--control-h)] gap-2 px-3"
-              title="Vista lista"
-              aria-label="Vista lista"
-            >
-              <IconList />
-              <span className="hidden sm:inline">Lista</span>
-            </Button>
-          </div>
-
             <Button
               variant="outline"
               onClick={() => {
@@ -585,12 +556,11 @@ export default function OperationsPage() {
                 setPage(1);
               }}
               disabled={!hasActiveFilters}
-              className="min-h-[var(--control-h)] min-w-[var(--control-h)] shrink-0 gap-2 px-3"
+              className="min-h-[var(--control-h)] min-w-[var(--control-h)] shrink-0 border-0 bg-stone-900 px-0 text-stone-50 hover:bg-stone-800 hover:text-stone-50"
               title="Limpiar filtros"
               aria-label="Limpiar filtros"
             >
               <IconClearFilters />
-              <span className="hidden sm:inline">Limpiar</span>
             </Button>
           </div>
         </div>
@@ -614,22 +584,56 @@ export default function OperationsPage() {
             </CardContent>
           </Card>
         ) : (
-          <>
-            {viewMode === "cards" ? (
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
                 <div className="space-y-3">
                   <div className="rounded-[18px] border border-slate-200 bg-white px-3 py-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Leyenda del mosaico</div>
-                      <div className="flex flex-wrap gap-2 text-[11px]">
-                        {statusFilterMeta.filter((item) => item.key !== "all").map((item) => {
-                          return (
-                            <div key={`legend-inline-${item.key}`} className="inline-flex items-center gap-2 text-slate-600">
-                              <span className={cn("h-3 w-3 rounded-[4px] border", statusLegendSwatch(item.key as Status))} />
-                              {item.title}
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Leyenda del mosaico</div>
+                        <div className="mt-1 text-[11px] text-slate-500">
+                          Mostrando {totalRowsForPagination === 0 ? 0 : pageStart + 1}-{Math.min(pageStart + effectivePageSize, totalRowsForPagination)} de {totalRowsForPagination}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <div className="flex flex-wrap gap-2 text-[11px]">
+                          {statusFilterMeta.filter((item) => item.key !== "all").map((item) => {
+                            return (
+                              <div key={`legend-inline-${item.key}`} className="inline-flex items-center gap-2 text-slate-600">
+                                <span className={cn("h-3 w-3 rounded-[4px] border", statusLegendSwatch(item.key as Status))} />
+                                {item.title}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {totalPages > 1 ? (
+                          <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+                            <Button
+                              onClick={() => setPage((p) => Math.max(1, p - 1))}
+                              disabled={safePage <= 1}
+                              variant="outline"
+                              size="sm"
+                              className="h-7 min-w-7 rounded-full px-0 text-[11px]"
+                              title="Página anterior"
+                              aria-label="Página anterior"
+                            >
+                              ◀
+                            </Button>
+                            <div className="px-1 text-[11px] font-medium text-slate-600">
+                              {safePage}/{totalPages}
                             </div>
-                          );
-                        })}
+                            <Button
+                              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                              disabled={safePage >= totalPages}
+                              variant="outline"
+                              size="sm"
+                              className="h-7 min-w-7 rounded-full px-0 text-[11px]"
+                              title="Página siguiente"
+                              aria-label="Página siguiente"
+                            >
+                              ▶
+                            </Button>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -641,30 +645,53 @@ export default function OperationsPage() {
                           <div className="text-xs font-semibold text-[var(--muted-foreground)]">{typeName}</div>
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">{typeRows.length}</span>
                         </div>
-                        <div className="grid grid-cols-[repeat(auto-fill,minmax(16px,1fr))] gap-1.5 sm:grid-cols-[repeat(auto-fill,minmax(18px,1fr))]">
+                        <div className="grid grid-cols-[repeat(auto-fill,minmax(24px,1fr))] gap-2 sm:grid-cols-[repeat(auto-fill,minmax(28px,1fr))]">
                           {typeRows.map((r) => {
                             const e = r.entity;
                             const nearest = r.nearest;
                             const selected = effectiveSelectedEntityId === e.id;
                             const palette = statusFilterPalette(r.status);
+                            const tone = statusTone(r.status);
+                            const typeLabel = e.entity_types?.name ?? "Sin tipo";
+                            const statusLabel = nearest?.label ?? "Sin info";
                             const dueLabel = !r.hasActiveDeadlines
                               ? "Sin vencimientos"
                               : nearest?.due
                                 ? fmtDate(nearest.due)
                                 : "Sin fecha estimada";
                             return (
-                              <button
-                                key={e.id}
-                                type="button"
-                                onClick={() => setSelectedEntityId(e.id)}
-                                className={cn(
-                                  "aspect-square min-h-4 rounded-[5px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] transition hover:-translate-y-0.5 hover:scale-[1.08] hover:shadow-[0_6px_14px_-10px_rgba(15,23,42,0.55)]",
-                                  palette,
-                                  selected && "ring-2 ring-sky-300 ring-offset-1 shadow-[0_0_0_1px_rgba(125,211,252,0.2)]"
-                                )}
-                                title={`${e.name} · ${nearest?.label ?? "Sin info"} · ${dueLabel}`}
-                                aria-label={`${e.name}: ${nearest?.label ?? "Sin info"}`}
-                              />
+                              <div key={e.id} className="group relative">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedEntityId(e.id)}
+                                  className={cn(
+                                    "aspect-square min-h-6 rounded-[7px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] transition hover:-translate-y-0.5 hover:scale-[1.08] hover:shadow-[0_6px_14px_-10px_rgba(15,23,42,0.55)] focus-visible:-translate-y-0.5 focus-visible:scale-[1.08] focus-visible:shadow-[0_6px_14px_-10px_rgba(15,23,42,0.55)]",
+                                    palette,
+                                    selected && "ring-2 ring-sky-300 ring-offset-1 shadow-[0_0_0_1px_rgba(125,211,252,0.2)]"
+                                  )}
+                                  aria-label={`${e.name}, ${typeLabel}, ${statusLabel}, ${dueLabel}`}
+                                />
+                                <div
+                                  className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-20 hidden w-56 -translate-x-1/2 rounded-[14px] px-3 py-2 text-left shadow-[0_16px_36px_-20px_rgba(15,23,42,0.45)] backdrop-blur group-hover:block group-focus-within:block"
+                                  style={{ border: `1px solid ${tone.border}`, background: tone.soft }}
+                                >
+                                  <div className="truncate text-sm font-semibold text-slate-900">{e.name}</div>
+                                  <div className="mt-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{typeLabel}</div>
+                                  <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
+                                    <span
+                                      className="rounded-full px-2 py-0.5 font-medium"
+                                      style={{ background: "#ffffffb3", color: tone.strong }}
+                                    >
+                                      {statusLabel}
+                                    </span>
+                                    <span className="text-slate-500">{dueLabel}</span>
+                                  </div>
+                                  <div
+                                    className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 rotate-45"
+                                    style={{ borderBottom: `1px solid ${tone.border}`, borderRight: `1px solid ${tone.border}`, background: tone.soft }}
+                                  />
+                                </div>
+                              </div>
                             );
                           })}
                         </div>
@@ -767,119 +794,6 @@ export default function OperationsPage() {
                   })()}
                 </aside>
               </div>
-            ) : (
-              <div className="overflow-x-auto rounded-2xl border bg-white">
-                <div className="grid grid-cols-[1.3fr_0.95fr_1.55fr_0.8fr] border-b bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
-                  <div>Entidad</div>
-                  <div>Estado</div>
-                  <div>Próximo vencimiento</div>
-                  <div className="text-right">Uso</div>
-                </div>
-                {groupedPagedRows.map(([typeName, typeRows]) => (
-                  <React.Fragment key={typeName}>
-                    <div className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100">{typeName}</div>
-                    {typeRows.map((r) => {
-                      const e = r.entity;
-                      const nearest = r.nearest;
-                      const tone = statusTone(r.status);
-                      const cardFields = (e.card_fields ?? []).filter((f) => String(f.value_text ?? "").trim() !== "");
-                      return (
-                        <div
-                          key={e.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => router.push(`/app/entities/${e.id}`)}
-                          onKeyDown={(ev) => {
-                            if (ev.key === "Enter" || ev.key === " ") {
-                              ev.preventDefault();
-                              router.push(`/app/entities/${e.id}`);
-                            }
-                          }}
-                          className="grid cursor-pointer grid-cols-[1.3fr_0.95fr_1.55fr_0.8fr] items-center gap-0 border-b px-3 py-2.5 text-sm transition-colors hover:bg-slate-50"
-                        >
-                          <div className="min-w-0">
-                            <div className="truncate font-semibold text-slate-900">{e.name}</div>
-                            <div className="truncate text-[11px] text-slate-500">{e.entity_types?.name ?? "Sin tipo"}</div>
-                          </div>
-                          <div>
-                            <Badge variant="outline" className="font-semibold" style={{ borderColor: tone.border, color: tone.strong }}>
-                              {r.hasActiveDeadlines ? nearest?.label ?? "Sin info" : "Sin vencimientos"}
-                            </Badge>
-                          </div>
-                          <div className="min-w-0">
-                            <div className="truncate text-[13px] font-medium text-slate-900">
-                              {!r.hasActiveDeadlines
-                                ? "—"
-                                : nearest?.due
-                                  ? fmtDate(nearest.due)
-                                  : "Sin fecha estimada"}
-                            </div>
-                            <div className="truncate text-[11px] text-slate-500">
-                              {!r.hasActiveDeadlines
-                                ? ""
-                                : `${nearest?.typeName ?? "Sin tipo"}${
-                                    nearest?.measureBy === "usage"
-                                      ? " · por uso"
-                                      : nearest?.measureBy === "date"
-                                        ? " · por fecha"
-                                        : ""
-                                  }`}
-                            </div>
-                            {cardFields.length > 0 ? (
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {cardFields.slice(0, 2).map((field, idx) => (
-                                  <Badge key={`${e.id}-${field.name}-${field.value_text}-${idx}`} variant="outline" className="bg-slate-50 text-[10px] font-normal text-slate-600">
-                                    {field.value_text}
-                                  </Badge>
-                                ))}
-                              </div>
-                            ) : null}
-                          </div>
-                          <div className="text-right">
-                            <div className="text-[13px] font-medium text-slate-800">{r.latestUsage != null ? r.latestUsage : "—"}</div>
-                            <div className="text-[11px] text-slate-500">
-                              {r.latestUsageAt ? new Date(r.latestUsageAt).toLocaleDateString() : ""}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </React.Fragment>
-                ))}
-              </div>
-            )}
-
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2">
-              <div className="text-xs text-slate-500">
-                Mostrando {totalRowsForPagination === 0 ? 0 : pageStart + 1}-{Math.min(pageStart + effectivePageSize, totalRowsForPagination)} de {totalRowsForPagination}
-              </div>
-              <div className="flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-slate-50 p-1">
-                <Button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={safePage <= 1}
-                  variant="outline"
-                  size="sm"
-                  className="h-[var(--control-h)] min-w-[var(--control-h)] px-2"
-                  title="Página anterior"
-                  aria-label="Página anterior"
-                >
-                  ◀
-                </Button>
-                <div className="px-1 text-xs font-medium text-slate-600">Página {safePage} de {totalPages}</div>
-                <Button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={safePage >= totalPages}
-                  variant="outline"
-                  size="sm"
-                  className="h-[var(--control-h)] min-w-[var(--control-h)] px-2"
-                  title="Página siguiente"
-                  aria-label="Página siguiente"
-                >
-                  ▶
-                </Button>
-              </div>
-            </div>
-          </>
         )}
       </section>
     </main>
