@@ -215,6 +215,7 @@ export default function OperationsPage() {
   const router = useRouter();
   const operationsPanelRef = useRef<HTMLDivElement | null>(null);
   const filtersBarRef = useRef<HTMLDivElement | null>(null);
+  const secondaryDropdownRef = useRef<HTMLDivElement | null>(null);
 
   const [entities, setEntities] = useState<EntityRow[]>([]);
   const [usage, setUsage] = useState<LatestUsageByEntity>({});
@@ -230,6 +231,7 @@ export default function OperationsPage() {
   const [page, setPage] = useState(1);
   const [selectedEntityId, setSelectedEntityId] = useState("");
   const [filtersCollapsed, setFiltersCollapsed] = useState(true);
+  const [secondaryDropdownOpen, setSecondaryDropdownOpen] = useState(false);
 
   const [semaphore, setSemaphore] = useState<SemaphoreSettings>({
     yellow_days: 60,
@@ -328,6 +330,17 @@ export default function OperationsPage() {
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [selectedEntityId]);
+
+  useEffect(() => {
+    if (!secondaryDropdownOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!secondaryDropdownRef.current?.contains(event.target as Node)) {
+        setSecondaryDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [secondaryDropdownOpen]);
 
   const entityTypeOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -638,51 +651,80 @@ export default function OperationsPage() {
                     </div>
                   </div>
 
-                  {selectedSecondaryOptions.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {selectedSecondaryOptions.map((option) => (
-                        <button
-                          key={`secondary-selected-${option.value}`}
-                          type="button"
-                          onClick={() => {
-                            setFilterSecondary((current) => current.filter((value) => value !== option.value));
-                            setPage(1);
-                          }}
-                          className="inline-flex items-center gap-2 rounded-full border border-sky-300/20 bg-sky-400/15 px-3 py-1.5 text-xs font-medium text-sky-200 transition hover:bg-sky-400/20"
-                        >
-                          <span className="truncate">{option.value}</span>
-                          <span aria-hidden>×</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
+                  <div ref={secondaryDropdownRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setSecondaryDropdownOpen((current) => !current)}
+                      className="flex min-h-[88px] w-full items-start justify-between gap-3 rounded-[1.35rem] border border-stone-700 bg-stone-950 px-4 py-3 text-left transition hover:bg-stone-900"
+                      aria-haspopup="listbox"
+                      aria-expanded={secondaryDropdownOpen}
+                    >
+                      <div className="min-w-0 flex-1">
+                        {selectedSecondaryOptions.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {selectedSecondaryOptions.map((option) => (
+                              <span
+                                key={`secondary-selected-${option.value}`}
+                                className="inline-flex max-w-full items-center gap-2 rounded-full border border-sky-300/20 bg-sky-400/15 px-3 py-1.5 text-xs font-medium text-sky-200"
+                              >
+                                <span className="truncate">{option.value}</span>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setFilterSecondary((current) => current.filter((value) => value !== option.value));
+                                    setPage(1);
+                                  }}
+                                  className="text-sm leading-none text-sky-100 transition hover:text-white"
+                                  aria-label={`Quitar ${option.value}`}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="pt-1 text-sm font-medium text-stone-400">
+                            Haz clic para desplegar opciones y seleccionar varias
+                          </div>
+                        )}
+                      </div>
+                      <IconChevronDown
+                        className={cn("mt-1 h-5 w-5 shrink-0 text-stone-400 transition-transform", secondaryDropdownOpen && "rotate-180")}
+                        stroke={2}
+                        aria-hidden
+                      />
+                    </button>
 
-              <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto pr-1">
-                {secondaryFilterOptions.filter((option) => !filterSecondary.includes(option.value)).length > 0 ? (
-                  secondaryFilterOptions
-                    .filter((option) => !filterSecondary.includes(option.value))
-                    .map((option) => {
-                      return (
-                        <button
-                          key={`secondary-option-${option.value}`}
-                          type="button"
-                          onClick={() => {
-                            setFilterSecondary((current) => [...current, option.value]);
-                            setPage(1);
-                          }}
-                          className="inline-flex items-center gap-2 rounded-full border border-stone-700 bg-stone-950 px-3 py-1.5 text-xs font-medium text-stone-300 transition hover:bg-stone-800"
-                        >
-                          <span className="truncate">{option.value}</span>
-                          <span className="text-[11px] text-stone-400">{option.count}</span>
-                        </button>
-                      );
-                    })
-                ) : (
-                  <div className="rounded-[1rem] border border-dashed border-stone-700 px-4 py-3 text-sm text-stone-400">
-                    No hay más opciones secundarias disponibles.
+                    {secondaryDropdownOpen ? (
+                      <div className="absolute left-0 top-[calc(100%+10px)] z-30 w-full rounded-[1.35rem] border border-stone-700 bg-stone-950 p-3 shadow-[0_18px_38px_-24px_rgba(42,26,8,0.45)]">
+                        <div role="listbox" aria-label="Filtro secundario" className="flex max-h-56 flex-wrap gap-2 overflow-y-auto pr-1">
+                          {secondaryFilterOptions.filter((option) => !filterSecondary.includes(option.value)).length > 0 ? (
+                            secondaryFilterOptions
+                              .filter((option) => !filterSecondary.includes(option.value))
+                              .map((option) => (
+                                <button
+                                  key={`secondary-option-${option.value}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setFilterSecondary((current) => [...current, option.value]);
+                                    setPage(1);
+                                  }}
+                                  className="inline-flex items-center gap-2 rounded-full border border-stone-700 bg-stone-900 px-3 py-1.5 text-xs font-medium text-stone-200 transition hover:bg-stone-800"
+                                >
+                                  <span className="truncate">{option.value}</span>
+                                  <span className="text-[11px] text-stone-400">{option.count}</span>
+                                </button>
+                              ))
+                          ) : (
+                            <div className="w-full rounded-[1rem] border border-dashed border-stone-700 px-4 py-3 text-sm text-stone-400">
+                              No hay más opciones secundarias disponibles.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
-                )}
-              </div>
                 </div>
               </div>
             ) : null}
