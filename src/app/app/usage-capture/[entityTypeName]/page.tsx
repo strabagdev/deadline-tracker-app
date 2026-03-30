@@ -1144,65 +1144,63 @@ export default function FocusedUsageCapturePage() {
             </div>
           ) : activeTab === "pending" ? (
             <div className="grid gap-4">
-              <section className="sticky top-24 z-20 rounded-[20px] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.97),rgba(241,245,249,0.94))] p-4 shadow-sm backdrop-blur">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">Contexto de trabajo</div>
-                    <div className="text-xs text-slate-500">Ajusta fecha, búsqueda y filtros antes de cargar el lote.</div>
+              <section className="sticky top-24 z-20 rounded-[20px] border border-stone-800 bg-stone-950/95 p-3 shadow-sm backdrop-blur">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="min-w-[220px]">
+                    <MarkedDatePicker
+                      value={loggedOn}
+                      onChange={setLoggedOn}
+                      highlightedDates={highlightedCalendarDates}
+                      disabledDates={[]}
+                      placeholder="Fecha"
+                      disabled={loading}
+                      showLegend={false}
+                    />
                   </div>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 shadow-sm">
-                    {filteredPendingEntities.length} pendiente{filteredPendingEntities.length === 1 ? "" : "s"} visible{filteredPendingEntities.length === 1 ? "" : "s"}
-                  </span>
-                </div>
 
-                <div className="grid items-end gap-3 md:grid-cols-[220px_minmax(220px,1fr)]">
-                  <MarkedDatePicker
-                    value={loggedOn}
-                    onChange={setLoggedOn}
-                    highlightedDates={highlightedCalendarDates}
-                    disabledDates={[]}
-                    label="Fecha de registro"
-                    disabled={loading}
-                  />
-
-                  <div className="grid gap-1">
-                    <label className="text-xs text-[var(--muted-foreground)]">Buscar entidad</label>
+                  <div className="min-w-[260px] flex-1 rounded-[1.2rem] bg-transparent transition hover:bg-white/5 focus-within:bg-white/5">
                     <Input
                       value={entitySearch}
                       onChange={(e) => setEntitySearch(e.target.value)}
-                      placeholder="Buscar entidad..."
+                      placeholder="Buscar entidad"
                       disabled={loading}
+                      className="border-0 bg-transparent px-3.5 text-base font-semibold text-stone-50 placeholder:text-stone-400 focus-visible:border-transparent focus-visible:ring-0 sm:text-base"
                     />
-                    {entitySearch.trim().length > 0 ? (
-                      <div className="max-h-44 overflow-auto rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--card)] p-2 text-xs">
-                        <div className="mb-1 font-semibold text-[var(--foreground)]">Posibles coincidencias en campos de entidad</div>
-                        <div className="mb-2 text-[11px] text-[var(--muted-foreground)]">
-                          Coincidencias: {searchDebugMatches.length} · Pendientes visibles: {filteredPendingEntities.length} · Con registro ese día: {searchDebugMatches.filter((r) => !r.pendingForDay).length}
-                        </div>
-                        {searchDebugMatches.length === 0 ? (
-                          <div className="text-[var(--muted-foreground)]">Sin coincidencias en campos.</div>
-                        ) : (
-                          <div className="grid gap-1">
-                            {searchDebugMatches.map((row) => (
-                              <div key={`${row.entityName}-${row.values.join("|")}`} className="rounded-[8px] border border-[color:var(--border)] bg-[var(--muted)]/60 px-2 py-1">
-                                <div className="truncate font-medium text-[var(--foreground)]">
-                                  {row.entityName}
-                                  {!row.pendingForDay ? <span className="ml-2 text-[10px] font-normal text-amber-700">(ya registrado en la fecha)</span> : null}
-                                  {row.pendingForDay && !row.passesSecondaryFilters ? <span className="ml-2 text-[10px] font-normal text-indigo-700">(filtrado por chips secundarios)</span> : null}
-                                </div>
-                                <div className="truncate text-[var(--muted-foreground)]">{row.values.join(" · ")}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ) : null}
+                  </div>
+
+                  <div className="rounded-full bg-stone-900 px-3 py-2 text-sm font-semibold text-stone-100">
+                    {filteredPendingEntities.length} pendiente{filteredPendingEntities.length === 1 ? "" : "s"} visible{filteredPendingEntities.length === 1 ? "" : "s"}
                   </div>
                 </div>
 
+                {entitySearch.trim().length > 0 ? (
+                  <div className="mt-2 max-h-44 overflow-auto rounded-[1rem] border border-stone-800 bg-stone-900 p-2 text-xs">
+                    <div className="mb-1 font-semibold text-stone-100">Posibles coincidencias en campos de entidad</div>
+                    <div className="mb-2 text-[11px] text-stone-400">
+                      Coincidencias: {searchDebugMatches.length} · Pendientes visibles: {filteredPendingEntities.length} · Con registro ese día: {searchDebugMatches.filter((r) => !r.pendingForDay).length}
+                    </div>
+                    {searchDebugMatches.length === 0 ? (
+                      <div className="text-stone-500">Sin coincidencias en campos.</div>
+                    ) : (
+                      <div className="grid gap-1">
+                        {searchDebugMatches.map((row) => (
+                          <div key={`${row.entityName}-${row.values.join("|")}`} className="rounded-[10px] border border-stone-800 bg-stone-950 px-2 py-1.5">
+                            <div className="truncate font-medium text-stone-100">
+                              {row.entityName}
+                              {!row.pendingForDay ? <span className="ml-2 text-[10px] font-normal text-amber-300">(ya registrado en la fecha)</span> : null}
+                              {row.pendingForDay && !row.passesSecondaryFilters ? <span className="ml-2 text-[10px] font-normal text-indigo-300">(filtrado por chips secundarios)</span> : null}
+                            </div>
+                            <div className="truncate text-stone-400">{row.values.join(" · ")}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
                 {pendingSecondaryOptions.length > 0 ? (
-                  <div className="mt-4 grid gap-2">
-                    <div className="text-xs text-[var(--muted-foreground)]">
+                  <div className="mt-3 grid gap-2 border-t border-stone-800 pt-3">
+                    <div className="text-xs text-stone-400">
                       Filtros secundarios para refinar la cola pendiente.
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -1212,8 +1210,8 @@ export default function FocusedUsageCapturePage() {
                         className={[
                           "rounded-full border px-2.5 py-1 text-xs transition",
                           pendingSecondaryFilters.length === 0
-                            ? "border-indigo-300 bg-indigo-100 text-indigo-800"
-                            : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                            ? "border-sky-300 bg-sky-100 text-sky-900"
+                            : "border-stone-700 bg-stone-900 text-stone-200 hover:bg-stone-800",
                         ].join(" ")}
                       >
                         Todos {pendingEntities.length}
@@ -1232,8 +1230,8 @@ export default function FocusedUsageCapturePage() {
                           className={[
                             "rounded-full border px-2.5 py-1 text-xs transition",
                             pendingSecondaryFilters.includes(opt.value)
-                              ? "border-indigo-300 bg-indigo-100 text-indigo-800"
-                              : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                              ? "border-sky-300 bg-sky-100 text-sky-900"
+                              : "border-stone-700 bg-stone-900 text-stone-200 hover:bg-stone-800",
                           ].join(" ")}
                           title={opt.label}
                         >
@@ -1245,7 +1243,7 @@ export default function FocusedUsageCapturePage() {
                         <button
                           type="button"
                           onClick={() => setPendingSecondaryMenuOpen((v) => !v)}
-                          className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 transition hover:bg-slate-50"
+                          className="rounded-full border border-stone-700 bg-stone-900 px-2.5 py-1 text-xs text-stone-200 transition hover:bg-stone-800"
                         >
                           {pendingSecondaryMenuOpen ? "Ocultar" : `+${pendingSecondaryOptions.length - pendingSecondaryTopOptions.length} más`}
                         </button>
@@ -1261,7 +1259,7 @@ export default function FocusedUsageCapturePage() {
                             onClick={() =>
                               setPendingSecondaryFilters((prev) => prev.filter((v) => v !== value))
                             }
-                            className="rounded-full border border-indigo-300 bg-indigo-100 px-2 py-0.5 text-[11px] text-indigo-800"
+                            className="rounded-full border border-sky-300 bg-sky-100 px-2 py-0.5 text-[11px] text-sky-900"
                             title={`Quitar filtro ${value}`}
                           >
                             {value} ×
@@ -1271,13 +1269,14 @@ export default function FocusedUsageCapturePage() {
                     ) : null}
 
                     {pendingSecondaryMenuOpen ? (
-                      <div className="rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[var(--card)] p-2">
+                      <div className="rounded-[1rem] border border-stone-800 bg-stone-900 p-2">
                         <div className="grid gap-2">
                           <Input
                             value={pendingSecondarySearch}
                             onChange={(e) => setPendingSecondarySearch(e.target.value)}
                             placeholder="Buscar filtro secundario..."
                             disabled={loading}
+                            className="border-stone-700 bg-stone-950 text-stone-100 placeholder:text-stone-500"
                           />
                           <div className="max-h-44 overflow-auto">
                             <div className="flex flex-wrap gap-2">
@@ -1295,8 +1294,8 @@ export default function FocusedUsageCapturePage() {
                                   className={[
                                     "rounded-full border px-2.5 py-1 text-xs transition",
                                     pendingSecondaryFilters.includes(opt.value)
-                                      ? "border-indigo-300 bg-indigo-100 text-indigo-800"
-                                      : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+                                      ? "border-sky-300 bg-sky-100 text-sky-900"
+                                      : "border-stone-700 bg-stone-950 text-stone-200 hover:bg-stone-800",
                                   ].join(" ")}
                                   title={opt.label}
                                 >
@@ -1305,7 +1304,7 @@ export default function FocusedUsageCapturePage() {
                                 </button>
                               ))}
                               {pendingSecondaryFilteredOptions.length === 0 ? (
-                                <span className="text-xs text-[var(--muted-foreground)]">Sin coincidencias.</span>
+                                <span className="text-xs text-stone-500">Sin coincidencias.</span>
                               ) : null}
                             </div>
                           </div>

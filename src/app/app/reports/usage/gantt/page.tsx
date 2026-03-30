@@ -260,6 +260,101 @@ function filterSelectClass() {
   return "h-[var(--control-h)] w-full rounded-[1.2rem] border-0 bg-transparent px-3.5 text-base font-semibold text-stone-50 outline-none transition placeholder:text-stone-400 focus:bg-white/5 sm:text-base";
 }
 
+function DarkFilterDropdown({
+  label,
+  value,
+  options,
+  onSelect,
+}: {
+  label: string;
+  value: string;
+  options: Option[];
+  onSelect: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const selectedLabel = getOptionLabel(options, value, label);
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative min-w-[180px]">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className={cn(
+          "flex min-h-[var(--control-h)] w-full items-center justify-between gap-2 rounded-[1.2rem] px-3.5 text-left transition",
+          value === "all" ? "bg-transparent hover:bg-white/5" : "bg-stone-900 hover:bg-stone-800"
+        )}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="block truncate text-base font-semibold text-stone-50">
+          {selectedLabel}
+        </span>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={cn("h-4 w-4 shrink-0 text-stone-300 transition-transform", open && "rotate-180")}
+          aria-hidden
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+
+      {open ? (
+        <div className="absolute left-0 top-[calc(100%+8px)] z-30 w-full min-w-[250px] rounded-[1.25rem] border border-stone-700 bg-stone-950 p-2 shadow-[0_18px_38px_-24px_rgba(42,26,8,0.45)]">
+          <div role="listbox" aria-label={label} className="grid gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                onSelect("all");
+                setOpen(false);
+              }}
+              className={cn(
+                "flex w-full items-center rounded-[12px] px-2.5 py-2 text-left text-[13px] transition",
+                value === "all" ? "bg-stone-800 text-stone-50" : "text-stone-300 hover:bg-stone-900 hover:text-stone-50"
+              )}
+            >
+              {label}
+            </button>
+            {options.map((option) => {
+              const active = option.id === value;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => {
+                    onSelect(option.id);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-center rounded-[12px] px-2.5 py-2 text-left text-[13px] transition",
+                    active ? "bg-stone-800 text-stone-50" : "text-stone-200 hover:bg-stone-900 hover:text-stone-50"
+                  )}
+                >
+                  <span className="truncate">{option.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function DirectionIcon({
   direction,
   className = "h-4 w-4",
@@ -899,27 +994,19 @@ export default function UsageGanttPage() {
               </div>
             </div>
 
-            <div className="min-w-[180px]">
-              <div className="rounded-[1.2rem] bg-transparent transition hover:bg-white/5 focus-within:bg-white/5">
-                <select value={entityTypeId} onChange={(e) => setEntityTypeId(e.target.value)} className={cn(filterSelectClass(), "appearance-none pr-9")}>
-                  <option value="all">Tipo</option>
-                  {entityTypeOptions.map((option) => (
-                    <option key={option.id} value={option.id}>{option.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            <DarkFilterDropdown
+              label="Tipo"
+              value={entityTypeId}
+              options={entityTypeOptions}
+              onSelect={setEntityTypeId}
+            />
 
-            <div className="min-w-[180px]">
-              <div className="rounded-[1.2rem] bg-transparent transition hover:bg-white/5 focus-within:bg-white/5">
-                <select value={usageUnitId} onChange={(e) => setUsageUnitId(e.target.value)} className={cn(filterSelectClass(), "appearance-none pr-9")}>
-                  <option value="all">Unidad</option>
-                  {usageUnitOptions.map((option) => (
-                    <option key={option.id} value={option.id}>{option.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            <DarkFilterDropdown
+              label="Unidad"
+              value={usageUnitId}
+              options={usageUnitOptions}
+              onSelect={setUsageUnitId}
+            />
 
             <div className="inline-flex h-[var(--control-h)] rounded-full border border-stone-700 bg-stone-900 p-1">
               <button

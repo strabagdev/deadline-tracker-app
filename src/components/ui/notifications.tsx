@@ -46,34 +46,72 @@ function normalizeInput(input: NotifyInput) {
 function toneClasses(tone: NotificationTone) {
   if (tone === "success") {
     return {
-      shell: "border-emerald-200/90 bg-[linear-gradient(180deg,rgba(236,253,245,0.98),rgba(209,250,229,0.92))] text-emerald-950 shadow-[0_18px_40px_-28px_rgba(5,150,105,0.5)]",
-      badge: "border-emerald-300/90 bg-emerald-100 text-emerald-700",
-      dot: "bg-emerald-500",
-      label: "Correcto",
+      shell: "border-emerald-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(243,252,247,0.96))] text-slate-950 shadow-[0_22px_54px_-30px_rgba(5,150,105,0.32)]",
+      badge: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      iconWrap: "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100",
+      progress: "bg-emerald-500",
+      label: "Listo",
     };
   }
   if (tone === "error") {
     return {
-      shell: "border-rose-200/90 bg-[linear-gradient(180deg,rgba(255,241,242,0.98),rgba(255,228,230,0.94))] text-rose-950 shadow-[0_18px_40px_-28px_rgba(225,29,72,0.42)]",
-      badge: "border-rose-300/90 bg-rose-100 text-rose-700",
-      dot: "bg-rose-500",
+      shell: "border-rose-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,244,246,0.96))] text-slate-950 shadow-[0_22px_54px_-30px_rgba(225,29,72,0.26)]",
+      badge: "border-rose-200 bg-rose-50 text-rose-700",
+      iconWrap: "bg-rose-50 text-rose-600 ring-1 ring-rose-100",
+      progress: "bg-rose-500",
       label: "Error",
     };
   }
   if (tone === "warning") {
     return {
-      shell: "border-amber-200/90 bg-[linear-gradient(180deg,rgba(255,251,235,0.98),rgba(254,243,199,0.94))] text-amber-950 shadow-[0_18px_40px_-28px_rgba(217,119,6,0.42)]",
-      badge: "border-amber-300/90 bg-amber-100 text-amber-700",
-      dot: "bg-amber-500",
-      label: "Atencion",
+      shell: "border-amber-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,250,235,0.97))] text-slate-950 shadow-[0_22px_54px_-30px_rgba(217,119,6,0.26)]",
+      badge: "border-amber-200 bg-amber-50 text-amber-700",
+      iconWrap: "bg-amber-50 text-amber-600 ring-1 ring-amber-100",
+      progress: "bg-amber-500",
+      label: "Atención",
     };
   }
   return {
-    shell: "border-sky-200/90 bg-[linear-gradient(180deg,rgba(240,249,255,0.98),rgba(224,242,254,0.94))] text-sky-950 shadow-[0_18px_40px_-28px_rgba(2,132,199,0.42)]",
-    badge: "border-sky-300/90 bg-sky-100 text-sky-700",
-    dot: "bg-sky-500",
-    label: "Info",
+    shell: "border-sky-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(243,249,255,0.96))] text-slate-950 shadow-[0_22px_54px_-30px_rgba(2,132,199,0.24)]",
+    badge: "border-sky-200 bg-sky-50 text-sky-700",
+    iconWrap: "bg-sky-50 text-sky-600 ring-1 ring-sky-100",
+    progress: "bg-sky-500",
+    label: "Actualización",
   };
+}
+
+function ToneIcon({ tone }: { tone: NotificationTone }) {
+  if (tone === "success") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]" aria-hidden>
+        <path d="M20 6 9 17l-5-5" />
+      </svg>
+    );
+  }
+  if (tone === "error") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]" aria-hidden>
+        <path d="M18 6 6 18" />
+        <path d="m6 6 12 12" />
+      </svg>
+    );
+  }
+  if (tone === "warning") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]" aria-hidden>
+        <path d="M12 9v4" />
+        <path d="M12 17h.01" />
+        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]" aria-hidden>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8h.01" />
+      <path d="M11 12h1v4h1" />
+    </svg>
+  );
 }
 
 function NotificationCard({
@@ -87,31 +125,32 @@ function NotificationCard({
   return (
     <div
       className={cn(
-        "pointer-events-auto w-full overflow-hidden rounded-[22px] border p-3 backdrop-blur-xl transition-all duration-200",
+        "pointer-events-auto w-full overflow-hidden rounded-[24px] border backdrop-blur-xl transition-all duration-200",
         palette.shell
       )}
       role={item.tone === "error" ? "alert" : "status"}
       aria-live={item.tone === "error" ? "assertive" : "polite"}
     >
-      <div className="flex items-start gap-3">
-        <div className="mt-1 flex h-2.5 w-2.5 shrink-0 rounded-full">
-          <span className={cn("h-2.5 w-2.5 rounded-full", palette.dot)} />
+      <div className={cn("h-1 w-full", palette.progress, "opacity-90")} />
+      <div className="flex items-start gap-3 p-3.5">
+        <div className={cn("mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl", palette.iconWrap)}>
+          <ToneIcon tone={item.tone} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em]", palette.badge)}>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className={cn("rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em]", palette.badge)}>
               {palette.label}
             </span>
-            <p className="text-sm font-semibold leading-5">{item.title}</p>
+            <p className="text-[15px] font-semibold leading-5 text-slate-900">{item.title}</p>
           </div>
           {item.description ? (
-            <p className="mt-1 whitespace-pre-wrap text-[13px] leading-5 text-current/78">{item.description}</p>
+            <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-5 text-slate-600">{item.description}</p>
           ) : null}
         </div>
         <button
           type="button"
           onClick={onDismiss}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/5 bg-white/65 text-base leading-none text-slate-500 transition hover:bg-white hover:text-slate-900"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900/5 text-base leading-none text-slate-400 transition hover:bg-slate-900/10 hover:text-slate-800"
           aria-label="Cerrar notificacion"
         >
           ×
@@ -169,7 +208,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   return (
     <NotificationsContext.Provider value={contextValue}>
       {children}
-      <div className="pointer-events-none fixed inset-x-4 bottom-4 z-[220] flex w-auto flex-col gap-3 sm:mx-auto sm:max-w-[420px]">
+      <div className="pointer-events-none fixed inset-x-4 bottom-4 z-[220] flex w-auto flex-col gap-3 sm:bottom-5 sm:right-5 sm:left-auto sm:w-[440px]">
         {items.map((item) => (
           <NotificationCard key={item.id} item={item} onDismiss={() => dismiss(item.id)} />
         ))}
