@@ -263,7 +263,7 @@ export default function DeadlineReportsPage() {
         <Card><CardContent className="pt-5"><div className="text-xs text-slate-500">Verde</div><div className="text-2xl font-semibold text-emerald-700">{summary.green}</div></CardContent></Card>
       </div>
 
-      <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.82)]">
+      <Card className="sticky top-24 z-20 border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.92)] shadow-sm backdrop-blur">
         <CardHeader className="pb-3">
           <CardTitle className="text-base sm:text-lg">Filtros</CardTitle>
         </CardHeader>

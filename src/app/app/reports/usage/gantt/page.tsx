@@ -257,7 +257,7 @@ function getCustomPeriodLabel(fromText: string, toText: string) {
 }
 
 function filterSelectClass() {
-  return "h-9 w-full rounded-[14px] border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100 sm:text-sm";
+  return "h-[var(--control-h)] w-full rounded-[1.2rem] border-0 bg-transparent px-3.5 text-base font-semibold text-stone-50 outline-none transition placeholder:text-stone-400 focus:bg-white/5 sm:text-base";
 }
 
 function DirectionIcon({
@@ -842,169 +842,164 @@ export default function UsageGanttPage() {
         }
       />
 
-      <Card>
+      <Card className="sticky top-24 z-20 border-stone-800 bg-stone-950/95 shadow-sm backdrop-blur">
         <CardContent className="p-2.5 sm:p-3">
-          <div className="grid gap-1.5 rounded-[20px] border border-slate-200 bg-slate-50/80 p-2 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] xl:items-start">
-            <section className="h-full rounded-[16px] border border-slate-200 bg-white p-2">
-              <div className="mb-1 flex min-h-7 items-center">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Alcance</div>
-              </div>
-              <div className="grid gap-1 md:grid-cols-[minmax(0,1.8fr)_minmax(0,0.85fr)_minmax(0,0.85fr)]">
-              <label className="grid gap-0.5">
-                <span className="text-[11px] font-medium text-slate-500">Entidad</span>
-                <div ref={entityFilterRef} className="relative">
-                  <input
-                    value={entitySearch}
-                    onChange={(e) => {
-                      const nextValue = e.target.value;
-                      setEntitySearch(nextValue);
-                      const matched = entityOptions.find(
-                        (option) => option.name.toLowerCase() === nextValue.trim().toLowerCase()
-                      );
-                      setEntityId(matched?.id ?? (nextValue.trim() ? entityId : "all"));
-                      if (!entitySuggestionsOpen) setEntitySuggestionsOpen(true);
-                    }}
-                    onFocus={() => setEntitySuggestionsOpen(true)}
-                    placeholder="Buscar entidad..."
-                    className={filterSelectClass()}
-                  />
-                  {entitySuggestionsOpen ? (
-                    <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 rounded-[16px] border border-slate-200 bg-white p-1 shadow-[0_18px_32px_-24px_rgba(15,23,42,0.18)]">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEntityId("all");
-                          setEntitySearch("");
-                          setEntitySuggestionsOpen(false);
-                        }}
-                        className="flex w-full items-center rounded-[10px] px-2.5 py-2 text-left text-[13px] text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                      >
-                        Todas las entidades
-                      </button>
-                      <div className="max-h-56 overflow-y-auto">
-                        {filteredEntityOptions.map((option) => (
-                          <button
-                            key={option.id}
-                            type="button"
-                            onClick={() => {
-                              setEntityId(option.id);
-                              setEntitySearch(option.name);
-                              setEntitySuggestionsOpen(false);
-                            }}
-                            className="flex w-full items-center rounded-[10px] px-2.5 py-2 text-left text-[13px] text-slate-700 hover:bg-slate-50 hover:text-slate-950"
-                          >
-                            {option.name}
-                          </button>
-                        ))}
-                        {filteredEntityOptions.length === 0 ? (
-                          <div className="px-2.5 py-2 text-[12px] text-slate-400">Sin coincidencias</div>
-                        ) : null}
-                      </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-[280px] flex-1" ref={entityFilterRef}>
+              <div className="relative rounded-[1.2rem] bg-transparent transition hover:bg-white/5 focus-within:bg-white/5">
+                <input
+                  value={entitySearch}
+                  onChange={(e) => {
+                    const nextValue = e.target.value;
+                    setEntitySearch(nextValue);
+                    const matched = entityOptions.find(
+                      (option) => option.name.toLowerCase() === nextValue.trim().toLowerCase()
+                    );
+                    setEntityId(matched?.id ?? (nextValue.trim() ? entityId : "all"));
+                    if (!entitySuggestionsOpen) setEntitySuggestionsOpen(true);
+                  }}
+                  onFocus={() => setEntitySuggestionsOpen(true)}
+                  placeholder="Entidad"
+                  className={cn(filterSelectClass(), "pr-4")}
+                />
+                {entitySuggestionsOpen ? (
+                  <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 rounded-[1.25rem] border border-stone-700 bg-stone-950 p-2 shadow-[0_18px_38px_-24px_rgba(42,26,8,0.45)]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEntityId("all");
+                        setEntitySearch("");
+                        setEntitySuggestionsOpen(false);
+                      }}
+                      className="flex w-full items-center rounded-[12px] px-2.5 py-2 text-left text-[13px] text-stone-300 transition hover:bg-stone-900 hover:text-stone-50"
+                    >
+                      Todas las entidades
+                    </button>
+                    <div className="max-h-56 overflow-y-auto">
+                      {filteredEntityOptions.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => {
+                            setEntityId(option.id);
+                            setEntitySearch(option.name);
+                            setEntitySuggestionsOpen(false);
+                          }}
+                          className="flex w-full items-center rounded-[12px] px-2.5 py-2 text-left text-[13px] text-stone-200 transition hover:bg-stone-900 hover:text-stone-50"
+                        >
+                          {option.name}
+                        </button>
+                      ))}
+                      {filteredEntityOptions.length === 0 ? (
+                        <div className="px-2.5 py-2 text-[12px] text-stone-500">Sin coincidencias</div>
+                      ) : null}
                     </div>
-                  ) : null}
-                </div>
-              </label>
-              <label className="grid gap-0.5">
-                <span className="text-[11px] font-medium text-slate-500">Tipo</span>
-                <select value={entityTypeId} onChange={(e) => setEntityTypeId(e.target.value)} className={filterSelectClass()}>
-                  <option value="all">Todos los tipos</option>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="min-w-[180px]">
+              <div className="rounded-[1.2rem] bg-transparent transition hover:bg-white/5 focus-within:bg-white/5">
+                <select value={entityTypeId} onChange={(e) => setEntityTypeId(e.target.value)} className={cn(filterSelectClass(), "appearance-none pr-9")}>
+                  <option value="all">Tipo</option>
                   {entityTypeOptions.map((option) => (
                     <option key={option.id} value={option.id}>{option.name}</option>
                   ))}
                 </select>
-              </label>
-              <label className="grid gap-0.5">
-                <span className="text-[11px] font-medium text-slate-500">Unidad</span>
-                <select value={usageUnitId} onChange={(e) => setUsageUnitId(e.target.value)} className={filterSelectClass()}>
-                  <option value="all">Todas las unidades</option>
+              </div>
+            </div>
+
+            <div className="min-w-[180px]">
+              <div className="rounded-[1.2rem] bg-transparent transition hover:bg-white/5 focus-within:bg-white/5">
+                <select value={usageUnitId} onChange={(e) => setUsageUnitId(e.target.value)} className={cn(filterSelectClass(), "appearance-none pr-9")}>
+                  <option value="all">Unidad</option>
                   {usageUnitOptions.map((option) => (
                     <option key={option.id} value={option.id}>{option.name}</option>
                   ))}
                 </select>
-              </label>
-              </div>
-            </section>
-
-            <section className="h-full rounded-[16px] border border-slate-200 bg-white p-2">
-            <div className="mb-1 flex min-h-7 flex-wrap items-center justify-between gap-1.5 sm:flex-nowrap">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Periodo</div>
-                <div className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-medium text-slate-600">
-                  {periodLabel}
-                </div>
-              </div>
-              <div className="inline-flex h-8 rounded-full border border-slate-200 bg-slate-50 p-1">
-                <button
-                  type="button"
-                  onClick={() => setRangeMode("preset")}
-                  className={cn(
-                    "inline-flex h-6 items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium transition",
-                    rangeMode === "preset" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                  )}
-                >
-                  Guiado
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRangeMode("custom")}
-                  className={cn(
-                    "inline-flex h-6 items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium transition",
-                    rangeMode === "custom" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                  )}
-                >
-                  Rango
-                </button>
               </div>
             </div>
 
+            <div className="inline-flex h-[var(--control-h)] rounded-full border border-stone-700 bg-stone-900 p-1">
+              <button
+                type="button"
+                onClick={() => setRangeMode("preset")}
+                className={cn(
+                  "inline-flex items-center rounded-full px-3 py-1 text-[12px] font-semibold transition",
+                  rangeMode === "preset" ? "bg-stone-50 text-stone-950" : "text-stone-300 hover:text-stone-50"
+                )}
+              >
+                Guiado
+              </button>
+              <button
+                type="button"
+                onClick={() => setRangeMode("custom")}
+                className={cn(
+                  "inline-flex items-center rounded-full px-3 py-1 text-[12px] font-semibold transition",
+                  rangeMode === "custom" ? "bg-stone-50 text-stone-950" : "text-stone-300 hover:text-stone-50"
+                )}
+              >
+                Rango
+              </button>
+            </div>
+
             {rangeMode === "preset" ? (
-              <div className="grid gap-1.5 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-center">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <div className="inline-flex h-8 rounded-full border border-slate-200 bg-slate-50 p-1">
-                    {([
-                      { value: "week", label: "Semanal" },
-                      { value: "month", label: "Mensual" },
-                    ] as Array<{ value: Scale; label: string }>).map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setScale(option.value)}
-                        className={cn(
-                          "inline-flex h-6 items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium transition",
-                          scale === option.value ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-700"
-                        )}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
+              <>
+                <div className="inline-flex h-[var(--control-h)] rounded-full border border-stone-700 bg-stone-900 p-1">
+                  {([
+                    { value: "week", label: "Semanal" },
+                    { value: "month", label: "Mensual" },
+                  ] as Array<{ value: Scale; label: string }>).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setScale(option.value)}
+                      className={cn(
+                        "inline-flex items-center rounded-full px-3 py-1 text-[12px] font-semibold transition",
+                        scale === option.value ? "bg-stone-50 text-stone-950" : "text-stone-300 hover:text-stone-50"
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
                 </div>
-                <div className="flex flex-wrap items-center gap-1 lg:justify-end">
-                  <Button className="rounded-full border-slate-200 bg-white hover:bg-slate-50" variant="outline" size="sm" onClick={() => setAnchor((prev) => shiftAnchor(prev, scale, -1))}>Anterior</Button>
-                  <Button className="rounded-full border-slate-200 bg-white hover:bg-slate-50" variant="outline" size="sm" onClick={() => setAnchor((prev) => shiftAnchor(prev, scale, 1))}>Siguiente</Button>
-                  <Button className="rounded-full border-slate-200 bg-white hover:bg-slate-50" variant="outline" size="sm" onClick={() => setAnchor(today())}>Hoy</Button>
+
+                <div className="rounded-full bg-stone-900 px-3 py-2 text-sm font-semibold text-stone-100">
+                  {periodLabel}
                 </div>
-              </div>
+
+                <div className="ml-auto flex flex-wrap items-center gap-1">
+                  <Button className="rounded-full border-stone-700 bg-stone-900 text-stone-100 hover:bg-stone-800" variant="outline" size="sm" onClick={() => setAnchor((prev) => shiftAnchor(prev, scale, -1))}>Anterior</Button>
+                  <Button className="rounded-full border-stone-700 bg-stone-900 text-stone-100 hover:bg-stone-800" variant="outline" size="sm" onClick={() => setAnchor((prev) => shiftAnchor(prev, scale, 1))}>Siguiente</Button>
+                  <Button className="rounded-full border-stone-700 bg-stone-900 text-stone-100 hover:bg-stone-800" variant="outline" size="sm" onClick={() => setAnchor(today())}>Hoy</Button>
+                </div>
+              </>
             ) : (
-              <div className="grid gap-1 sm:grid-cols-2">
-                <MarkedDatePicker
-                  value={dateFrom}
-                  onChange={setDateFrom}
-                  highlightedDates={highlightedDates}
-                  placeholder="Desde"
-                  showLegend={false}
-                />
-                <MarkedDatePicker
-                  value={dateTo}
-                  onChange={setDateTo}
-                  highlightedDates={highlightedDates}
-                  placeholder="Hasta"
-                  showLegend={false}
-                />
+              <div className="ml-auto rounded-full bg-stone-900 px-3 py-2 text-sm font-semibold text-stone-100">
+                {periodLabel}
               </div>
             )}
-            </section>
           </div>
+
+          {rangeMode === "custom" ? (
+            <div className="mt-2 grid gap-2 md:grid-cols-2">
+              <MarkedDatePicker
+                value={dateFrom}
+                onChange={setDateFrom}
+                highlightedDates={highlightedDates}
+                placeholder="Desde"
+                showLegend={false}
+              />
+              <MarkedDatePicker
+                value={dateTo}
+                onChange={setDateTo}
+                highlightedDates={highlightedDates}
+                placeholder="Hasta"
+                showLegend={false}
+              />
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

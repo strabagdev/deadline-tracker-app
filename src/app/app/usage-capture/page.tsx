@@ -195,7 +195,7 @@ export default function UsageCapturePage() {
 
       {errorMsg ? <p className="text-sm text-rose-600 whitespace-pre-wrap">{errorMsg}</p> : null}
 
-      <Card>
+      <Card className="sticky top-24 z-20 bg-white/95 shadow-sm backdrop-blur">
         <CardHeader className="pb-3">
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">

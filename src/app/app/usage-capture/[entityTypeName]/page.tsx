@@ -1144,7 +1144,7 @@ export default function FocusedUsageCapturePage() {
             </div>
           ) : activeTab === "pending" ? (
             <div className="grid gap-4">
-              <section className="rounded-[20px] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.88))] p-4">
+              <section className="sticky top-24 z-20 rounded-[20px] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.97),rgba(241,245,249,0.94))] p-4 shadow-sm backdrop-blur">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div className="text-sm font-semibold text-slate-900">Contexto de trabajo</div>

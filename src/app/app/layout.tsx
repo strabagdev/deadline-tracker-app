@@ -584,8 +584,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     router.refresh();
   }
 
-  const userInfoCapsuleDesktop = !isSuperAdmin ? (
-    <div className="hidden min-w-0 items-center gap-2 rounded-full bg-slate-900/5 px-2.5 py-1 ring-1 ring-slate-200/80 backdrop-blur-sm 2xl:flex">
+  const orgDisplayName = React.useMemo(() => {
+    const org = String(activeOrgName ?? "").trim();
+    if (org) return org;
+    const email = String(sessionEmail ?? "").trim();
+    return email || "Sin organización";
+  }, [activeOrgName, sessionEmail]);
+
+  const userNameCapsuleDesktop = !isSuperAdmin ? (
+    <div className="hidden min-w-0 items-center gap-2 rounded-full bg-slate-900/5 px-2.5 py-1 ring-1 ring-slate-200/80 backdrop-blur-sm lg:flex">
       {activeOrgLogoUrl ? (
         <img
           src={activeOrgLogoUrl}
@@ -596,26 +603,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         />
       ) : null}
       <div className="min-w-0 truncate text-[11px] font-medium text-slate-700">
-        {activeOrgName || sessionEmail || "Sin organización"}
+        {orgDisplayName}
       </div>
     </div>
   ) : null;
 
-  const userInfoCapsuleMobile = !isSuperAdmin ? (
+  const userNameCapsuleMobile = !isSuperAdmin ? (
     <div className="flex min-w-0 items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-slate-200/70 backdrop-blur-sm">
-      {activeOrgLogoUrl ? (
-        <img
-          src={activeOrgLogoUrl}
-          alt="Logo organización"
-          width={18}
-          height={18}
-          className="h-[18px] w-[18px] rounded-md object-cover"
-        />
-      ) : null}
       <div className="min-w-0">
-        <div className="truncate text-[11px] font-medium text-slate-700">
-          {activeOrgName || "Sin organización"}
-        </div>
+        <div className="truncate text-[11px] font-medium text-slate-700">{orgDisplayName}</div>
         <div className="truncate text-[11px] text-slate-500">
           {sessionEmail || "(sin email)"}
         </div>
@@ -673,7 +669,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   </div>
                 ) : (
                   <div className="flex min-w-0 items-center gap-2 lg:hidden">
-                    <div className="min-w-0">{userInfoCapsuleMobile}</div>
+                    <div className="min-w-0">{userNameCapsuleMobile}</div>
                     <div className="shrink-0">
                       <Button
                         variant="outline"
@@ -719,6 +715,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   </nav>
                   <div className="flex-1" />
                   <div className="flex shrink-0 items-center gap-2">
+                    {userNameCapsuleDesktop}
                     <Button
                       onClick={refreshApp}
                       variant="outline"
@@ -744,7 +741,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     >
                       <IconLogout />
                     </Button>
-                    {userInfoCapsuleDesktop}
                   </div>
                 </div>
               ) : null}

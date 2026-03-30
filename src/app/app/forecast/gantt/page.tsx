@@ -253,7 +253,7 @@ export default function ForecastGanttPage() {
         }
       />
 
-      <Card>
+      <Card className="sticky top-24 z-20 bg-white/95 shadow-sm backdrop-blur">
         <CardContent className="grid gap-3 py-4 md:grid-cols-3 xl:grid-cols-6">
           <select value={entityId} onChange={(e) => setEntityId(e.target.value)} className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm">
             <option value="all">Todas las entidades</option>

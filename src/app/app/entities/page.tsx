@@ -977,7 +977,7 @@ export default function EntitiesPage() {
         </div>
       ) : null}
 
-      <Card className="border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.82)]">
+      <Card className="sticky top-24 z-20 border-[rgba(17,32,28,0.08)] bg-[rgba(255,255,255,0.92)] shadow-sm backdrop-blur">
         <CardHeader className="pb-3">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
             <div>

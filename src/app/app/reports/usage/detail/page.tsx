@@ -585,7 +585,7 @@ export default function UsageReportsPage() {
 
       {errorMsg ? <div className="app-alert app-alert-error whitespace-pre-wrap">{errorMsg}</div> : null}
 
-      <Card>
+      <Card className="sticky top-24 z-20 bg-white/95 shadow-sm backdrop-blur">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Filtros</CardTitle>
         </CardHeader>

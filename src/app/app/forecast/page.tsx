@@ -306,7 +306,7 @@ export default function ForecastPage() {
             </Card>
           </section>
 
-          <Card>
+          <Card className="sticky top-24 z-20 bg-white/95 shadow-sm backdrop-blur">
             <CardHeader className="pb-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
