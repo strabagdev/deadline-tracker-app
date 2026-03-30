@@ -896,6 +896,7 @@ export default function FocusedUsageCapturePage() {
         secondaryBadge={typeLabel || entityTypeName || "—"}
         title="Ingreso de Uso Enfocado"
         subtitle={<>Tipo de entidad: <b>{typeLabel || entityTypeName || "—"}</b></>}
+        density="compact"
         actions={
           <Link href="/app/usage-capture">
             <Button variant="outline" size="sm">Volver</Button>

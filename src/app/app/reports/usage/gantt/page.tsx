@@ -826,6 +826,7 @@ export default function UsageGanttPage() {
         secondaryBadge="Uso"
         title="Reporte cronológico de actividad"
         subtitle="Lectura temporal del uso registrado para detectar concentración, vacíos y continuidad operativa."
+        density="compact"
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => void exportPdf()} disabled={loading || busy}>

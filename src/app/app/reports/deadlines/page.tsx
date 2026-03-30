@@ -234,6 +234,7 @@ export default function DeadlineReportsPage() {
         secondaryBadge="Vencimientos"
         title="Reportes de vencimientos"
         subtitle="Vista reportable del estado vigente por entidad y vencimiento."
+        density="compact"
         actions={
           <>
             <Button onClick={() => void downloadExcel()} variant="outline" size="sm" disabled={loading || busy}>

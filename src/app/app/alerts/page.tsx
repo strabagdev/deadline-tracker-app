@@ -154,6 +154,7 @@ export default function AlertsPage() {
         secondaryBadge="Eventos"
         title="Eventos"
         subtitle={<>Historial operativo derivado desde <code>deadline_forecasts</code>. El estado vigente se revisa en Forecast.</>}
+        density="compact"
         actions={
           <>
             <Link href="/app/forecast">

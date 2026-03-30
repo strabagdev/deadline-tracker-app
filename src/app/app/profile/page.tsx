@@ -167,6 +167,7 @@ export default function ProfilePage() {
         secondaryBadge={orgRole || "Sin rol"}
         title="Perfil de usuario"
         subtitle="Configuración de acceso y marca de organización."
+        density="compact"
         actions={
           <Button type="button" variant="outline" size="sm" onClick={() => router.replace("/app")}>
             Volver

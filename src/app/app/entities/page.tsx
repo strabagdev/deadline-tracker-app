@@ -559,6 +559,7 @@ export default function EntitiesPage() {
         secondaryBadge="Entidades"
         title="Entidades"
         subtitle="Gestión compacta para alta densidad de registros."
+        density="compact"
         actions={
           <>
             <Button

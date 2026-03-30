@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { IconChevronDown, IconRotateClockwise } from "@tabler/icons-react";
+import { IconArrowUp, IconChevronDown, IconRotateClockwise } from "@tabler/icons-react";
 import { supabaseAuth } from "@/lib/supabase/authClient";
 import { Loader } from "@/components/ui/loader";
 import { Button } from "@/components/ui/button";
@@ -70,7 +70,7 @@ type FilterDropdownOption = {
   badgeClassName?: string;
 };
 
-const CARD_PAGE_SIZE = 250;
+const CARD_PAGE_SIZE = 200;
 
 function IconClearFilters({ className }: IconProps) {
   return <IconRotateClockwise stroke={2} className={cn("h-5 w-5", className)} aria-hidden />;
@@ -214,6 +214,7 @@ function FilterDropdown({
 export default function OperationsPage() {
   const router = useRouter();
   const operationsPanelRef = useRef<HTMLDivElement | null>(null);
+  const filtersBarRef = useRef<HTMLDivElement | null>(null);
 
   const [entities, setEntities] = useState<EntityRow[]>([]);
   const [usage, setUsage] = useState<LatestUsageByEntity>({});
@@ -228,7 +229,7 @@ export default function OperationsPage() {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [selectedEntityId, setSelectedEntityId] = useState("");
-  const [filtersCollapsed, setFiltersCollapsed] = useState(false);
+  const [filtersCollapsed, setFiltersCollapsed] = useState(true);
 
   const [semaphore, setSemaphore] = useState<SemaphoreSettings>({
     yellow_days: 60,
@@ -511,6 +512,17 @@ export default function OperationsPage() {
     return `Se están mostrando entidades ${clauses.join(" ")}`;
   }, [entityTypeDropdownOptions, filterEntityType, filterSecondary, filterStatus, q, statusFilterOptions]);
 
+  function scrollToFilters() {
+    const element = filtersBarRef.current;
+    if (!element) return;
+    const stickyTop = 96;
+    const absoluteTop = window.scrollY + element.getBoundingClientRect().top;
+    window.scrollTo({
+      top: Math.max(0, absoluteTop - stickyTop),
+      behavior: "smooth",
+    });
+  }
+
   return (
     <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-4 sm:space-y-6">
       <PageHero
@@ -518,9 +530,22 @@ export default function OperationsPage() {
         secondaryBadge="Seguimiento"
         title="Operaciones"
         subtitle="Control visual del estado operativo y acceso directo al detalle por entidad."
+        density="compact"
+        actions={
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={scrollToFilters}
+            title="Ir a filtros"
+            aria-label="Ir a filtros"
+            className="h-10 w-10 rounded-full"
+          >
+            <IconArrowUp className="h-4 w-4" stroke={2} />
+          </Button>
+        }
       />
 
-      <div className="rounded-[2rem] border border-stone-200 bg-stone-950 px-6 py-6 text-stone-50 shadow-[0_20px_45px_rgba(42,26,8,0.35)]">
+      <div ref={filtersBarRef} className="sticky top-24 z-20 rounded-[2rem] border border-stone-200 bg-stone-950 px-6 py-6 text-stone-50 shadow-[0_20px_45px_rgba(42,26,8,0.35)]">
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-400">Filtros</div>
@@ -632,41 +657,32 @@ export default function OperationsPage() {
                     </div>
                   ) : null}
 
-                  <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto pr-1">
-                    {secondaryFilterOptions.length > 0 ? (
-                      secondaryFilterOptions.map((option) => {
-                        const selected = filterSecondary.includes(option.value);
-                        return (
-                          <button
-                            key={`secondary-option-${option.value}`}
-                            type="button"
-                            onClick={() => {
-                              setFilterSecondary((current) => {
-                                if (current.includes(option.value)) {
-                                  return current.filter((value) => value !== option.value);
-                                }
-                                return [...current, option.value];
-                              });
-                              setPage(1);
-                            }}
-                            className={cn(
-                              "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition",
-                              selected
-                                ? "border-sky-300/20 bg-sky-400/15 text-sky-200"
-                                : "border-stone-700 bg-stone-950 text-stone-300 hover:bg-stone-800"
-                            )}
-                          >
-                            <span className="truncate">{option.value}</span>
-                            <span className="text-[11px] text-stone-400">{option.count}</span>
-                          </button>
-                        );
-                      })
-                    ) : (
-                      <div className="rounded-[1rem] border border-dashed border-stone-700 px-4 py-3 text-sm text-stone-400">
-                        No hay opciones secundarias disponibles.
-                      </div>
-                    )}
+              <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto pr-1">
+                {secondaryFilterOptions.filter((option) => !filterSecondary.includes(option.value)).length > 0 ? (
+                  secondaryFilterOptions
+                    .filter((option) => !filterSecondary.includes(option.value))
+                    .map((option) => {
+                      return (
+                        <button
+                          key={`secondary-option-${option.value}`}
+                          type="button"
+                          onClick={() => {
+                            setFilterSecondary((current) => [...current, option.value]);
+                            setPage(1);
+                          }}
+                          className="inline-flex items-center gap-2 rounded-full border border-stone-700 bg-stone-950 px-3 py-1.5 text-xs font-medium text-stone-300 transition hover:bg-stone-800"
+                        >
+                          <span className="truncate">{option.value}</span>
+                          <span className="text-[11px] text-stone-400">{option.count}</span>
+                        </button>
+                      );
+                    })
+                ) : (
+                  <div className="rounded-[1rem] border border-dashed border-stone-700 px-4 py-3 text-sm text-stone-400">
+                    No hay más opciones secundarias disponibles.
                   </div>
+                )}
+              </div>
                 </div>
               </div>
             ) : null}
@@ -694,58 +710,6 @@ export default function OperationsPage() {
         ) : (
           <div ref={operationsPanelRef} className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
                 <div className="space-y-3">
-                  <div className="rounded-[18px] border border-slate-200 bg-white px-3 py-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Leyenda del mosaico</div>
-                        <div className="mt-1 text-[11px] text-slate-500">
-                          Mostrando {totalRowsForPagination === 0 ? 0 : pageStart + 1}-{Math.min(pageStart + effectivePageSize, totalRowsForPagination)} de {totalRowsForPagination}
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        <div className="flex flex-wrap gap-2 text-[11px]">
-                          {statusFilterMeta.filter((item) => item.key !== "all").map((item) => {
-                            return (
-                              <div key={`legend-inline-${item.key}`} className="inline-flex items-center gap-2 text-slate-600">
-                                <span className={cn("h-3 w-3 rounded-[4px] border", statusLegendSwatch(item.key as Status))} />
-                                {item.title}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {totalPages > 1 ? (
-                          <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
-                            <Button
-                              onClick={() => setPage((p) => Math.max(1, p - 1))}
-                              disabled={safePage <= 1}
-                              variant="outline"
-                              size="sm"
-                              className="h-7 min-w-7 rounded-full px-0 text-[11px]"
-                              title="Página anterior"
-                              aria-label="Página anterior"
-                            >
-                              ◀
-                            </Button>
-                            <div className="px-1 text-[11px] font-medium text-slate-600">
-                              {safePage}/{totalPages}
-                            </div>
-                            <Button
-                              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                              disabled={safePage >= totalPages}
-                              variant="outline"
-                              size="sm"
-                              className="h-7 min-w-7 rounded-full px-0 text-[11px]"
-                              title="Página siguiente"
-                              aria-label="Página siguiente"
-                            >
-                              ▶
-                            </Button>
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-
                   {groupedPagedRows.map(([typeName, typeRows]) => (
                     <section key={typeName} className="space-y-2">
                       <div className="rounded-[18px] border border-slate-200 bg-white p-3">
@@ -806,6 +770,55 @@ export default function OperationsPage() {
                       </div>
                     </section>
                   ))}
+
+                  <div className="rounded-[18px] border border-slate-200 bg-white px-3 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px]">
+                        {statusFilterMeta.filter((item) => item.key !== "all").map((item) => {
+                          return (
+                            <div key={`legend-inline-${item.key}`} className="inline-flex items-center gap-2 text-slate-600">
+                              <span className={cn("h-3 w-3 rounded-[4px] border", statusLegendSwatch(item.key as Status))} />
+                              {item.title}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2 text-right">
+                        <div className="text-[11px] text-slate-500">
+                          Mostrando {totalRowsForPagination === 0 ? 0 : pageStart + 1}-{Math.min(pageStart + effectivePageSize, totalRowsForPagination)} de {totalRowsForPagination}
+                        </div>
+                        {totalPages > 1 ? (
+                          <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+                            <Button
+                              onClick={() => setPage((p) => Math.max(1, p - 1))}
+                              disabled={safePage <= 1}
+                              variant="outline"
+                              size="sm"
+                              className="h-7 min-w-7 rounded-full px-0 text-[11px]"
+                              title="Página anterior"
+                              aria-label="Página anterior"
+                            >
+                              ◀
+                            </Button>
+                            <div className="px-1 text-[11px] font-medium text-slate-600">
+                              {safePage}/{totalPages}
+                            </div>
+                            <Button
+                              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                              disabled={safePage >= totalPages}
+                              variant="outline"
+                              size="sm"
+                              className="h-7 min-w-7 rounded-full px-0 text-[11px]"
+                              title="Página siguiente"
+                              aria-label="Página siguiente"
+                            >
+                              ▶
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <aside className="grid content-start gap-3 rounded-[20px] border border-slate-200 bg-white p-4">
@@ -833,7 +846,7 @@ export default function OperationsPage() {
                           <div className="rounded-[16px] border p-4" style={{ borderColor: tone.border, background: tone.soft }}>
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <div className="break-words text-base font-semibold leading-6 text-slate-950">{e.name}</div>
+                                <div className="truncate text-base font-semibold leading-6 text-slate-950">{e.name}</div>
                                 <div className="mt-1 break-words text-xs text-slate-500">{e.entity_types?.name ?? "Sin tipo"}</div>
                               </div>
                               <Badge

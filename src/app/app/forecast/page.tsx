@@ -262,6 +262,7 @@ export default function ForecastPage() {
         secondaryBadge="Operación"
         title="OpsAhead Forecast"
         subtitle="Motor precalculado principal para vencimientos, riesgo y estado operativo."
+        density="compact"
         actions={
           <>
             <Link href="/app/reports/deadlines">

@@ -184,6 +184,7 @@ export default function UsageCapturePage() {
         secondaryBadge="Captura"
         title="Ingreso General de Uso"
         subtitle="Elige el tipo de entidad desde un hub pensado para retomar trabajo y entrar rápido a la captura enfocada."
+        density="compact"
         actions={
           <>
             <Link href="/app/reports/usage"><Button variant="outline" size="sm">Reportes uso</Button></Link>

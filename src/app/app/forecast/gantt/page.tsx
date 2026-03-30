@@ -245,6 +245,7 @@ export default function ForecastGanttPage() {
         secondaryBadge="Gantt"
         title="Carta Gantt de vencimientos"
         subtitle="Seguimiento temporal desde última ejecución hasta vencimiento proyectado."
+        density="compact"
         actions={
           <Link href="/app/forecast">
             <Button variant="outline" size="sm">Volver a Forecast</Button>

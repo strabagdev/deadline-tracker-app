@@ -570,6 +570,7 @@ export default function UsageReportsPage() {
         secondaryBadge="Uso"
         title="Detalle de Reportes de Uso"
         subtitle="Vista tabular para revisión puntual, exportación y lectura detallada de registros de uso."
+        density="compact"
         actions={
           <>
             <Link href="/app/usage-capture">
