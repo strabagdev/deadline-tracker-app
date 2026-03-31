@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="OpsAhead">
+  <rect width="512" height="512" rx="112" fill="#000"/>
+  <text
+    x="256"
+    y="284"
+    text-anchor="middle"
+    font-family="Arial, Helvetica, sans-serif"
+    font-size="188"
+    font-weight="700"
+    fill="#fff"
+  >
+    OA
+  </text>
+</svg>
