@@ -491,7 +491,7 @@ export default function AnalyticsDashboardPage() {
               <div className="mt-2.5 flex items-center justify-between gap-3 text-xs">
                 <div className="text-emerald-100/75">
                   {visibleSummaryUpdatedAt
-                    ? `Actualizado ${new Date(visibleSummaryUpdatedAt).toLocaleString(undefined, { timeZone: "UTC" })}`
+                    ? `Actualizado ${new Date(visibleSummaryUpdatedAt).toLocaleString()}`
                     : ""}
                 </div>
                 {summaryNeedsClamp ? (
@@ -638,7 +638,7 @@ export default function AnalyticsDashboardPage() {
               </p>
               {visibleSummaryUpdatedAt ? (
                 <div className="mt-4 text-xs text-emerald-100/75">
-                  Actualizado {new Date(visibleSummaryUpdatedAt).toLocaleString(undefined, { timeZone: "UTC" })}
+                  Actualizado {new Date(visibleSummaryUpdatedAt).toLocaleString()}
                 </div>
               ) : null}
             </div>
