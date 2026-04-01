@@ -97,6 +97,7 @@ export default function AnalyticsDashboardPage() {
   const [executiveSummary, setExecutiveSummary] = useState<DashboardExecutiveSummary | null>(null);
   const [summaryView, setSummaryView] = useState<"ai" | "system">("ai");
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
+  const [summaryCollapsed, setSummaryCollapsed] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -425,85 +426,98 @@ export default function AnalyticsDashboardPage() {
       <section className="overflow-hidden rounded-[28px] border border-emerald-500/20 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.18),transparent_28%),linear-gradient(160deg,#020617_0%,#0f172a_62%,#022c22_100%)] shadow-[0_26px_64px_-46px_rgba(2,6,23,0.9)]">
         <div className="px-5 py-3.5 sm:px-6 sm:py-4">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSummaryView("system")}
+                  className={`rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] transition ${
+                    !showingAiSummary
+                      ? "border-white/20 bg-white text-slate-950"
+                      : "border-white/10 bg-white/5 text-emerald-200 hover:bg-white/10"
+                  }`}
+                >
+                  Sistema
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (hasAiExecutiveComment) setSummaryView("ai");
+                  }}
+                  disabled={!hasAiExecutiveComment}
+                  className={`rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] transition ${
+                    showingAiSummary
+                      ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-100"
+                      : hasAiExecutiveComment
+                        ? "border-white/10 bg-white/5 text-emerald-200 hover:bg-white/10"
+                        : "cursor-not-allowed border-white/5 bg-white/5 text-slate-500"
+                  }`}
+                >
+                  IA
+                </button>
+                <span className="text-[11px] uppercase tracking-[0.2em] text-emerald-200/75">
+                  {showingAiSummary ? "Comentario ejecutivo" : "Resumen operativo"}
+                </span>
+              </div>
               <button
                 type="button"
-                onClick={() => setSummaryView("system")}
-                className={`rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] transition ${
-                  !showingAiSummary
-                    ? "border-white/20 bg-white text-slate-950"
-                    : "border-white/10 bg-white/5 text-emerald-200 hover:bg-white/10"
-                }`}
+                onClick={() => setSummaryCollapsed((current) => !current)}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-200 transition hover:bg-white/10 hover:text-emerald-100"
               >
-                Sistema
+                {summaryCollapsed ? "Expandir" : "Colapsar"}
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (hasAiExecutiveComment) setSummaryView("ai");
-                }}
-                disabled={!hasAiExecutiveComment}
-                className={`rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] transition ${
-                  showingAiSummary
-                    ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-100"
-                    : hasAiExecutiveComment
-                      ? "border-white/10 bg-white/5 text-emerald-200 hover:bg-white/10"
-                      : "cursor-not-allowed border-white/5 bg-white/5 text-slate-500"
-                }`}
-              >
-                IA
-              </button>
-              <span className="text-[11px] uppercase tracking-[0.2em] text-emerald-200/75">
-                {showingAiSummary ? "Comentario ejecutivo" : "Resumen operativo"}
-              </span>
             </div>
-            <div className="mt-1.5">
-              {visibleSummaryText ? (
-                <div className="space-y-2">
-                  {summaryNeedsClamp ? (
-                    <div>
-                      <p
-                        className="overflow-hidden text-[15px] leading-7 text-slate-100 sm:text-[16px]"
-                        style={{
-                          display: "-webkit-box",
-                          WebkitBoxOrient: "vertical",
-                          WebkitLineClamp: 2,
-                        }}
-                      >
-                        {visibleSummaryText}
-                      </p>
+            {!summaryCollapsed ? (
+              <>
+                <div className="mt-1.5">
+                  {visibleSummaryText ? (
+                    <div className="space-y-2">
+                      {summaryNeedsClamp ? (
+                        <div>
+                          <p
+                            className="overflow-hidden text-[15px] leading-7 text-slate-100 sm:text-[16px]"
+                            style={{
+                              display: "-webkit-box",
+                              WebkitBoxOrient: "vertical",
+                              WebkitLineClamp: 2,
+                            }}
+                          >
+                            {visibleSummaryText}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-[15px] leading-7 text-slate-100 sm:text-[16px]">
+                          {visibleSummaryText}
+                        </p>
+                      )}
                     </div>
                   ) : (
-                    <p className="text-[15px] leading-7 text-slate-100 sm:text-[16px]">
-                      {visibleSummaryText}
+                    <p className="text-sm leading-6 text-slate-300">
+                      {showingAiSummary
+                        ? "El comentario ejecutivo narrado todavía no está disponible."
+                        : "El resumen del sistema todavía no está disponible."}
                     </p>
                   )}
                 </div>
-              ) : (
-                <p className="text-sm leading-6 text-slate-300">
-                  {showingAiSummary
-                    ? "El comentario ejecutivo narrado todavía no está disponible."
-                    : "El resumen del sistema todavía no está disponible."}
-                </p>
-              )}
-            </div>
-            {visibleSummaryUpdatedAt || summaryNeedsClamp ? (
-              <div className="mt-2.5 flex items-center justify-between gap-3 text-xs">
-                <div className="text-emerald-100/75">
-                  {visibleSummaryUpdatedAt
-                    ? `Actualizado ${new Date(visibleSummaryUpdatedAt).toLocaleString()}`
-                    : ""}
-                </div>
-                {summaryNeedsClamp ? (
-                  <button
-                    type="button"
-                    onClick={() => setSummaryModalOpen(true)}
-                    className="shrink-0 whitespace-nowrap font-medium uppercase tracking-[0.18em] text-emerald-200/85 transition hover:text-emerald-100"
-                  >
-                    Leer más
-                  </button>
+                {visibleSummaryUpdatedAt || summaryNeedsClamp ? (
+                  <div className="mt-2.5 flex items-center justify-between gap-3 text-xs">
+                    <div className="text-emerald-100/75">
+                      {visibleSummaryUpdatedAt
+                        ? `Actualizado ${new Date(visibleSummaryUpdatedAt).toLocaleString()}`
+                        : ""}
+                    </div>
+                    {summaryNeedsClamp ? (
+                      <button
+                        type="button"
+                        onClick={() => setSummaryModalOpen(true)}
+                        className="shrink-0 whitespace-nowrap font-medium uppercase tracking-[0.18em] text-emerald-200/85 transition hover:text-emerald-100"
+                      >
+                        Leer más
+                      </button>
+                    ) : null}
+                  </div>
                 ) : null}
-              </div>
+              </>
             ) : null}
           </div>
         </div>
