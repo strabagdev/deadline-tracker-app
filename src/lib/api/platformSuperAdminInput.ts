@@ -1,15 +1,19 @@
 export function parseSuperAdminInitializePayload(body: unknown) {
   const payload = (body ?? {}) as Record<string, unknown>;
+  const authMode =
+    payload.authMode === "associate-existing" || payload.authMode === "create-new"
+      ? payload.authMode
+      : "associate-existing";
   const email = String(payload.email ?? "").trim().toLowerCase();
   const password = String(payload.password ?? "");
   const setupKey = String(payload.setupKey ?? "").trim();
 
   if (!email) return { ok: false as const, status: 400, body: { error: "email required", code: "BAD_REQUEST" } };
-  if (password.length < 8) {
+  if (authMode === "create-new" && password.length < 8) {
     return { ok: false as const, status: 400, body: { error: "password min length is 8", code: "BAD_REQUEST" } };
   }
 
-  return { ok: true as const, email, password, setupKey };
+  return { ok: true as const, authMode, email, password, setupKey };
 }
 
 export function validateSuperAdminSetupKey(input: { setupKey: string; expectedSetupKey?: string }) {

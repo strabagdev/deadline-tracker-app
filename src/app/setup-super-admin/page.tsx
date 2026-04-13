@@ -9,6 +9,8 @@ type PublicStatusResponse = {
   error?: string;
 };
 
+type SetupAuthMode = "associate-existing" | "create-new";
+
 export default function SetupSuperAdminPage() {
   const router = useRouter();
 
@@ -21,12 +23,13 @@ export default function SetupSuperAdminPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [setupKey, setSetupKey] = useState("");
+  const [authMode, setAuthMode] = useState<SetupAuthMode>("associate-existing");
 
   const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
   const missingChecks: string[] = [];
   if (!normalizedEmail) missingChecks.push("Email requerido");
-  if (password.length < 8) missingChecks.push("Contraseña mínimo 8 caracteres");
-  if (confirmPassword !== password) missingChecks.push("Confirmación de contraseña no coincide");
+  if (authMode === "create-new" && password.length < 8) missingChecks.push("Contraseña mínimo 8 caracteres");
+  if (authMode === "create-new" && confirmPassword !== password) missingChecks.push("Confirmación de contraseña no coincide");
   if (!setupKey.trim()) missingChecks.push("Clave de setup requerida");
   const canSubmit = missingChecks.length === 0;
 
@@ -71,20 +74,25 @@ export default function SetupSuperAdminPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        authMode,
         email: normalizedEmail,
-        password,
+        password: authMode === "create-new" ? password : "",
         setupKey: setupKey.trim(),
       }),
     });
 
-    const json = (await res.json().catch(() => ({}))) as { error?: string; email?: string };
+    const json = (await res.json().catch(() => ({}))) as { error?: string; email?: string; auth_mode?: SetupAuthMode };
     if (!res.ok) {
       setError(json.error || "No se pudo crear el super admin inicial.");
       setBusy(false);
       return;
     }
 
-    setOk(`Super admin creado: ${json.email || normalizedEmail}. Ahora inicia sesión.`);
+    setOk(
+      json.auth_mode === "associate-existing"
+        ? `Super admin asociado: ${json.email || normalizedEmail}. La contraseña del usuario existente no fue modificada.`
+        : `Super admin creado: ${json.email || normalizedEmail}. Ahora inicia sesión.`
+    );
     setBusy(false);
     setTimeout(() => router.replace("/login"), 900);
   }
@@ -101,11 +109,35 @@ export default function SetupSuperAdminPage() {
     <main style={{ maxWidth: 680, margin: "40px auto", padding: 16 }}>
       <h1>Preconfiguración de Plataforma</h1>
       <p style={{ opacity: 0.8 }}>
-        Esta instalación no tiene super admin. Crea aquí el superusuario inicial. Esta pantalla
+        Esta instalación no tiene super admin. Define aquí el acceso inicial. Esta pantalla
         desaparecerá una vez creado.
       </p>
 
       <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+        <div>
+          <label>Modo</label>
+          <div style={{ display: "grid", gap: 8, marginTop: 6 }}>
+            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                type="radio"
+                checked={authMode === "associate-existing"}
+                onChange={() => setAuthMode("associate-existing")}
+                disabled={busy}
+              />
+              Asociar usuario existente del Auth central
+            </label>
+            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                type="radio"
+                checked={authMode === "create-new"}
+                onChange={() => setAuthMode("create-new")}
+                disabled={busy}
+              />
+              Crear usuario nuevo en Auth
+            </label>
+          </div>
+        </div>
+
         <div>
           <label>Email super admin</label>
           <input
@@ -118,27 +150,36 @@ export default function SetupSuperAdminPage() {
           />
         </div>
 
-        <div>
-          <label>Contraseña (mínimo 8)</label>
-          <input
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            type="password"
-            style={{ width: "100%", padding: 10, marginTop: 6 }}
-            disabled={busy}
-          />
-        </div>
+        {authMode === "create-new" ? (
+          <>
+            <div>
+              <label>Contraseña (mínimo 8)</label>
+              <input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type="password"
+                style={{ width: "100%", padding: 10, marginTop: 6 }}
+                disabled={busy}
+              />
+            </div>
 
-        <div>
-          <label>Confirmar contraseña</label>
-          <input
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            type="password"
-            style={{ width: "100%", padding: 10, marginTop: 6 }}
-            disabled={busy}
-          />
-        </div>
+            <div>
+              <label>Confirmar contraseña</label>
+              <input
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                type="password"
+                style={{ width: "100%", padding: 10, marginTop: 6 }}
+                disabled={busy}
+              />
+            </div>
+          </>
+        ) : (
+          <div style={{ fontSize: 13, opacity: 0.8 }}>
+            Se reutilizará un usuario ya existente en el Auth central. Si no recuerdas su contraseña, luego puedes usar
+            magic link o recuperación.
+          </div>
+        )}
 
         <div>
           <label>Clave de setup</label>

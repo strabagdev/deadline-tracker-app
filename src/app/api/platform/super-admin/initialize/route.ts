@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
+import { findAuthUserIdByEmail } from "@/lib/server/authAdmin";
 import { hasAnySuperAdmin } from "@/lib/server/superAdmin";
 import {
   parseSuperAdminInitializePayload,
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const parsed = parseSuperAdminInitializePayload(body);
     if (!parsed.ok) return NextResponse.json(parsed.body, { status: parsed.status });
-    const { email, password, setupKey } = parsed;
+    const { authMode, email, password, setupKey } = parsed;
 
     const expectedSetupKey = process.env.PLATFORM_SETUP_KEY;
     const setupValidation = validateSuperAdminSetupKey({ setupKey, expectedSetupKey });
@@ -34,19 +35,45 @@ export async function POST(req: Request) {
       process.env.SUPABASE_AUTH_SERVICE_ROLE_KEY!
     );
 
-    const { data: created, error: createErr } = await authAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    });
+    let userId = await findAuthUserIdByEmail(email);
 
-    if (createErr) {
-      return NextResponse.json({ error: createErr.message, code: "BAD_REQUEST" }, { status: 400 });
+    if (authMode === "associate-existing") {
+      if (!userId) {
+        return NextResponse.json(
+          {
+            error: "Ese email no existe todavía en el Auth central. Usa la opción de crear usuario nuevo.",
+            code: "BAD_REQUEST",
+          },
+          { status: 400 }
+        );
+      }
     }
 
-    const userId = created.user?.id;
-    if (!userId) {
-      return NextResponse.json({ error: "failed to create super admin user", code: "BAD_REQUEST" }, { status: 400 });
+    if (authMode === "create-new") {
+      if (userId) {
+        return NextResponse.json(
+          {
+            error: "Ese email ya existe en el Auth central. Usa la opción de asociar usuario existente.",
+            code: "BAD_REQUEST",
+          },
+          { status: 400 }
+        );
+      }
+
+      const { data: created, error: createErr } = await authAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+      });
+
+      if (createErr) {
+        return NextResponse.json({ error: createErr.message, code: "BAD_REQUEST" }, { status: 400 });
+      }
+
+      userId = created.user?.id ?? null;
+      if (!userId) {
+        return NextResponse.json({ error: "failed to create super admin user", code: "BAD_REQUEST" }, { status: 400 });
+      }
     }
 
     const { error: profileErr } = await db.from("profiles").upsert(
@@ -61,7 +88,7 @@ export async function POST(req: Request) {
     const { error: adminErr } = await db.from("platform_admins").insert({ user_id: userId });
     if (adminErr) throw adminErr;
 
-    return NextResponse.json({ ok: true, email, user_id: userId });
+    return NextResponse.json({ ok: true, email, user_id: userId, auth_mode: authMode });
   } catch (error: unknown) {
     return NextResponse.json({ error: getErrorMessage(error), code: "INTERNAL_ERROR" }, { status: 500 });
   }
