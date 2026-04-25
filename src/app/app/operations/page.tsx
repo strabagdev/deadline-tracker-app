@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { IconArrowUp, IconChevronDown, IconRotateClockwise } from "@tabler/icons-react";
 import { supabaseAuth } from "@/lib/supabase/authClient";
@@ -466,14 +466,14 @@ export default function OperationsPage() {
   const hasActiveFilters =
     q.trim().length > 0 || filterEntityType !== "all" || filterStatus !== "all" || filterSecondary.length > 0;
 
-  function countByStatus(s: Status | "all") {
+  const countByStatus = useCallback((s: Status | "all") => {
     if (s === "all") return statusCounts.total;
     if (s === "red") return statusCounts.red;
     if (s === "orange") return statusCounts.orange;
     if (s === "yellow") return statusCounts.yellow;
     if (s === "green") return statusCounts.green;
     return statusCounts.none;
-  }
+  }, [statusCounts]);
 
   const statusFilterOptions = useMemo<FilterDropdownOption[]>(
     () =>
@@ -483,7 +483,7 @@ export default function OperationsPage() {
         count: countByStatus(item.key),
         badgeClassName: statusBadgeClasses(item.key),
       })),
-    [statusFilterMeta, statusCounts]
+    [countByStatus, statusFilterMeta]
   );
 
   const selectedSecondaryOptions = useMemo(
