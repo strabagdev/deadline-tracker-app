@@ -652,9 +652,15 @@ export default function OperationsPage() {
                   </div>
 
                   <div ref={secondaryDropdownRef} className="relative">
-                    <button
-                      type="button"
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={() => setSecondaryDropdownOpen((current) => !current)}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        setSecondaryDropdownOpen((current) => !current);
+                      }}
                       className="flex min-h-[88px] w-full items-start justify-between gap-3 rounded-[1.35rem] border border-stone-700 bg-stone-950 px-4 py-3 text-left transition hover:bg-stone-900"
                       aria-haspopup="listbox"
                       aria-expanded={secondaryDropdownOpen}
@@ -694,7 +700,7 @@ export default function OperationsPage() {
                         stroke={2}
                         aria-hidden
                       />
-                    </button>
+                    </div>
 
                     {secondaryDropdownOpen ? (
                       <div className="absolute left-0 top-[calc(100%+10px)] z-30 w-full rounded-[1.35rem] border border-stone-700 bg-stone-950 p-3 shadow-[0_18px_38px_-24px_rgba(42,26,8,0.45)]">
