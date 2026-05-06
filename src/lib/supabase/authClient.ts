@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getSupabaseAuthPublicConfig } from "@/lib/supabase/env";
 
 type SupabaseAuthClient = ReturnType<typeof createClient>;
 
@@ -53,8 +54,7 @@ function sanitizeInvalidAuthStorage(url: string) {
 function getSupabaseAuthClient(): SupabaseAuthClient {
   if (cachedClient) return cachedClient;
 
-  const url = String(process.env.NEXT_PUBLIC_SUPABASE_AUTH_URL ?? "").trim();
-  const anonKey = String(process.env.NEXT_PUBLIC_SUPABASE_AUTH_ANON_KEY ?? "").trim();
+  const { url, anonKey } = getSupabaseAuthPublicConfig();
 
   if (!url || !anonKey) {
     throw new Error("Missing Supabase auth public configuration");

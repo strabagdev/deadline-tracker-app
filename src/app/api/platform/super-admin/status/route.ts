@@ -32,7 +32,7 @@ export async function GET(req: Request) {
     const { user } = await requireAuthUser(req);
     const db = createDataServerClient();
 
-    const status = await getSuperAdminStatus(db, user.id);
+    const status = await getSuperAdminStatus(db, user.id, user.email);
 
     return NextResponse.json({
       has_super_admin: status.hasSuperAdmin,

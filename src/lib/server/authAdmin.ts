@@ -1,14 +1,14 @@
 import { createClient } from "@supabase/supabase-js";
+import { getSupabaseAuthServerConfig } from "@/lib/supabase/env";
 
 export function createAuthAdminClient() {
-  const authUrl = process.env.NEXT_PUBLIC_SUPABASE_AUTH_URL;
-  const authServiceRole = process.env.SUPABASE_AUTH_SERVICE_ROLE_KEY;
+  const { url, serviceRoleKey } = getSupabaseAuthServerConfig();
 
-  if (!authUrl || !authServiceRole) {
+  if (!url || !serviceRoleKey) {
     throw new Error("Missing auth env vars");
   }
 
-  return createClient(authUrl, authServiceRole, {
+  return createClient(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }

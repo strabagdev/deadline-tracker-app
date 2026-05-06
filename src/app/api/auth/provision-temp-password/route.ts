@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
+import { createAuthAdminClient } from "@/lib/server/authAdmin";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
@@ -40,10 +40,7 @@ export async function POST(req: Request) {
 
     const tempPassword = generateTempPassword();
 
-    const authAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_AUTH_URL!,
-      process.env.SUPABASE_AUTH_SERVICE_ROLE_KEY!
-    );
+    const authAdmin = createAuthAdminClient();
 
     const nextUserMetadata = {
       ...(user.user_metadata || {}),

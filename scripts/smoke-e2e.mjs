@@ -25,6 +25,14 @@ function required(name) {
   return v;
 }
 
+function firstEnv(...names) {
+  for (const name of names) {
+    const value = String(process.env[name] || "").trim();
+    if (value) return value;
+  }
+  throw new Error(`Missing env: ${names.join(" or ")}`);
+}
+
 async function requestJson(url, options = {}) {
   const res = await fetch(url, options);
   const text = await res.text();
@@ -74,8 +82,8 @@ async function main() {
   loadEnvLocal();
 
   const baseUrl = process.env.SMOKE_BASE_URL || "http://localhost:3000";
-  const authUrl = required("NEXT_PUBLIC_SUPABASE_AUTH_URL");
-  const anonKey = required("NEXT_PUBLIC_SUPABASE_AUTH_ANON_KEY");
+  const authUrl = firstEnv("NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_AUTH_URL", "NEXT_PUBLIC_DATA_SUPABASE_URL");
+  const anonKey = firstEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_AUTH_ANON_KEY", "NEXT_PUBLIC_DATA_SUPABASE_ANON_KEY");
 
   const superAdminEmail = required("SMOKE_SUPERADMIN_EMAIL");
   const superAdminPassword = required("SMOKE_SUPERADMIN_PASSWORD");

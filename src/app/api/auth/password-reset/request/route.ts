@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getPublicAppUrl } from "@/lib/server/publicAppOrigin";
 import { createAuthAdminClient } from "@/lib/server/authAdmin";
 import { ensureSupabaseRedirect, isResendConfigured, sendAuthEmail } from "@/lib/server/authEmail";
+import { getSupabaseAuthPublicConfig, getSupabaseAuthServerConfig } from "@/lib/supabase/env";
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -10,13 +11,12 @@ function getErrorMessage(error: unknown) {
 }
 
 async function authUserExistsByEmail(email: string) {
-  const authUrl = process.env.NEXT_PUBLIC_SUPABASE_AUTH_URL;
-  const serviceRoleKey = process.env.SUPABASE_AUTH_SERVICE_ROLE_KEY;
-  if (!authUrl || !serviceRoleKey) {
+  const { url, serviceRoleKey } = getSupabaseAuthServerConfig();
+  if (!url || !serviceRoleKey) {
     throw new Error("Missing auth server configuration");
   }
 
-  const adminClient = createClient(authUrl, serviceRoleKey, {
+  const adminClient = createClient(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
@@ -80,13 +80,12 @@ export async function POST(req: Request) {
         actionUrl: actionLink,
       });
     } else {
-      const authUrl = process.env.NEXT_PUBLIC_SUPABASE_AUTH_URL;
-      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_AUTH_ANON_KEY;
-      if (!authUrl || !anonKey) {
+      const { url, anonKey } = getSupabaseAuthPublicConfig();
+      if (!url || !anonKey) {
         throw new Error("Missing auth public configuration");
       }
 
-      const publicClient = createClient(authUrl, anonKey, {
+      const publicClient = createClient(url, anonKey, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
 

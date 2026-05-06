@@ -24,7 +24,7 @@ Opcional:
 
 - `SMOKE_BASE_URL` (default: `http://localhost:3000`)
 
-Nota: el script lee `.env.local` automáticamente para tomar `NEXT_PUBLIC_SUPABASE_AUTH_URL` y `NEXT_PUBLIC_SUPABASE_AUTH_ANON_KEY`.
+Nota: el script lee `.env.local` automáticamente para tomar la configuración pública de Supabase Auth. Acepta `NEXT_PUBLIC_SUPABASE_AUTH_URL` / `NEXT_PUBLIC_SUPABASE_AUTH_ANON_KEY` o, si usas un solo proyecto, `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 
 ## Ejecución
 
@@ -46,8 +46,8 @@ Existe workflow `Smoke E2E` (`.github/workflows/smoke-e2e.yml`) para correr esta
 
 Secrets requeridos en GitHub:
 
-- `NEXT_PUBLIC_SUPABASE_AUTH_URL`
-- `NEXT_PUBLIC_SUPABASE_AUTH_ANON_KEY`
+- `NEXT_PUBLIC_SUPABASE_AUTH_URL` o `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_AUTH_ANON_KEY` o `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SMOKE_SUPERADMIN_EMAIL`
 - `SMOKE_SUPERADMIN_PASSWORD`
 - `SMOKE_OWNER_EMAIL`

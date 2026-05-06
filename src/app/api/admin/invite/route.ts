@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/server/requireAuthUser";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
 import { canViewModule, getOrgAccess, isAdminRole } from "@/lib/server/orgAccess";
-import { createClient } from "@supabase/supabase-js";
-import { findAuthUserIdByEmail } from "@/lib/server/authAdmin";
+import { createAuthAdminClient, findAuthUserIdByEmail } from "@/lib/server/authAdmin";
 import { getPublicAppUrl } from "@/lib/server/publicAppOrigin";
 import { AuthEmailProviderError, ensureSupabaseRedirect, isResendConfigured, sendAuthEmail } from "@/lib/server/authEmail";
 import type { GenerateLinkResponse } from "@supabase/auth-js";
@@ -194,10 +193,7 @@ export async function POST(req: Request) {
         }
       }
 
-      const supabaseAuthAdmin = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_AUTH_URL!,
-        process.env.SUPABASE_AUTH_SERVICE_ROLE_KEY!
-      );
+      const supabaseAuthAdmin = createAuthAdminClient();
 
       const redirectTo = getPublicAppUrl(req, "/auth/callback");
       const shouldUseResend = isResendConfigured();

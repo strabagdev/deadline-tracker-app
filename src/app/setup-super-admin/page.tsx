@@ -6,6 +6,7 @@ import { Loader } from "@/components/ui/loader";
 
 type PublicStatusResponse = {
   has_super_admin?: boolean;
+  configured_super_admin_email?: string | null;
   error?: string;
 };
 
@@ -24,6 +25,7 @@ export default function SetupSuperAdminPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [setupKey, setSetupKey] = useState("");
   const [authMode, setAuthMode] = useState<SetupAuthMode>("associate-existing");
+  const [configuredEmail, setConfiguredEmail] = useState("");
 
   const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
   const missingChecks: string[] = [];
@@ -55,6 +57,13 @@ export default function SetupSuperAdminPage() {
       setLoading(false);
       router.replace("/login");
       return;
+    }
+
+    const nextConfiguredEmail = String(json.configured_super_admin_email ?? "").trim().toLowerCase();
+    setConfiguredEmail(nextConfiguredEmail);
+    if (nextConfiguredEmail) {
+      setEmail(nextConfiguredEmail);
+      setAuthMode("create-new");
     }
 
     setLoading(false);
@@ -147,7 +156,13 @@ export default function SetupSuperAdminPage() {
             placeholder="superadmin@empresa.com"
             style={{ width: "100%", padding: 10, marginTop: 6 }}
             disabled={busy}
+            readOnly={Boolean(configuredEmail)}
           />
+          {configuredEmail ? (
+            <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
+              Este email viene de <code>PLATFORM_SUPER_ADMIN_EMAIL</code>.
+            </div>
+          ) : null}
         </div>
 
         {authMode === "create-new" ? (

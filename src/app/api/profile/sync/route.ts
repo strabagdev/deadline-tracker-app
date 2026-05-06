@@ -45,7 +45,7 @@ export async function POST(req: Request) {
 
     if (error) throw error;
 
-    const superAdmin = await isSuperAdmin(db, user.id);
+    const superAdmin = await isSuperAdmin(db, user.id, email);
     if (!superAdmin) {
       const { data: memberships, error: membershipErr } = await db
         .from("organization_members")

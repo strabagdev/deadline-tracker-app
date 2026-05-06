@@ -39,7 +39,42 @@ RESEND_FROM_EMAIL=no-reply@tu-dominio.com
 RESEND_FROM_NAME=Deadline Tracker
 ```
 
+Para fijar la cuenta super admin inicial por configuración:
+
+```env
+PLATFORM_SUPER_ADMIN_EMAIL=admin@empresa.com
+PLATFORM_SETUP_KEY=una_clave_de_setup
+```
+
+Si `PLATFORM_SUPER_ADMIN_EMAIL` está definida, solo ese email puede completar el setup inicial y se considera super admin aunque el proyecto Auth haya cambiado de UUIDs durante una migración.
+
 ## Supabase Auth en este proyecto
+
+La app puede trabajar con un solo proyecto Supabase para datos y autorización. En ese caso define:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_publishable_o_anon_key
+SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
+```
+
+Si prefieres nombrarla como aparece en el dashboard nuevo de Supabase, también se acepta:
+
+```env
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=tu_publishable_key
+```
+
+También se mantiene compatibilidad con la configuración separada heredada:
+
+```env
+NEXT_PUBLIC_SUPABASE_AUTH_URL=https://tu-proyecto-auth.supabase.co
+NEXT_PUBLIC_SUPABASE_AUTH_ANON_KEY=tu_auth_publishable_o_anon_key
+SUPABASE_AUTH_SERVICE_ROLE_KEY=tu_auth_service_role_key
+SUPABASE_DATA_URL=https://tu-proyecto-data.supabase.co
+SUPABASE_DATA_SERVICE_ROLE_KEY=tu_data_service_role_key
+```
+
+Si usas el proyecto único, Auth y las tablas de datos deben vivir en ese mismo proyecto para que los `user_id` de `auth.users` coincidan con `profiles`, `organization_members` y `platform_admins`.
 
 Usos actuales detectados:
 

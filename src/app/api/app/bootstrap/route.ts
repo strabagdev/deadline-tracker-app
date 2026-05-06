@@ -15,7 +15,7 @@ export async function GET(req: Request) {
     const db = createDataServerClient();
 
     const [superStatus, platformSettings] = await Promise.all([
-      getSuperAdminStatus(db, user.id),
+      getSuperAdminStatus(db, user.id, user.email),
       db
         .from("platform_settings")
         .select("platform_logo_url")

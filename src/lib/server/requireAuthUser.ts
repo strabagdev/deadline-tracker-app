@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getSupabaseAuthPublicConfig } from "@/lib/supabase/env";
 
 function getErrorText(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -35,10 +36,10 @@ export async function requireAuthUser(req: Request) {
 
   if (!token) throw new Error("Missing Bearer token");
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_AUTH_URL!;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_AUTH_ANON_KEY!;
+  const { url, anonKey } = getSupabaseAuthPublicConfig();
+  if (!url || !anonKey) throw new Error("Missing auth public configuration");
 
-  const supabase = createClient(url, anon, { auth: { persistSession: false } });
+  const supabase = createClient(url, anonKey, { auth: { persistSession: false } });
 
   let lastError: unknown = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {

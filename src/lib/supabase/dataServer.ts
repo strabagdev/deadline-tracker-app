@@ -1,14 +1,14 @@
 import { createClient } from "@supabase/supabase-js";
+import { getSupabaseDataServerConfig } from "@/lib/supabase/env";
 
 export function createDataServerClient() {
-  const url = process.env.SUPABASE_DATA_URL;
-  const key = process.env.SUPABASE_DATA_SERVICE_ROLE_KEY;
+  const { url, serviceRoleKey } = getSupabaseDataServerConfig();
 
-  if (!url || !key) {
-    throw new Error("Missing SUPABASE_DATA_URL or SUPABASE_DATA_SERVICE_ROLE_KEY");
+  if (!url || !serviceRoleKey) {
+    throw new Error("Missing Supabase data server configuration");
   }
 
-  return createClient(url, key, {
+  return createClient(url, serviceRoleKey, {
     auth: { persistSession: false },
   });
 }

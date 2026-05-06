@@ -23,7 +23,16 @@ type ProfileRow = {
   email: string | null;
 };
 
+export function getConfiguredSuperAdminEmail() {
+  return String(process.env.PLATFORM_SUPER_ADMIN_EMAIL ?? "").trim().toLowerCase();
+}
+
 async function getPrimarySuperAdmin(db: DataServerClient) {
+  const configuredEmail = getConfiguredSuperAdminEmail();
+  if (configuredEmail) {
+    return { userId: null, email: configuredEmail };
+  }
+
   const { data, error } = await db
     .from("platform_admins")
     .select("user_id, created_at")
@@ -53,13 +62,55 @@ async function getPrimarySuperAdmin(db: DataServerClient) {
   };
 }
 
+async function getProfileEmailByUserId(db: DataServerClient, userId: string) {
+  const { data, error } = await db
+    .from("profiles")
+    .select("email")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return String(data?.email ?? "").trim().toLowerCase();
+}
+
+async function isConfiguredSuperAdminProvisioned(db: DataServerClient, configuredEmail: string) {
+  const { data: profile, error: profileError } = await db
+    .from("profiles")
+    .select("user_id")
+    .eq("email", configuredEmail)
+    .maybeSingle();
+  if (profileError) throw profileError;
+
+  const userId = String(profile?.user_id ?? "");
+  if (!userId) return false;
+
+  const { data: admin, error: adminError } = await db
+    .from("platform_admins")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (adminError) throw adminError;
+
+  return Boolean(admin?.user_id);
+}
+
 export async function hasAnySuperAdmin(db: DataServerClient): Promise<boolean> {
+  const configuredEmail = getConfiguredSuperAdminEmail();
+  if (configuredEmail) {
+    return isConfiguredSuperAdminProvisioned(db, configuredEmail);
+  }
+
   const { data, error } = await db.from("platform_admins").select("user_id").limit(1);
   if (error) throw error;
   return Array.isArray(data) && data.length > 0;
 }
 
-export async function isSuperAdmin(db: DataServerClient, userId: string): Promise<boolean> {
+export async function isSuperAdmin(db: DataServerClient, userId: string, userEmail?: string | null): Promise<boolean> {
+  const configuredEmail = getConfiguredSuperAdminEmail();
+  if (configuredEmail) {
+    const normalizedEmail = String(userEmail ?? "").trim().toLowerCase() || (await getProfileEmailByUserId(db, userId));
+    if (normalizedEmail === configuredEmail) return true;
+  }
+
   const { data, error } = await db
     .from("platform_admins")
     .select("user_id")
@@ -69,10 +120,10 @@ export async function isSuperAdmin(db: DataServerClient, userId: string): Promis
   return Boolean(data?.user_id);
 }
 
-export async function getSuperAdminStatus(db: DataServerClient, userId: string) {
+export async function getSuperAdminStatus(db: DataServerClient, userId: string, userEmail?: string | null) {
   try {
     const hasSuperAdmin = await hasAnySuperAdmin(db);
-    const isCurrentSuperAdmin = hasSuperAdmin ? await isSuperAdmin(db, userId) : false;
+    const isCurrentSuperAdmin = await isSuperAdmin(db, userId, userEmail);
     const primary = await getPrimarySuperAdmin(db);
 
     return {
@@ -96,9 +147,10 @@ export async function bootstrapFirstSuperAdmin(
   userId: string,
   userEmail: string
 ) {
+  const configuredEmail = getConfiguredSuperAdminEmail();
   const hasSuperAdmin = await hasAnySuperAdmin(db);
   if (hasSuperAdmin) {
-    const alreadySuperAdmin = await isSuperAdmin(db, userId);
+    const alreadySuperAdmin = await isSuperAdmin(db, userId, userEmail);
     if (alreadySuperAdmin) return { created: false, alreadySuperAdmin: true };
     return { created: false, alreadySuperAdmin: false };
   }
@@ -106,6 +158,9 @@ export async function bootstrapFirstSuperAdmin(
   const normalizedEmail = userEmail.trim().toLowerCase();
   if (!normalizedEmail) {
     throw new Error("Authenticated user has no email");
+  }
+  if (configuredEmail && normalizedEmail !== configuredEmail) {
+    throw new Error("Authenticated user is not the configured super admin");
   }
 
   const { error: profileErr } = await db.from("profiles").upsert(
@@ -117,7 +172,7 @@ export async function bootstrapFirstSuperAdmin(
   );
   if (profileErr) throw profileErr;
 
-  const { error } = await db.from("platform_admins").insert({ user_id: userId });
+  const { error } = await db.from("platform_admins").upsert({ user_id: userId }, { onConflict: "user_id" });
   if (error) throw error;
   return { created: true, alreadySuperAdmin: true };
 }

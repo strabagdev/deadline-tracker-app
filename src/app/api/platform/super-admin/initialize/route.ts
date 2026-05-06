@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { createDataServerClient } from "@/lib/supabase/dataServer";
-import { findAuthUserIdByEmail } from "@/lib/server/authAdmin";
-import { hasAnySuperAdmin } from "@/lib/server/superAdmin";
+import { createAuthAdminClient, findAuthUserIdByEmail } from "@/lib/server/authAdmin";
+import { getConfiguredSuperAdminEmail, hasAnySuperAdmin } from "@/lib/server/superAdmin";
 import {
   parseSuperAdminInitializePayload,
   validateSuperAdminSetupKey,
@@ -16,24 +15,30 @@ function getErrorMessage(error: unknown): string {
 export async function POST(req: Request) {
   try {
     const db = createDataServerClient();
-    const alreadyExists = await hasAnySuperAdmin(db);
-    if (alreadyExists) {
-      return NextResponse.json({ error: "super admin already configured", code: "FORBIDDEN" }, { status: 403 });
-    }
-
     const body = await req.json().catch(() => ({}));
     const parsed = parseSuperAdminInitializePayload(body);
     if (!parsed.ok) return NextResponse.json(parsed.body, { status: parsed.status });
     const { authMode, email, password, setupKey } = parsed;
 
+    const configuredEmail = getConfiguredSuperAdminEmail();
+    if (configuredEmail && email !== configuredEmail) {
+      return NextResponse.json(
+        { error: `El super admin inicial debe ser ${configuredEmail}.`, code: "FORBIDDEN" },
+        { status: 403 }
+      );
+    }
+
+    const existingConfiguredAuthUserId = configuredEmail ? await findAuthUserIdByEmail(configuredEmail) : null;
+    const alreadyExists = await hasAnySuperAdmin(db);
+    if (alreadyExists && (!configuredEmail || existingConfiguredAuthUserId)) {
+      return NextResponse.json({ error: "super admin already configured", code: "FORBIDDEN" }, { status: 403 });
+    }
+
     const expectedSetupKey = process.env.PLATFORM_SETUP_KEY;
     const setupValidation = validateSuperAdminSetupKey({ setupKey, expectedSetupKey });
     if (!setupValidation.ok) return NextResponse.json(setupValidation.body, { status: setupValidation.status });
 
-    const authAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_AUTH_URL!,
-      process.env.SUPABASE_AUTH_SERVICE_ROLE_KEY!
-    );
+    const authAdmin = createAuthAdminClient();
 
     let userId = await findAuthUserIdByEmail(email);
 
@@ -85,7 +90,7 @@ export async function POST(req: Request) {
     );
     if (profileErr) throw profileErr;
 
-    const { error: adminErr } = await db.from("platform_admins").insert({ user_id: userId });
+    const { error: adminErr } = await db.from("platform_admins").upsert({ user_id: userId }, { onConflict: "user_id" });
     if (adminErr) throw adminErr;
 
     return NextResponse.json({ ok: true, email, user_id: userId, auth_mode: authMode });
